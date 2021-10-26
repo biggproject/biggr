@@ -164,7 +164,7 @@ create_serie <- function(n_hours, values)
     start <- ymd_hms("2020-01-01 00:00:00")
     return (
         data.frame(
-            time = seq(start, start + hours(n_hours), by="hours"),
+            time = seq(start, start + hours(n_hours - 1), by="hours"),
             value=values))
 }
 
