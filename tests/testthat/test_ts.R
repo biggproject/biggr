@@ -1,8 +1,6 @@
 library(lubridate)
 Sys.setlocale("LC_ALL", "en_US.UTF-8")
 
-set.seed(123)
-
 readdata <- function(filename) {
   columns <- c("time", "value")
   data <- read_delim(filename, ";",
@@ -174,6 +172,17 @@ create_serie <- function(n_hours, values) {
   )
 }
 
+create_serie_days <- function(n_days, values) {
+  start <- ymd_hms("2020-01-01 00:00:00")
+  return(
+    data.frame(
+      time = seq(start, start + days(n_days - 1), by = "days"),
+      value = values
+    )
+  )
+}
+
+
 test_that("Detect min max outliers. No outlier", {
   testdata <- create_serie(10, rep(10, 10))
   expected <- rep(FALSE, 10)
@@ -210,6 +219,55 @@ test_that("Detect min max outliers series. No outlier", {
   )
 })
 
+test_that("Detect min max outliers series. No outlier", {
+  testdata <- create_serie(10, rep(10, 10))
+  minSeries <- create_serie(10, rep(10, 10))
+  maxSeries <- create_serie(10, rep(10, 10))
+  expected <- rep(FALSE, 10)
+  obtained <- detect_ts_min_max_outliers(testdata, min = 5, max = 15, minSeries, maxSeries)
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+})
+
+
+test_that("Detect min max outliers series. No outlier ", {
+  testdata <- create_serie(10, rep(10, 10))
+  minSeries <- create_serie(10, c(10, 10, 10, NA, 10, NA, 10, 10, 10, 10))
+  maxSeries <- create_serie(10, c(10, 10, 10, NA, 10, NA, 10, 10, 10, 10))
+  expected <- rep(FALSE, 10)
+  obtained <- detect_ts_min_max_outliers(testdata, min = 5, max = 15, minSeries, maxSeries)
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+})
+
+test_that("Detect min max outliers series with different freq. No outlier ", {
+  testdata <- create_serie(48, rep(10, 48))
+  minSeries <- create_serie_days(3, c(10, 10, 12))
+  maxSeries <- create_serie_days(3, c(10, 10, 12))
+  expected <- rep(FALSE, 48)
+  obtained <- detect_ts_min_max_outliers(testdata, min = 5, max = 15, minSeries, maxSeries)
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+})
+
+test_that("Detect min max outliers series with different freq. No outlier ", {
+  testdata <- create_serie(48, rep(10, 48))
+  minSeries <- create_serie_days(3, c(10, 10, 12))
+  maxSeries <- create_serie_days(3, c(8, 10, 12))
+  expected <- c(rep(TRUE, 24), rep(FALSE, 24))
+  obtained <- detect_ts_min_max_outliers(testdata, min = 5, max = 15, minSeries, maxSeries)
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+})
+
 test_that("Detect min max outliers. Min max outliers", {
   testdata <- create_serie(10, rep(10, 10))
   # outliers
@@ -218,6 +276,83 @@ test_that("Detect min max outliers. Min max outliers", {
   expected <- rep(FALSE, 10)
   expected[c(2, 4, 6, 8)] <- TRUE
   obtained <- detect_ts_min_max_outliers(testdata, min = 5, max = 15)
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+})
+
+test_that("Detect z-score outliers series. No outlier ", {
+  testdata <- create_serie(48, c(rep(5, 12), rep(10, 12), rep(5, 12), rep(10, 12)))
+  expected <- rep(FALSE, 48)
+  zScoreThreshold <- 2
+  obtained <- detect_ts_zscore_outliers(testdata, zScoreThreshold)
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+})
+
+test_that("Detect z-score outliers series. With outlier ", {
+  testdata <- create_serie(48, c(rep(5, 12), rep(10, 12), rep(5, 12), rep(10, 12)))
+  expected <- rep(TRUE, 48)
+  zScoreThreshold <- 0.5
+  obtained <- detect_ts_zscore_outliers(testdata, zScoreThreshold)
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+})
+
+test_that("Detect outlier elements based on calendar model. No window", {
+  # WARNING: Naive test to check it launches
+  # No quality analysis done
+  filename <- "test_data/test_ts_hourly.csv"
+  data <- readdata(filename)
+  obtained <- detect_ts_calendar_model_outliers(
+    data,
+    holidaysCalendar = as_date("2020-03-02")
+  )
+  expected <- rep(FALSE, 97)
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+})
+
+test_that("Detect outlier elements based on calendar model. With window", {
+  # WARNING: Naive test to check it launches
+  # No quality analysis done
+  # set.seed(123); testdata <- create_serie(144, sample(seq(1000), 144))
+  filename <- "test_data/test_ts_hourly.csv"
+  data <- readdata(filename)
+  obtained <- detect_ts_calendar_model_outliers(
+    data,
+    calendarFeatures = c("H"),
+    holidaysCalendar = as_date("2020-03-02"),
+    window = "10H"
+  )
+  expected <- rep(FALSE, 97)
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+})
+
+
+test_that("Detect z-score outliers series. With window and outlier ", {
+  set.seed(123)
+  testdata <- create_serie(48, sample(seq(100), 48))
+  expected <- c(
+    TRUE, TRUE, FALSE, TRUE, TRUE, FALSE, FALSE, FALSE,
+    TRUE, TRUE, FALSE, FALSE, TRUE, TRUE, TRUE, FALSE, TRUE, TRUE,
+    FALSE, TRUE, FALSE, TRUE, TRUE, TRUE, FALSE, TRUE, TRUE, TRUE,
+    TRUE, FALSE, TRUE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE,
+    TRUE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE
+  )
+  zScoreThreshold <- 0.5
+  window <- "3H"
+  obtained <- detect_ts_zscore_outliers(testdata, zScoreThreshold, window)
   expect(
     all(obtained == expected),
     "Expected and obtained are different"

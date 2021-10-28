@@ -1,3 +1,45 @@
+timesteps <- list(
+  "1" = "S",
+  "60" = "T",
+  "3600" = "H",
+  "86400" = "D",
+  "604800" = "W",
+  "2419200" = "M",
+  "2505600" = "M",
+  "2592000" = "M",
+  "2678400" = "M",
+  "31536000" = "Y",
+  "31622400" = "Y"
+)
+
+seqsteps <- list(
+  "S" = "sec",
+  "T" = "min",
+  "H" = "hour",
+  "D" = "day",
+  "W" = "week",
+  "M" = "month",
+  "MS" = "month",
+  "Y" = "year",
+  "YS" = "year"
+)
+
+roundsteps <- list(
+  "S" = "second",
+  "T" = "minute",
+  "H" = "hour",
+  "D" = "day",
+  "W" = "week",
+  "M" = "month",
+  "Y" = "year"
+)
+
+invert <- function(x) {
+  v <- as.integer(names(x))
+  names(v) <- as.character(x)
+  return(v)
+}
+
 #' The function infers, i.e. automatically deduce from the input data, the
 #' minimum time step (frequency) that can be used for the input time series.
 #'
@@ -9,38 +51,6 @@
 #' step (e.g. "15T","1H", "3M", "1D" ,...). If no frequency can be detected,
 #' the function will return None.
 detect_time_step <- function(data, maxMissingTimeSteps = 0) {
-  timesteps <- list(
-    "1" = "S",
-    "60" = "T",
-    "3600" = "H",
-    "86400" = "D",
-    "604800" = "W",
-    "2419200" = "M",
-    "2505600" = "M",
-    "2592000" = "M",
-    "2678400" = "M",
-    "31536000" = "Y",
-    "31622400" = "Y"
-  )
-  seqsteps <- list(
-    "S" = "sec",
-    "T" = "min",
-    "H" = "hour",
-    "D" = "day",
-    "W" = "week",
-    "M" = "month",
-    "Y" = "year"
-  )
-  roundsteps <- list(
-    "S" = "second",
-    "T" = "minute",
-    "H" = "hour",
-    "D" = "day",
-    "W" = "week",
-    "M" = "month",
-    "Y" = "year"
-  )
-
   # Use contingency table to identify
   # most common frequency
   crosstab <- data %>%
@@ -157,8 +167,38 @@ detect_time_step <- function(data, maxMissingTimeSteps = 0) {
   return(timestep)
 }
 
+resample <- function(data, timestep) {
+  # Resample (upsample) by creating synthetic comple serie
+  data$time_ <- round_date(data$time, roundsteps[timestep])
+  start <- data$time_[1]
+  end <- data$time[length(data$time)]
+  timeseq <- seq(start, end, by = as.character(seqsteps[timestep]))
+
+  # TEMPFIX: seq.Date not properly adding months
+  if ((timestep == "M") & (day(start) == 31)) {
+    mask <- day(timeseq) == 1
+    timeseq[mask] <- timeseq[mask] - 60 * 60 * 24
+  }
+
+  # Create synthetic serie mixing timeserie and ffill values
+  newdata <- data.frame(time_ = timeseq) %>%
+    left_join(data, by = "time_") %>%
+    fill(value, .direction = "down") %>%
+    mutate(time = time_) %>%
+    select(-time_)
+  return(newdata)
+}
+
+
 
 #' Detect elements of the time series outside a minimum and maximum range.
+#'
+#' Additionally, with the minSeries and maxSeries arguments, this ranges can
+#' be set differently along the period. When using this feature, the timestep
+#' of both minSeries and maxSeries need to be resampled to the original
+#' frequency of the data time series, applying forward fill if is needed
+#' (Remember the time stamps of each time series element always represent the
+#' begining of the time step).
 #'
 #' @param data <timeSeries> An argument containing the time series from which
 #' the outliers need to be detected.
@@ -178,16 +218,20 @@ detect_ts_min_max_outliers <- function(data, min, max, minSeries = NULL, maxSeri
   max_mask <- (data$value > max)
 
   if (!is.null(minSeries)) {
+    timestep <- detect_time_step(data)
+    minSeries <- resample(minSeries, timestep)
     mask <- data %>%
       left_join(minSeries, by = "time") %>%
       mutate(outlier = value.x < value.y)
     min_mask <- mask[["outlier"]]
   }
   if (!is.null(maxSeries)) {
+    timestep <- detect_time_step(data)
+    maxSeries <- resample(maxSeries, timestep)
     mask <- data %>%
       left_join(maxSeries, by = "time") %>%
       mutate(outlier = value.x > value.y)
-    min_mask <- mask[["outlier"]]
+    max_mask <- mask[["outlier"]]
   }
   return(min_mask | max_mask)
 }
@@ -208,11 +252,152 @@ detect_ts_min_max_outliers <- function(data, min, max, minSeries = NULL, maxSeri
 #' aggregation function of the Zscore is the mean (true), or median(false).
 #' The first one makes the Z-score sensitive to extreme values, and the
 #' second no. Default is true.
+#' @return outliers boolean timeSeries object using the original time period
+#' and frequency, only assigning true values when an element should be
+#' considered as an outlier.
 
-detect_ts_zscore_outliers <- function(data, zScoreThreshold, window = NULL, zScoreExtremesSensitive = NULL) {
+detect_ts_zscore_outliers <- function(data, zScoreThreshold, window = NULL, zScoreExtremesSensitive = TRUE) {
+  func <- ifelse(zScoreExtremesSensitive == TRUE, mean, median)
+  zScore <- ((data$value - func(data$value)) / sd(data$value))
+  if (!is.null(window)) {
+    timestep <- detect_time_step(data)
+    timesteps_ <- invert(timesteps)
+    secs <- as.integer(duration(window, units = "seconds"))
+    width <- secs / as.integer(timesteps_[timestep])
+    zScore <- roll_scale(data$value, width = width, min_obs = 1)
+    # TEMPFIX
+    zScore[1] <- zScore[2]
+  }
+  return(abs(zScore) >= zScoreThreshold)
 }
 
-detect_ts_calendar_model_outliers <- function() {
+fs <- function(data) {
+  # naive implementation
+  return(sin(data * 2 * pi))
+}
+
+detect_ts_calendar_model_outliers_window <- function(data,
+                                                     calendarFeatures = c("HOL", "H"),
+                                                     mode = "upperAndLower",
+                                                     upperModelPercentile = 90,
+                                                     lowerModelPercentile = 10,
+                                                     upperPercentualThreshold = 30,
+                                                     lowerPercentualThreshold = 30,
+                                                     holidaysCalendar = c()) {
+
+  # WARNING: First naive approach
+  newdata <- data %>%
+    mutate(
+      H = fs(hour(time) / 24),
+      U = fs(day(time) / 365),
+      W = fs(week(time) / 52),
+      m = fs(month(time) / 12),
+      Y = year(time),
+      HOL = as_date(time) %in% holidaysCalendar
+    )
+
+  formula <- as.formula(paste("value", paste(calendarFeatures, collapse = "+"),
+    sep = "~"
+  ))
+  model <- rq(
+    formula,
+    tau = c(lowerModelPercentile / 100.0, upperModelPercentile / 100.0),
+    newdata
+  )
+  prediction <- as.data.frame(predict.rq(model, newdata))
+  names(prediction) <- c("lower", "upper")
+
+  lowerPrediction <- (1 - lowerPercentualThreshold / 100.0) * prediction$lower
+  upperPrediction <- (1 + upperPercentualThreshold / 100.0) * prediction$upper
+
+  if (mode == "lower") {
+    mask <- data$value < lowerPrediction
+  } else if (mode == "upper") {
+    mask <- data$value > upperPrediction
+  } else if (mode == "upperAndLower") {
+    mask <- (data$value < lowerPrediction) | (data$value > upperPrediction)
+  }
+  return(mask)
+}
+
+#' Detect elements of the time series out of a confidence threshold based
+#' on linear model of the calendar variables (month, weekday, hour).
+#'
+#' @param data timeSeries An argument containing the time series from which
+#' the outliers need to be detected.
+#' @param calendarFeatures: list of strings An optional argument set the
+#' calendar features of the model. Default values are: ["HOL*intercept","H"]
+#' @param mode: string An optional argument setting which outliers need to be
+#' filtered, the ones upper, or the ones lower to the prediction.
+#' Default is "upperAndLower".
+#' @param upperModelPercentile: float An optional argument defining the
+#' percentile used in the quantile regression model for the upper prediction.
+#' Default is 90.
+#' @param lowerModelPercentile: float An optional argument defining the
+#' percentile used in the quantile regression model for the lower prediction.
+#' Default is 10.
+#' @param upperPercentualThreshold: float It sets the dynamic upper threshold
+#' to detect outliers. It is an optional argument to define the percentage
+#' of difference added to the upper model predition itself. Default is 30.
+#' @param lowerPercentualThreshold: float It sets the dynamic lower threshold
+#' to detect outliers. An optional argument to define the percentage of
+#' difference substracted to the predition of the model. () Default is 30.
+#' @param holidaysCalendar list of dates An optional list giving the dates
+#' where local or national holidays related to the location of the data
+#' argument. Default is empty list.
+#' @param window string. A string in ISO 8601 format representing the
+#' window (e.g. "2m","4m","14D",...). This is an optional argument setting
+#' the width of the window where the model is trained and evaluated
+#' @return outliers boolean timeSeries object using the original time period
+#' and frequency, only assigning true values when an element should be
+#' considered as an outlier.
+#' @return predicted timeSeries of the predicted values of the original
+#' timeSeries based on the calendar regression model.
+detect_ts_calendar_model_outliers <- function(data,
+                                              calendarFeatures = c("HOL", "H"),
+                                              mode = "upperAndLower",
+                                              upperModelPercentile = 90,
+                                              lowerModelPercentile = 10,
+                                              upperPercentualThreshold = 30,
+                                              lowerPercentualThreshold = 30,
+                                              holidaysCalendar = c(),
+                                              window = NULL) {
+  if (is.null(window)) {
+    return(
+      detect_ts_calendar_model_outliers_window(
+        data,
+        calendarFeatures,
+        mode,
+        upperModelPercentile,
+        lowerModelPercentile,
+        upperPercentualThreshold,
+        lowerPercentualThreshold,
+        holidaysCalendar
+      )
+    )
+  } else {
+    start <- as.integer(seconds(data$time[1]))
+    windowsize <- as.integer(duration(window, units = "seconds"))
+    newdata <- data %>%
+      mutate(
+        window = (as.integer(seconds(time)) - start) %/% windowsize
+      )
+    windows <- unique(newdata$window)
+    result <- lapply(windows, function(window) {
+      tmp <- newdata[newdata$window == window, ]
+      result <- detect_ts_calendar_model_outliers_window(
+        tmp,
+        calendarFeatures,
+        mode,
+        upperModelPercentile,
+        lowerModelPercentile,
+        upperPercentualThreshold,
+        lowerPercentualThreshold,
+        holidaysCalendar
+      )
+    })
+    return(unlist(result))
+  }
 }
 
 #' Detect which numerical elements are outside the min-max range.
@@ -279,6 +464,7 @@ detect_static_reg_exp <- function(data, regExpValues, negativeExp = FALSE) {
 #' @param fillMask: boolean timeSeries defining the time periods where the
 #' imputation can be done. By default, all elements of the timeseriesxi
 #' can be filled.
+#' @return filledData timeSeries with filled elements.
 
 fill_ts_na <- function(data, outliersMinMax, outliersZScore, outliersCalendarModel, methodFillNA = "linearInterpolation", maxGap = NULL, fillMask = NULL) {
   # NOTE: outliersMinMax and outliersZScore not used

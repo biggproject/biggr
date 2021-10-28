@@ -13,6 +13,8 @@ Depends:
     dplyr,
     tidyr,
     zoo,
+    roll,
+    quantreg,
     testthat
 License: "" 
 RoxygenNote: 7.1.2
