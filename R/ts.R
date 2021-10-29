@@ -31,7 +31,9 @@ roundsteps <- list(
   "D" = "day",
   "W" = "week",
   "M" = "month",
-  "Y" = "year"
+  "MS" = "month",
+  "Y" = "year",
+  "YS" = "year"
 )
 
 invert <- function(x) {
