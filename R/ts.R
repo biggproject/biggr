@@ -57,7 +57,7 @@ detect_time_step <- function(data, maxMissingTimeSteps = 0) {
   # most common frequency
   crosstab <- data %>%
     mutate(
-      time_lag1 = lag(time),
+      time_lag1 = lag(time, 1),
       secs = as.integer(
         difftime(time, time_lag1, units = "secs")
       )
@@ -477,7 +477,7 @@ fill_ts_na <- function(data, outliersMinMax, outliersZScore, outliersCalendarMod
     missing <- data %>%
       drop_na(.) %>%
       mutate(
-        time_lag1 = lag(time),
+        time_lag1 = lag(time, 1),
         secs = as.integer(
           difftime(time, time_lag1, units = "secs")
         ),
