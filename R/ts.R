@@ -516,3 +516,69 @@ fill_ts_na <- function(data, outliersMinMax, outliersZScore, outliersCalendarMod
     mutate(value = coalesce(value, value.fill)) %>%
     select(time, value))
 }
+
+round_up <- function(x) 10^ceiling(log10(x))
+
+#' The function converts a cumulative (counter) or onChange (delta) measurement
+#' to instantaneous.
+#'
+#' @param data <timeSeries> The cumulative or on-change time series that has to
+#' be converted to instantaneous. An instantaneous measurement is a gauge
+#' metric, in which the value can increase or decrease and measures a specific
+#' instant in time.
+#' @param measurementReadingType <enumeration> An argument used to define the
+#' measurement reading type
+#'
+#' @return data <timeSeries> The cumulative or onChange time series with
+#' the measurements converted to the instantaneous type.
+
+clean_ts_integrate <- function(data, measurementReadingType = "onChange") {
+  if (measurementReadingType == "onChange") {
+    return(data %>% mutate(value = lead(value, 1)))
+  } else if (measurementReadingType == "cumulative") {
+    # WARNING: Not handling series with false-positive overrun
+    return(data %>%
+      mutate(
+        value_lead1 = lead(value, 1),
+        delta = value_lead1 - value,
+        value = ifelse(delta < 0, round_up(value) - value + value_lead1, delta)
+      ) %>%
+      select(c(time, value)))
+  } else {
+    return(data)
+  }
+}
+
+#' The function aligns the frequency of the input time series with the output
+#' frequency given as an argument using the specified aggregation function.
+#'
+#' @param data <timeSeries> The time series that has to be aligned with an
+#' output time step, i.e. with a specific frequency. If the
+#' measurementReadingType of the series is not instantaneous, the data must
+#' be converted first using the function clean_ts_integrate.
+#' @param outputTimeStep <string> The frequency used to resample the input
+#' time series for the alignment. It must be a string in ISO 8601 format
+#' representing the time step (e.g. "15T","1H", "M", "D",...).
+#' @param aggregationFunction <string> The aggregation function to use when
+#  resampling the series (avg, sum, min, max)
+#'
+#' @return data <timeSeries> The time series resampled with the specified
+#' period and aggregation function.
+align_time_grid <- function(data, measurementReadingType, outputTimeStep, aggregationFunction) {
+  data <- clean_ts_integrate(data, measurementReadingType)
+
+  return(data %>%
+    mutate(time = floor_date(data$time, outputTimeStep,
+      week_start = getOption("lubridate.week.start", 1)
+    )) %>%
+    group_by(time) %>%
+    summarize(
+      sum = sum(value, na.rm = TRUE),
+      avg = mean(value, na.rm = TRUE),
+      min = min(value, na.rm = TRUE),
+      max = max(value, na.rm = TRUE)
+    ) %>%
+    mutate(value = !!as.name(aggregationFunction)) %>%
+    ungroup() %>%
+    select(time, value))
+}

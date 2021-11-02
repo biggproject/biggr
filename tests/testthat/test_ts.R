@@ -162,11 +162,19 @@ test_that("Detect hourly time step. Missing hours. maxMissingTimeSteps set", {
   b2backtest_missing(filename, expected, 0.4, missing)
 })
 
-create_serie <- function(n_hours, values) {
+create_serie <- function(n, values, timestep = "hours") {
+  funcs <- list(
+    "mins" = minutes,
+    "hours" = hours,
+    "days" = days,
+    "months" = months
+  )
+  func <- funcs[[timestep]]
+
   start <- ymd_hms("2020-01-01 00:00:00")
   return(
     data.frame(
-      time = seq(start, start + hours(n_hours - 1), by = "hours"),
+      time = seq(start, start + func(n - 1), by = timestep),
       value = values
     )
   )
@@ -514,4 +522,113 @@ test_that("Fill ts na. One missing hour. Imputation not done. Backward", {
   methodFillNA <- "backward"
   maxGap <- "2H"
   fill_test(data, methodFillNA, maxGap, expected)
+})
+
+test_that("Clean ts integrate using onChange", {
+  testdata <- create_serie(7, c(5, 7, 8, 10, 11, 16, 20))
+  expected <- create_serie(7, c(7, 8, 10, 11, 16, 20, NA))
+  obtained <- clean_ts_integrate(testdata, measurementReadingType = "onChange")
+  n_rows <- dim(obtained)[1]
+  expect(
+    all(obtained[0:(n_rows - 1), ] == expected[0:(n_rows - 1), ] & is.na(obtained$value[n_rows])),
+    "Expected and obtained are different"
+  )
+})
+
+test_that("Clean ts integrate using cumulative", {
+  testdata <- create_serie(7, c(5, 6, 8, 2, 3, 5, 8))
+  expected <- create_serie(7, c(1, 2, 4, 1, 2, 3, NA))
+  obtained <- clean_ts_integrate(testdata, measurementReadingType = "cumulative")
+  n_rows <- dim(obtained)[1]
+  expect(
+    all(obtained[0:(n_rows - 1), ] == expected[0:(n_rows - 1), ] & is.na(obtained$value[n_rows])),
+    "Expected and obtained are different"
+  )
+})
+
+test_that("Clean ts integrate using cumulative multiple", {
+  testdata <- create_serie(10, c(5, 6, 8, 2, 3, 5, 800, 3, 5, 8))
+  expected <- create_serie(10, c(1, 2, 4, 1, 2, 795, 203, 2, 3, NA))
+  obtained <- clean_ts_integrate(testdata, measurementReadingType = "cumulative")
+  n_rows <- dim(obtained)[1]
+  expect(
+    all(obtained[0:(n_rows - 1), ] == expected[0:(n_rows - 1), ] & is.na(obtained$value[n_rows])),
+    "Expected and obtained are different"
+  )
+})
+
+test_that("Align time grid 1D sum", {
+  testdata <- create_serie(48, c(rep(1, 24), rep(2, 24)))
+  expected <- create_serie(2, c(24, 48), timestep = "days")
+  obtained <- align_time_grid(testdata,
+    measurementReadingType = "",
+    outputTimeStep = "1D", aggregationFunction = "sum"
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+})
+
+test_that("Align time grid 1D avg", {
+  testdata <- create_serie(48, c(rep(5, 12), rep(10, 12), rep(2, 24)))
+  expected <- create_serie(2, c(7.5, 2), timestep = "days")
+  obtained <- align_time_grid(testdata,
+    measurementReadingType = "",
+    outputTimeStep = "1D", aggregationFunction = "avg"
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+})
+
+test_that("Align time grid 1D min", {
+  testdata <- create_serie(48, c(rep(5, 12), rep(10, 12), rep(2, 24)))
+  expected <- create_serie(2, c(5, 2), timestep = "days")
+  obtained <- align_time_grid(testdata,
+    measurementReadingType = "",
+    outputTimeStep = "1D", aggregationFunction = "min"
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+})
+
+test_that("Align time grid 1D max", {
+  testdata <- create_serie(48, c(rep(5, 12), rep(10, 12), rep(2, 24)))
+  expected <- create_serie(2, c(10, 2), timestep = "days")
+  obtained <- align_time_grid(testdata,
+    measurementReadingType = "",
+    outputTimeStep = "1D", aggregationFunction = "max"
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+})
+test_that("Align time grid 15T sum. Minutes", {
+  testdata <- create_serie(120, c(rep(1, 60), rep(2, 60)), timestep = "mins")
+  expected <- create_serie(2, c(60, 120), timestep = "hours")
+  obtained <- align_time_grid(testdata,
+    measurementReadingType = "",
+    outputTimeStep = "H", aggregationFunction = "sum"
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+})
+test_that("Align time grid 1D sum. Days", {
+  testdata <- create_serie(60, rep(1, 60), timestep = "days")
+  expected <- create_serie(2, c(31, 29), timestep = "months")
+  obtained <- align_time_grid(testdata,
+    measurementReadingType = "",
+    outputTimeStep = "m", aggregationFunction = "sum"
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
 })
