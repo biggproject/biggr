@@ -14,9 +14,9 @@ readdata <- function(filename) {
   return(data)
 }
 
-b2backtest <- function(filename, expected, maxMissingTimeSteps = 0) {
+b2backtest <- function(filename, expected, maxMissingTimeSteps = 0, approxTimeSteps = FALSE) {
   testdata <- readdata(filename)
-  obtained <- detect_time_step(testdata, maxMissingTimeSteps)
+  obtained <- detect_time_step(testdata, maxMissingTimeSteps, approxTimeSteps)
   expect(
     obtained == expected,
     "Expected and obtained are different"
@@ -160,6 +160,12 @@ test_that("Detect hourly time step. Missing hours. maxMissingTimeSteps set", {
   missing <- which(mask == TRUE)
   expected <- "D"
   b2backtest_missing(filename, expected, 0.4, missing)
+})
+
+test_that("Detect hourly time step. No missing hour. Approx. timesteps", {
+  filename <- "test_data/test_ts_hourly.csv"
+  expected <- "H"
+  b2backtest(filename, expected)
 })
 
 create_serie <- function(n, values, timestep = "hours") {

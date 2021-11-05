@@ -36,6 +36,31 @@ roundsteps <- list(
   "YS" = "year"
 )
 
+approx_timesteps <- function(x) {
+  # NOTE: Tricky fix to manage non-exact scenarios. Find closest timestep
+  # Review close interval per each of the timesteps
+  approx <- list(
+    "S" = c(0, 0), # 0s
+    "T" = c(-2, 2), # 2s
+    "H" = c(-2 * 60, -2 * 60), # -+2min
+    "D" = c(-1 * 60 * 60, 1 * 60 * 60), # -+1hour
+    "W" = c(-1 * 60 * 60, 1 * 60 * 60), # -+1hour
+    "M" = c(-1 * 24 * 60 * 60, 1 * 24 * 60 * 60), # -+1day
+    "Y" = c(-1 * 24 * 60 * 60, 1 * 24 * 60 * 60) # -+1day
+  )
+  for (name in names(x))
+  {
+    step <- timesteps[[name]]
+    min_secs <- approx[[step]][1]
+    max_secs <- approx[[step]][2]
+    secs <- as.integer(name) + seq(min_secs, max_secs, 1)
+    steps <- rep(step, length(secs))
+    names(steps) <- secs
+    x <- append(x, as.list(steps))
+  }
+  return(x)
+}
+
 invert <- function(x) {
   v <- as.integer(names(x))
   names(v) <- as.character(x)
@@ -52,7 +77,8 @@ invert <- function(x) {
 #' @return timeStep <string> A string in ISO 8601 format representing the time
 #' step (e.g. "15T","1H", "3M", "1D" ,...). If no frequency can be detected,
 #' the function will return None.
-detect_time_step <- function(data, maxMissingTimeSteps = 0) {
+detect_time_step <- function(data, maxMissingTimeSteps = 0, approxTimeSteps = FALSE) {
+  if (approxTimeSteps == TRUE) timesteps <- approx_timesteps(timesteps)
   # Use contingency table to identify
   # most common frequency
   crosstab <- data %>%
@@ -536,7 +562,7 @@ clean_ts_integrate <- function(data, measurementReadingType = "onChange") {
   if (measurementReadingType == "onChange") {
     return(data %>% mutate(value = lead(value, 1)))
   } else if (measurementReadingType == "cumulative") {
-    # WARNING: Not handling series with false-positive overrun
+    # WARNING: Not handling series with false-positive roll over
     return(data %>%
       mutate(
         value_lead1 = lead(value, 1),
