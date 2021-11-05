@@ -167,7 +167,8 @@ create_serie <- function(n, values, timestep = "hours") {
     "mins" = minutes,
     "hours" = hours,
     "days" = days,
-    "months" = months
+    "months" = months,
+    "years" = years
   )
   func <- funcs[[timestep]]
 
@@ -535,6 +536,18 @@ test_that("Clean ts integrate using onChange", {
   )
 })
 
+
+test_that("Clean ts integrate using cumulative. No roll over", {
+  testdata <- create_serie(7, c(5, 6, 8, 12, 13, 15, 18))
+  expected <- create_serie(7, c(1, 2, 4, 1, 2, 3, NA))
+  obtained <- clean_ts_integrate(testdata, measurementReadingType = "cumulative")
+  n_rows <- dim(obtained)[1]
+  expect(
+    all(obtained[0:(n_rows - 1), ] == expected[0:(n_rows - 1), ] & is.na(obtained$value[n_rows])),
+    "Expected and obtained are different"
+  )
+})
+
 test_that("Clean ts integrate using cumulative", {
   testdata <- create_serie(7, c(5, 6, 8, 2, 3, 5, 8))
   expected <- create_serie(7, c(1, 2, 4, 1, 2, 3, NA))
@@ -626,6 +639,18 @@ test_that("Align time grid 1D sum. Days", {
   obtained <- align_time_grid(testdata,
     measurementReadingType = "",
     outputTimeStep = "m", aggregationFunction = "sum"
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+})
+test_that("Align time grid 1D sum. Months", {
+  testdata <- create_serie(24, rep(1, 24), timestep = "months")
+  expected <- create_serie(2, c(12, 12), timestep = "years")
+  obtained <- align_time_grid(testdata,
+    measurementReadingType = "",
+    outputTimeStep = "y", aggregationFunction = "sum"
   )
   expect(
     all(obtained == expected),
