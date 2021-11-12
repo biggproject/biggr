@@ -133,16 +133,16 @@ lpf_ts <- function(data, featuresNames, smoothingTimeScaleParameter) {
   lpf <- function(x, alpha) {
     y <- numeric(length(x))
     for (i in 1:length(x)) {
-      if (is.na(y[i - 1]) || i==1) {
+      if (is.na(y[i - 1]) || i == 1) {
         y[i] <- (alpha) * x[i]
       } else {
-        y[i] <- (1-alpha) * y[i - 1] + (alpha) * x[i]
+        y[i] <- (1 - alpha) * y[i - 1] + (alpha) * x[i]
       }
     }
     ## Return (afterwards the init value y[1], must be handled)
     return(y)
-  } 
-  return (data %>% mutate_at(featuresNames, lpf, smoothingTimeScaleParameter))
+  }
+  return(data %>% mutate_at(featuresNames, lpf, smoothingTimeScaleParameter))
 }
 
 #' Physical transformation of the smoothing time scale parameter to consider
@@ -158,13 +158,13 @@ lpf_ts <- function(data, featuresNames, smoothingTimeScaleParameter) {
 #' filter. It ranges from 0 to 1.
 get_lpf_smoothing_time_scale <- function(data, timeConstantInHours) {
   # NOTE: Implementation by @gmor (copy&paste)
-  steps <- list( 
+  steps <- list(
     "S" = 60,
     "T" = 60,
-    "H" = 1 
+    "H" = 1
   )
   timestep <- detect_time_step(data)
-  return (1 - (exp(1)^(- steps[[timestep]]/((2*pi)*timeConstantInHours/24))))
+  return(1 - (exp(1)^(-steps[[timestep]] / ((2 * pi) * timeConstantInHours / 24))))
 }
 
 #' Decompose the time in date, day of the year, day of the week, day of the
@@ -179,31 +179,34 @@ get_lpf_smoothing_time_scale <- function(data, timeConstantInHours) {
 #' optional, by default no transformation to local time zone is done.
 #' @return data <timeSeries> containing the same initial information of data
 #' input argument, plus the calendar components as new columns.
-calendar_components <- function(data, localTimeZone=NULL, holidays=NULL) {
+calendar_components <- function(data, localTimeZone = NULL, holidays = NULL) {
   getSeason <- function(dates) {
     # NOTE: This function was taken from the following stackoverflow post:
     # http://stackoverflow.com/questions/9500114/find-which-season-a-particular-date-belongs-to.
     # 2012 is a good year to which to convert all of the dates;
     # since it is a leap year
     WS <- as.Date("2012-12-15", format = "%Y-%m-%d") # Winter Solstice
-    SE <- as.Date("2012-3-15",  format = "%Y-%m-%d") # Spring Equinox
-    SS <- as.Date("2012-6-15",  format = "%Y-%m-%d") # Summer Solstice
-    FE <- as.Date("2012-9-15",  format = "%Y-%m-%d") # Fall Equinox
+    SE <- as.Date("2012-3-15", format = "%Y-%m-%d") # Spring Equinox
+    SS <- as.Date("2012-6-15", format = "%Y-%m-%d") # Summer Solstice
+    FE <- as.Date("2012-9-15", format = "%Y-%m-%d") # Fall Equinox
 
     # Convert dates from any year to 2012 dates
-    d <- as.Date(strftime(dates, format="2012-%m-%d"))
+    d <- as.Date(strftime(dates, format = "2012-%m-%d"))
 
-    ifelse (d >= WS | d < SE, "Winter",
-      ifelse (d >= SE & d < SS, "Spring",
-        ifelse (d >= SS & d < FE, "Summer", "Fall")))
+    ifelse(d >= WS | d < SE, "Winter",
+      ifelse(d >= SE & d < SS, "Spring",
+        ifelse(d >= SS & d < FE, "Summer", "Fall")
+      )
+    )
   }
-  return (data %>%
+  return(data %>%
     mutate(
       localtime = with_tz(time, localTimeZone),
       date = lubridate::date(localtime),
       weekday = wday(localtime,
-        week_start = getOption("lubridate.week.start", 1)),  
-      is_weekend = wday(localtime) %in% c(6,7),
+        week_start = getOption("lubridate.week.start", 1)
+      ),
+      is_weekend = wday(localtime) %in% c(6, 7),
       is_holidays = ifelse(is.null(holidays), NA, ifelse(date %in% holidays, TRUE, FALSE)),
       year = year(localtime),
       quarter = quarter(localtime),
@@ -215,8 +218,7 @@ calendar_components <- function(data, localTimeZone=NULL, holidays=NULL) {
       minute = minute(localtime),
       second = second(localtime),
     ) %>%
-    select(-localtime)
- )  
+    select(-localtime))
 }
 
 #' Obtain the components of the Fourier Series, in sine-cosine form.
@@ -249,7 +251,7 @@ fs_components <- function(data, featuresNames, mask, nHarmonics) {
   fs <- function(X, featureName, nHarmonics) {
     lapply(1:nHarmonics, function(i) {
       value <- list(
-	sin(i * X * 2 * pi),
+        sin(i * X * 2 * pi),
         cos(i * X * 2 * pi)
       )
       names(value) <- paste0(featureName, c("_sin_", "_cos_"), i)
@@ -259,7 +261,7 @@ fs_components <- function(data, featuresNames, mask, nHarmonics) {
 
   tmpdata <- data
   if (!is.null(mask)) {
-     tmpdata[mask, featuresNames] <- 0 
+    tmpdata[mask, featuresNames] <- 0
   }
   for (featureName in featuresNames) {
     tmp <- fs(tmpdata[[featureName]], featureName, nHarmonics)
