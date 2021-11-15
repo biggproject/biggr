@@ -10,28 +10,17 @@
 #' feature will be generated for each lag
 #' @param featuresNames <list> selecting the series to transform.
 #' @param predictMode <integer> predictMode
-#' @param forceInitPerFeature <list> Supported "global", "input", "output"
+#' @param forceGlobalInputFeatures
+#' @param forceInitInputFeatures
+#' @param forceInitOutputFeatures
 #' @return data <timeSeries> containing the same initial information of the data
 #' input argument, plus the lagged components as new columns.
-lag_components <- function(data, maxLag, featuresNames = NULL, predictMode = 0, forceInitPerFeature = NULL) {
+lag_components <- function(data, maxLag, featuresNames = NULL, predictMode = 0,
+                           forceGlobalInputFeatures = NULL, forceInitInputFeatures = NULL,
+                           forceInitOutputFeatures = NULL) {
   # NOTE: Implementation by @gmor (copy&paste)
 
   predictionStep <- predictMode
-  forceGlobalInputFeatures <- ifelse(
-    "global" %in% names(forceInitPerFeature),
-    forceInitPerFeature[["global"]],
-    NULL
-  )
-  forceInitInputFeatures <- ifelse(
-    "input" %in% names(forceInitPerFeature),
-    forceInitPerFeature[["input"]],
-    NULL
-  )
-  forceInitOutputFeatures <- ifelse(
-    "output" %in% names(forceInitPerFeature),
-    forceInitPerFeature[["output"]],
-    NULL
-  )
 
   if (is.null(featuresNames)) {
     if (ncol(data) > 2) {
