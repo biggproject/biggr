@@ -6,13 +6,15 @@ Author: author
 Maintainer: maintainer <maintainer@email>
 Description: "" 
 Encoding: UTF-8
-LazyData: true
+LazyData: false 
 Depends:
     lubridate,
     readr,
     dplyr,
     tidyr,
     zoo,
+    roll,
+    quantreg,
     testthat
 License: "" 
 RoxygenNote: 7.1.2
