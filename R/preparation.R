@@ -124,10 +124,10 @@ detect_time_step <- function(data, maxMissingTimeSteps = 0, approxTimeSteps = FA
     {
       # WARNING: Using first timestamp as reference
       # in order to identify periodicity
-      start <- round_date(data$time[1], roundsteps[timestep_],
+      start <- floor_date(data$time[1], roundsteps[timestep_],
         week_start = getOption("lubridate.week.start", 1)
       )
-      end <- round_date(data$time[length(data$time)], roundsteps[timestep_],
+      end <- floor_date(data$time[length(data$time)], roundsteps[timestep_],
         week_start = getOption("lubridate.week.start", 1)
       )
       if (timestep_ %in% c("M", "Y")) {
@@ -201,7 +201,7 @@ detect_time_step <- function(data, maxMissingTimeSteps = 0, approxTimeSteps = FA
 
 resample <- function(data, timestep) {
   # Resample (upsample) by creating synthetic comple serie
-  data$time_ <- round_date(data$time, roundsteps[timestep],
+  data$time_ <- floor_date(data$time, roundsteps[timestep],
     week_start = getOption("lubridate.week.start", 1)
   )
   start <- data$time_[1]
