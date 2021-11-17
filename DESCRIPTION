@@ -6,7 +6,7 @@ Author: author
 Maintainer: maintainer <maintainer@email>
 Description: "" 
 Encoding: UTF-8
-LazyData: true
+LazyData: false 
 Depends:
     lubridate,
     readr,
