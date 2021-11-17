@@ -846,3 +846,203 @@ test_that("Calendar components. Winter, With holidays", {
     "Expected and obtained are different"
   )
 }) 
+
+test_that("Degree raw. Heating", {
+  start=ymd_hms("2020-12-27 00:00:00")
+  testdata <- create_serie(7, c(18,19,20,21,22,23,24), timestep = "days")
+  baseTemperature <- 21
+  expected <- create_serie(7, c(3,2,1,0,0,0,0), timestep = "days")
+  obtained <- (
+    degree_raw(testdata, baseTemperature, "heating")
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+}) 
+
+test_that("Degree raw. Heating under", {
+  start=ymd_hms("2020-12-27 00:00:00")
+  testdata <- create_serie(7, c(10,11,12,13,14,15,16), timestep = "days")
+  baseTemperature <- 20
+  expected <- create_serie(7, c(10,9,8,7,6,5,4), timestep = "days")
+  obtained <- (
+    degree_raw(testdata, baseTemperature, "heating")
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+}) 
+
+test_that("Degree raw. Heating over", {
+  start=ymd_hms("2020-12-27 00:00:00")
+  testdata <- create_serie(7, c(21,22,23,24,25,26,27), timestep = "days")
+  baseTemperature <- 20
+  expected <- create_serie(7, rep(0, 7), timestep = "days")
+  obtained <- (
+    degree_raw(testdata, baseTemperature, "heating")
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+}) 
+
+test_that("Degree raw. Cooling", {
+  start=ymd_hms("2020-12-27 00:00:00")
+  testdata <- create_serie(7, c(22,23,24,25,26,27,28), timestep = "days")
+  baseTemperature <- 25
+  expected <- create_serie(7, c(0,0,0,0,1,2,3), timestep = "days")
+  obtained <- (
+    degree_raw(testdata, baseTemperature, "cooling")
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+}) 
+
+test_that("Degree raw. Cooling under", {
+  start=ymd_hms("2020-12-27 00:00:00")
+  testdata <- create_serie(7, c(10,11,12,13,14,15,16), timestep = "days")
+  baseTemperature <- 25 
+  expected <- create_serie(7, rep(0, 7), timestep = "days")
+  obtained <- (
+    degree_raw(testdata, baseTemperature, "cooling")
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+}) 
+
+test_that("Degree raw. Cooling over", {
+  start=ymd_hms("2020-12-27 00:00:00")
+  testdata <- create_serie(7, c(26,27,28,29,30,31,32), timestep = "days")
+  baseTemperature <- 25
+  expected <- create_serie(7, c(1,2,3,4,5,6,7), timestep = "days")
+  obtained <- (
+    degree_raw(testdata, baseTemperature, "cooling")
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+}) 
+
+test_that("Degree raw. Heating. infreq=D, outfreq=D", {
+  start=ymd_hms("2020-12-27 00:00:00")
+  testdata <- create_serie(7, c(18,19,20,21,22,23,24), timestep = "days")
+  baseTemperature <- 21
+  expected <- create_serie(7, c(3,2,1,0,0,0,0), timestep = "days")
+  obtained <- (
+    degree_days(testdata, "Europe/Madrid", baseTemperature, "heating", "D")
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+}) 
+
+test_that("Degree raw. Heating under. infreq=D, outfreq=D", {
+  start=ymd_hms("2020-12-27 00:00:00")
+  testdata <- create_serie(7, c(10,11,12,13,14,15,16), timestep = "days")
+  baseTemperature <- 20
+  expected <- create_serie(7, c(10,9,8,7,6,5,4), timestep = "days")
+  obtained <- (
+    degree_days(testdata, "Europe/Madrid", baseTemperature, "heating", "D")
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+}) 
+
+test_that("Degree raw. Heating over. infreq=D, outfreq=D", {
+  start=ymd_hms("2020-12-27 00:00:00")
+  testdata <- create_serie(7, c(21,22,23,24,25,26,27), timestep = "days")
+  baseTemperature <- 20
+  expected <- create_serie(7, rep(0, 7), timestep = "days")
+  obtained <- (
+    degree_days(testdata, "Europe/Madrid", baseTemperature, "heating", "D")
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+}) 
+
+test_that("Degree raw. Cooling. infreq=D, outfreq=D", {
+  start=ymd_hms("2020-12-27 00:00:00")
+  testdata <- create_serie(7, c(22,23,24,25,26,27,28), timestep = "days")
+  baseTemperature <- 25
+  expected <- create_serie(7, c(0,0,0,0,1,2,3), timestep = "days")
+  obtained <- (
+    degree_days(testdata, "Europe/Madrid", baseTemperature, "cooling", "D")
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+}) 
+
+test_that("Degree raw. Cooling under. infreq=D, outfreq=D", {
+  start=ymd_hms("2020-12-27 00:00:00")
+  testdata <- create_serie(7, c(10,11,12,13,14,15,16), timestep = "days")
+  baseTemperature <- 25 
+  expected <- create_serie(7, rep(0, 7), timestep = "days")
+  obtained <- (
+    degree_days(testdata, "Europe/Madrid", baseTemperature, "cooling", "D")
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+}) 
+
+test_that("Degree raw. Cooling over. infreq=D, outfreq=D", {
+  start=ymd_hms("2020-12-27 00:00:00")
+  testdata <- create_serie(7, c(26,27,28,29,30,31,32), timestep = "days")
+  baseTemperature <- 25
+  expected <- create_serie(7, c(1,2,3,4,5,6,7), timestep = "days")
+  obtained <- (
+    degree_days(testdata, "Europe/Madrid", baseTemperature, "cooling", "D")
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+}) 
+
+test_that("Degree raw. Cooling over. infreq=H, outfreq=D", {
+  start=ymd_hms("2020-12-27 00:00:00")
+  serie <- c(rep(25,12), rep(27,12), rep(26, 12), rep(28, 12))
+  testdata <- create_serie(48, serie, timestep = "hours")
+  testdata$time <- with_tz(force_tz(testdata$time, "Europe/Madrid"), "UTC")
+  baseTemperature <- 25
+  expected <- create_serie(2, c(1,2), timestep = "days")
+  obtained <- (
+    degree_days(testdata, "Europe/Madrid", baseTemperature, "cooling", "D")
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+}) 
+
+test_that("Degree raw. Cooling over. infreq=D, outfreq=M", {
+  start=ymd_hms("2020-12-27 00:00:00")
+  testdata <- create_serie(31, c(rep(25, 10), rep(26, 10), rep(28, 11)),
+    timestep = "days")
+  testdata$time <- with_tz(force_tz(as_datetime(testdata$time), "Europe/Madrid"), "UTC")
+  baseTemperature <- 25
+  expected <- create_serie(1, 0 + 10*1 + 3*11, timestep = "days")
+  obtained <- (
+    degree_days(testdata, "Europe/Madrid", baseTemperature, "cooling", "M")
+  )
+  expect(
+    all(obtained == expected),
+    "Expected and obtained are different"
+  )
+}) 

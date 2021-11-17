@@ -258,3 +258,72 @@ fs_components <- function(data, featuresNames, mask, nHarmonics) {
   }
   return(data)
 }
+
+
+#' Calculate the difference between outdoor temperature and a base temperature,
+#' without considering the frequency of the original data.
+#' 
+#' @param temperature <timeSeries> of outdoor temperature of a location. Maximum
+#' input frequency is daily ("D").
+#' @param baseTemperature <float> describing the Balance Point Temperature (BPT)
+#' used in the calculation. Below BPT in heating mode, heat would be required by
+#' the building. The contrary in the case of cooling, over BPT in cooling mode
+#' @param mode: string describing the calculation mode, which could be "cooling"
+#' or "heating". By default, "heating" is configured.
+#' @return series timeSeries of the difference between the temperature argument
+#' and the selected base temperature, mantaining the original frequency of
+#' temperature.
+degree_raw <- function(temperature, baseTemperature, mode = "heating") {
+  return (data.frame(
+    time = temperature$time,
+    dd = (
+      if (mode == "heating") pmax(0, baseTemperature - temperature$value)
+      else pmax(0, temperature$value - baseTemperature)
+    )))
+}
+
+#' Calculate the degree-days with a desired output frequency and considering
+#' cooling or heating mode.
+#' 
+#' @param temperature <timeSeries> of outdoor temperature of a location.
+#' Maximum input frequency is daily ("D") or higher ("H","15T",...).
+#' @param localTimeZone <string> specifying the local time zone related to
+#' the building in analysis. The format of this time zones are defined by
+#' the IANA Time Zone Database (https://www.iana.org/time-zones). This
+#' argument is optional, by default no transformation to local time zone is
+#' done.
+#' @param baseTemperature <float> describing the Balance Point
+#' Temperature (BPT) used in the calculation. Below BPT in heating mode,
+#' heat would be required by the building. The contrary in the case of
+#' cooling, over BPT in cooling mode
+#' @param mode <string> describing the calculation mode, which could be
+#' "cooling" or "heating". By default, "heating" is configured.
+#' @param outputTimeStep <string> The frequency used to resample the daily
+#' degree days. It must be a string in ISO 8601 format representing the
+#' time step. Only yearly ("Y"), monthly ("M"), daily ("D") output time
+#' steps are allowed.
+#' @return degreeDays <timeSeries> in the outputTimeStep of the heating or
+#' cooling degree days.
+degree_days <- function(temperature, localTimeZone, baseTemperature,
+			mode = "heating", outputTimeStep = "D") {
+  tmp <- temperature %>%
+    mutate(
+      localtime = with_tz(time, localTimeZone),
+      time = as_datetime(lubridate::date(localtime))
+    ) %>%
+    group_by(time) %>%
+    summarize(
+      value = mean(value, na.rm = TRUE)
+    )
+  dd <- degree_raw(tmp, baseTemperature, mode)
+  return (dd %>%
+    mutate(group = floor_date(time, roundsteps[outputTimeStep],
+      week_start = getOption("lubridate.week.start", 1))
+    ) %>%
+    group_by(group) %>%
+    summarize(
+      dd = sum(dd, na.rm = TRUE)
+    ) %>%
+    rename(time = group) %>%
+    mutate(time = with_tz(time, "UTC")))
+}
