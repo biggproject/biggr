@@ -1,7 +1,7 @@
 Package: biggr
 Type: Package
 Title: biggr 
-Version: 0.1.1
+Version: 0.1.2
 Author: author 
 Maintainer: maintainer <maintainer@email>
 Description: "" 
@@ -12,9 +12,11 @@ Depends:
     readr,
     dplyr,
     tidyr,
+    tibble,
     zoo,
     roll,
     quantreg,
+    kernlab,
     testthat
 License: "" 
 RoxygenNote: 7.1.2
