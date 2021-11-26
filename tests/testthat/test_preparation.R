@@ -168,7 +168,7 @@ test_that("Detect hourly time step. No missing hour. Approx. timesteps", {
   b2backtest(filename, expected)
 })
 
-create_serie <- function(n, values, timestep = "hours", start=ymd_hms("2020-01-01 00:00:00")) {
+create_serie <- function(n, values, timestep = "hours", start = ymd_hms("2020-01-01 00:00:00")) {
   funcs <- list(
     "mins" = minutes,
     "hours" = hours,

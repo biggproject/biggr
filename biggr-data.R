@@ -1,7 +1,7 @@
 #' Electricity consumption samples dataset
 #'
 #' Electricity consumption samples dataset
-#' Available hourly data in dataset: 
+#' Available hourly data in dataset:
 #'   time (UTC)
 #'   Qe
 #'   precipIntensity
@@ -33,13 +33,13 @@
 #'
 #' @usage data(biggr)
 #'
-#' @format See dataset header 
+#' @format See dataset header
 #'
 #' @keywords datasets
 #'
-#' @references 
+#' @references
 #'
-#' @source 
+#' @source
 #'
 #' @examples
 #' data(biggr)
