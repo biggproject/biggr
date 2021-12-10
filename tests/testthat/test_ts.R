@@ -168,7 +168,7 @@ test_that("Detect hourly time step. No missing hour. Approx. timesteps", {
   b2backtest(filename, expected)
 })
 
-create_serie <- function(n, values, timestep = "hours", start=ymd_hms("2020-01-01 00:00:00")) {
+create_serie <- function(n, values, timestep = "hours", start = ymd_hms("2020-01-01 00:00:00")) {
   funcs <- list(
     "mins" = minutes,
     "hours" = hours,
@@ -696,14 +696,14 @@ test_that("Lowpass filtering", {
   columns <- c("value2", "value4")
   obtained <- lpf_ts(testdata, columns, smoothingTimeScaleParameter)
   expect(
-    all.equal(obtained, expected, tolerance=0.00001),
+    all.equal(obtained, expected, tolerance = 0.00001),
     "Expected and obtained are different"
   )
 })
 
 test_that("Calendar components. Winter, Without holidays", {
-  start=ymd_hms("2020-01-01 00:00:00")
-  testdata <- create_serie(1, rep(1, 1), timestep = "hours", start=start)
+  start <- ymd_hms("2020-01-01 00:00:00")
+  testdata <- create_serie(1, rep(1, 1), timestep = "hours", start = start)
   obtained <- (
     calendar_components(testdata, "Europe/Madrid") %>% select(-c(is_holidays))
   )
@@ -713,7 +713,7 @@ test_that("Calendar components. Winter, Without holidays", {
     date = ymd("2020-01-01"),
     weekday = 3,
     is_weekend = FALSE,
-    #is_holidays = NA,
+    # is_holidays = NA,
     year = 2020,
     quarter = 1,
     semester = 1,
@@ -723,16 +723,16 @@ test_that("Calendar components. Winter, Without holidays", {
     hour = 1,
     minute = 0,
     second = 0
-  ) 
+  )
   expect(
     all(obtained == expected),
     "Expected and obtained are different"
   )
-}) 
+})
 
 test_that("Calendar components. Spring, Without holidays", {
-  start=ymd_hms("2020-04-01 21:59:59")
-  testdata <- create_serie(1, rep(1, 1), timestep = "hours", start=start)
+  start <- ymd_hms("2020-04-01 21:59:59")
+  testdata <- create_serie(1, rep(1, 1), timestep = "hours", start = start)
   obtained <- (
     calendar_components(testdata, "Europe/Madrid") %>% select(-c(is_holidays))
   )
@@ -742,7 +742,7 @@ test_that("Calendar components. Spring, Without holidays", {
     date = ymd("2020-04-01"),
     weekday = 3,
     is_weekend = FALSE,
-    #is_holidays = NA,
+    # is_holidays = NA,
     year = 2020,
     quarter = 2,
     semester = 1,
@@ -752,16 +752,16 @@ test_that("Calendar components. Spring, Without holidays", {
     hour = 23,
     minute = 59,
     second = 59
-  ) 
+  )
   expect(
     all(obtained == expected),
     "Expected and obtained are different"
   )
-}) 
+})
 
 test_that("Calendar components. Summer, Without holidays", {
-  start=ymd_hms("2020-07-01 21:59:59")
-  testdata <- create_serie(1, rep(1, 1), timestep = "hours", start=start)
+  start <- ymd_hms("2020-07-01 21:59:59")
+  testdata <- create_serie(1, rep(1, 1), timestep = "hours", start = start)
   obtained <- (
     calendar_components(testdata, "Europe/Madrid") %>% select(-c(is_holidays))
   )
@@ -771,7 +771,7 @@ test_that("Calendar components. Summer, Without holidays", {
     date = ymd("2020-07-01"),
     weekday = 3,
     is_weekend = FALSE,
-    #is_holidays = NA,
+    # is_holidays = NA,
     year = 2020,
     quarter = 3,
     semester = 2,
@@ -781,16 +781,16 @@ test_that("Calendar components. Summer, Without holidays", {
     hour = 23,
     minute = 59,
     second = 59
-  ) 
+  )
   expect(
     all(obtained == expected),
     "Expected and obtained are different"
   )
-}) 
+})
 
 test_that("Calendar components. Winter, Without holidays", {
-  start=ymd_hms("2020-12-27 00:00:00")
-  testdata <- create_serie(1, rep(1, 1), timestep = "hours", start=start)
+  start <- ymd_hms("2020-12-27 00:00:00")
+  testdata <- create_serie(1, rep(1, 1), timestep = "hours", start = start)
   obtained <- (
     calendar_components(testdata, "Europe/Madrid") %>% select(-c(is_holidays))
   )
@@ -800,7 +800,7 @@ test_that("Calendar components. Winter, Without holidays", {
     date = ymd("2020-12-27"),
     weekday = 7,
     is_weekend = FALSE,
-    #is_holidays = NA,
+    # is_holidays = NA,
     year = 2020,
     quarter = 4,
     semester = 2,
@@ -810,16 +810,16 @@ test_that("Calendar components. Winter, Without holidays", {
     hour = 1,
     minute = 0,
     second = 0
-  ) 
+  )
   expect(
     all(obtained == expected),
     "Expected and obtained are different"
   )
-}) 
+})
 
 test_that("Calendar components. Winter, With holidays", {
-  start=ymd_hms("2020-12-27 00:00:00")
-  testdata <- create_serie(1, rep(1, 1), timestep = "hours", start=start)
+  start <- ymd_hms("2020-12-27 00:00:00")
+  testdata <- create_serie(1, rep(1, 1), timestep = "hours", start = start)
   holidays <- c(ymd("2020-12-27"))
   obtained <- (
     calendar_components(testdata, "Europe/Madrid", holidays)
@@ -840,9 +840,9 @@ test_that("Calendar components. Winter, With holidays", {
     hour = 1,
     minute = 0,
     second = 0
-  ) 
+  )
   expect(
     all(obtained == expected),
     "Expected and obtained are different"
   )
-}) 
+})
