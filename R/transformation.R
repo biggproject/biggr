@@ -693,3 +693,103 @@ clustering_dlc <- function(consumption, temperature, localTimeZone, kMax,
     )
   ))
 }
+
+
+#' Classify daily load curves based on the outputs of a clustering and a
+#' new set of data
+#'
+#' @param consumption <timeSeries> containing the total energy consumption
+#' of a building.
+#' @param temperature <timeSeries> containing the outdoor temperature of
+#' the related building.
+#' @param localTimeZone <string> local time zone
+#' @param clustering <object> clustering_dlc() output
+#' @param methodPriority: list of strings Possible values:
+#'   absoluteLoadCurvesCentroids: Based on the absolute consumption load
+#'     curve
+#'   clusteringCentroids: Based on the inputs considered in the clustering
+#'     procedure. Applying the same transformations done during that process.
+#'   classificationModel: Based on a classification model of the calendar
+#'     features.
+#' @return dailyClassification <timeSeries>
+classification_dlc <- function(consumption, temperature, localTimeZone,
+			       clustering, methodPriority) {
+
+  stop("Still under development")
+  tmp <- consumption %>%
+    left_join(temperature, by = "time")
+
+  loadCurveTransformation <- clustering$loadCurveTransformation
+  inputVars <- clustering$inputVars
+  nDayParts <- clustering$nDayParts
+  tmp_norm <- normalize_load(tmp, localTimeZone, loadCurveTransformation, inputVars, nDayParts)
+  tmp_norm$values[is.na(tmp_norm$values)] <- 0
+
+  clusteringCentroids <- clustering$clusteringCentroids
+  absoluteLoadCurvesCentroids <- clustering$absoluteLoadCurvesCentroids 
+
+  all_hours <- as.character(0:23)
+  all_hours_default <- rep(NA, length(all_hours))
+  names(default) <- all_hours
+  tmp <- tmp %>%
+    mutate(
+      localtime = with_tz(time, localTimeZone),
+      date = lubridate::date(localtime),
+      hour = hour(localtime),
+    ) %>%
+    distinct(date, hour, .keep_all = TRUE)
+  tmp_spread <- tmp %>%
+    spread(hour, value) %>%
+    add_column(tmp_spread, !!!all_hours_default[setdiff(all_hours, names(tmp_spread))]) %>%
+    select(!!!all_hours)
+
+  columns <- !(colnames(absoluteLoadCurvesCentroids) %in% "s")
+  tmp_centroids <- absoluteLoadCurvesCentroids[, columns]
+  tmp_centroids_dist <- t(proxy::dist(
+    apply(as.matrix(tmp_centroids), 1:2, as.numeric),
+    as.matrix(tmp_spread)))
+
+  columns <- !(colnames(clusteringCentroids) %in% "s")
+  tmp_clust <- clusteringCentroids[, columns]
+  tmp_clust_dist <- t(proxy::dist(
+    apply(as.matrix(tmp_clust), 1:2, as.numeric),
+    as.matrix(tmp_norm$values)))
+
+  # Classify across all centroids (the classification is done by calculating
+  # the cross distance matrix between the centroids data frame and the
+  # consumption data frame)
+  tmp_centroids_predict <- data.frame(
+    "days" = tmp_spread$dates,
+    "classification_load_curve" = 
+      sprintf("%02i", tmp_centroids_dist %>% apply(1, function(x) {ifelse(sum(is.na(x))>1, NA, order(x)[1])}))
+  )
+
+  tmp_clust_predict <- data.frame(
+    "days" = tmp_norm$dates,
+    "classification_clustering_centroids" = 
+      sprintf("%02i", tmp_clust_dist %>% apply(1, function(x) {ifelse(sum(is.na(x))>1, NA, order(x)[1])}))
+  )
+
+  if (methodPriority == "absoluteLoadCurvesCentroids") {
+    # Based on the absolute consumption load curve
+    tmp_class_predict <- tmp_centroids_predict$classification_load_curve
+  } else if (methodPriority == "clusteringCentroids") {
+    stop("Implementation pending")
+    # Based on the inputs considered in the clustering procedure.
+    # Applying the same transformations done during that process.
+  } else {
+    stop("Implementation pending")
+    # classificationModel
+    # Based on a classification model of the calendar
+    # features.
+  }
+  tmp_class_predict <- data.frame(
+    "date" = tmp_spread$dates,
+    "prediction" = tmp_class_predict 
+  )
+  # Mix of different results ?
+
+  result <- tmp %>%
+    left_join(tmp_class_predict, by="date")
+  return(result)
+}
