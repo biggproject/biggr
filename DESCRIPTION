@@ -15,6 +15,9 @@ Depends:
     zoo,
     roll,
     quantreg,
-    testthat
+    testthat,
+    kernlab,
+    fastDummies,
+    caret
 License: "" 
 RoxygenNote: 7.1.2
