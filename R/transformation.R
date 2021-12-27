@@ -413,6 +413,7 @@ normalize_load <- function(data, localTimeZone, transformation = "relative", inp
     holidays <- read_csv(holidays, col_names = FALSE)
     holidays <- holidays$X1
   }
+
   tmp <- data %>%
     mutate(
       localtime = with_tz(time, localTimeZone),
@@ -449,6 +450,7 @@ normalize_load <- function(data, localTimeZone, transformation = "relative", inp
     tmp_spread[, columns] <- tmp_spread[columns] / rowSums(tmp_spread[columns], na.rm = TRUE)
     # tmp_spread[columns] <- tmp_spread[columns] / rowSums(tmp_spread[columns], na.rm=TRUE)
   }
+
 
   tmp_spread <- tmp_spread %>%
     inner_join(tmp_daily, by = "date")
@@ -587,7 +589,6 @@ make.similarity <- function(my.data, similarity) {
 
 clustering_dlc <- function(consumption, temperature, localTimeZone, kMax,
                            inputVars, loadCurveTransformation, nDayParts, ignoreDates = c()) {
-  stop("Still under development")
   tmp <- consumption %>%
     left_join(temperature, by = "time") %>%
     filter(!(lubridate::date(time) %in% ignoreDates))
@@ -598,7 +599,7 @@ clustering_dlc <- function(consumption, temperature, localTimeZone, kMax,
   # Identify best K to be used in spectral clustering
   # Calculate eigenvalues/eigenvector and find the one
   # with the highest eigenvalue decrease
-  S <- make.similarity(tmp_norm$values, similariry)
+  S <- make.similarity(tmp_norm$values, similarity)
   A <- make.affinity(S, 3) # use 3 neighbors (includes self)
   D <- diag(apply(A, 1, sum))
   U <- D - A
@@ -614,7 +615,7 @@ clustering_dlc <- function(consumption, temperature, localTimeZone, kMax,
   # Using polynomial spectral clustering
   spectral_clust <- tryCatch(
     {
-      specc(tmp_norm$values,
+      specc(as.matrix(tmp_norm$values),
         centers = k,
         kernel = "polydot", kpar = list(degree = 2),
         nystrom.red = T, nystrom.sample = nrow(tmp_norm$values)[1] / 6,
@@ -626,14 +627,18 @@ clustering_dlc <- function(consumption, temperature, localTimeZone, kMax,
     }
   )
 
+  # Check valif spectal clustering otherwise use single cluster
   spectral_clust_valid <- (!(class(spectral_clust)[1] == "numeric"))
   s <- spectral_clust
   if (spectral_clust_valid == TRUE) s <- spectral_clust@.Data
+
+  # Cluster results with cluster identifier assignment per date
   cluster_results <- data.frame(
     "date" = tmp_norm$dates,
     "s" = s
   )
 
+  # Calendar features added and sorted
   tmp <- tmp %>%
     mutate(
       localtime = with_tz(time, localTimeZone),
@@ -646,16 +651,20 @@ clustering_dlc <- function(consumption, temperature, localTimeZone, kMax,
     ) %>%
     distinct(date, hour, .keep_all = TRUE) %>%
     arrange(time)
+
+  # Clustering results wit merge of both raw data and cluster properties
   cluster_struct <- merge(tmp, cluster_results, by = "date")
 
   # Read the clustering centroids
   if (spectral_clust_valid == TRUE) {
+    # Clustering didn't failed so using obtained centroids
     cluster_centroids <- spectral_clust@centers
     cluster_centroids <- data.frame(
       "s" = 1:nrow(cluster_centroids),
       cluster_centroids
     )
   } else {
+    # Custering failed so using mean data as single centroid 
     cluster_centroids <- tmp_norm$values %>%
       summarize_all(mean, na.rm = T)
     cluster_centroids <- data.frame(
@@ -671,6 +680,7 @@ clustering_dlc <- function(consumption, temperature, localTimeZone, kMax,
     remove_rownames() %>%
     column_to_rownames(var = "s")
 
+  # Calculate centroids using raw data mean per cluster
   tmp_centroids <- cluster_struct %>%
     group_by(hour, s) %>%
     summarize(value = mean(value, na.rm = TRUE)) %>%
@@ -680,11 +690,21 @@ clustering_dlc <- function(consumption, temperature, localTimeZone, kMax,
     remove_rownames() %>%
     column_to_rownames(var = "s")
 
+  if (spectral_clust_valid == TRUE){
+    # Create calendar classification model using weekday as inpute feature
+    mod_calendar <- multinom(
+      formula = as.factor(s) ~ 1 + as.factor(weekday),
+      data = cluster_struct[cluster_struct[,"time"]>=(max(cluster_struct[,"time"])-years(1)),])
+  } else {
+    # Create naïve classification with single cluster 
+    mod_calendar <- unique(cluster_struct$s)
+  }
+
   return(list(
     dailyClassification = cluster_results,
     absoluteLoadCurvesCentroids = tmp_centroids,
     clusteringCentroids = cluster_centroids,
-    classificationModel = NULL,
+    classificationModel = mod_calendar,
     opts = list(
       "normSpecs" = NULL,
       "loadCurveTransformation" = loadCurveTransformation,
@@ -715,13 +735,12 @@ clustering_dlc <- function(consumption, temperature, localTimeZone, kMax,
 classification_dlc <- function(consumption, temperature, localTimeZone,
 			       clustering, methodPriority) {
 
-  stop("Still under development")
   tmp <- consumption %>%
     left_join(temperature, by = "time")
 
-  loadCurveTransformation <- clustering$loadCurveTransformation
-  inputVars <- clustering$inputVars
-  nDayParts <- clustering$nDayParts
+  loadCurveTransformation <- clustering$opts$loadCurveTransformation
+  inputVars <- clustering$opts$inputVars
+  nDayParts <- clustering$opts$nDayParts
   tmp_norm <- normalize_load(tmp, localTimeZone, loadCurveTransformation, inputVars, nDayParts)
   tmp_norm$values[is.na(tmp_norm$values)] <- 0
 
@@ -730,24 +749,33 @@ classification_dlc <- function(consumption, temperature, localTimeZone,
 
   all_hours <- as.character(0:23)
   all_hours_default <- rep(NA, length(all_hours))
-  names(default) <- all_hours
+  names(all_hours_default) <- all_hours
   tmp <- tmp %>%
     mutate(
       localtime = with_tz(time, localTimeZone),
       date = lubridate::date(localtime),
       hour = hour(localtime),
+      weekday = wday(date,
+        week_start = getOption("lubridate.week.start", 1)
+      ),
+      is_weekend = weekday %in% c(6, 7)
     ) %>%
     distinct(date, hour, .keep_all = TRUE)
+
+  # WARNING: Ignoring temperature ?
   tmp_spread <- tmp %>%
-    spread(hour, value) %>%
-    add_column(tmp_spread, !!!all_hours_default[setdiff(all_hours, names(tmp_spread))]) %>%
-    select(!!!all_hours)
+    select(date, hour, value) %>%
+    spread(hour, value)
+  tmp_spread <-  add_column(tmp_spread, !!!all_hours_default[setdiff(all_hours, names(tmp_spread))]) %>%
+    select(c(date, !!!all_hours))
 
   columns <- !(colnames(absoluteLoadCurvesCentroids) %in% "s")
   tmp_centroids <- absoluteLoadCurvesCentroids[, columns]
+
+  columns <- !(colnames(tmp_spread) %in% "date")
   tmp_centroids_dist <- t(proxy::dist(
     apply(as.matrix(tmp_centroids), 1:2, as.numeric),
-    as.matrix(tmp_spread)))
+    as.matrix(tmp_spread[, columns])))
 
   columns <- !(colnames(clusteringCentroids) %in% "s")
   tmp_clust <- clusteringCentroids[, columns]
@@ -758,38 +786,51 @@ classification_dlc <- function(consumption, temperature, localTimeZone,
   # Classify across all centroids (the classification is done by calculating
   # the cross distance matrix between the centroids data frame and the
   # consumption data frame)
+  # Centroids from raw data
   tmp_centroids_predict <- data.frame(
-    "days" = tmp_spread$dates,
-    "classification_load_curve" = 
+    "days" = tmp_spread$date,
+    "prediction" = 
       sprintf("%02i", tmp_centroids_dist %>% apply(1, function(x) {ifelse(sum(is.na(x))>1, NA, order(x)[1])}))
   )
 
+  # Centroids from spectral clustering
   tmp_clust_predict <- data.frame(
-    "days" = tmp_norm$dates,
-    "classification_clustering_centroids" = 
+    "days" = tmp_norm$date,
+    "prediction" = 
       sprintf("%02i", tmp_clust_dist %>% apply(1, function(x) {ifelse(sum(is.na(x))>1, NA, order(x)[1])}))
   )
 
   if (methodPriority == "absoluteLoadCurvesCentroids") {
-    # Based on the absolute consumption load curve
-    tmp_class_predict <- tmp_centroids_predict$classification_load_curve
+    # Prediction based on raw data centroids
+    tmp_class_predict <- tmp_centroids_predict$prediction
+    tmp_class_predict <- data.frame(
+      "date" = tmp_spread$date,
+      "s" = tmp_class_predict 
+    )
+    result <- tmp %>%
+      left_join(tmp_class_predict, by="date")
   } else if (methodPriority == "clusteringCentroids") {
-    stop("Implementation pending")
     # Based on the inputs considered in the clustering procedure.
     # Applying the same transformations done during that process.
+    tmp_class_predict <- tmp_clust_predict$prediction
+    tmp_class_predict <- data.frame(
+      "date" = tmp_spread$date,
+      "s" = tmp_class_predict 
+    )
+    result <- tmp %>%
+      left_join(tmp_class_predict, by="date")
   } else {
-    stop("Implementation pending")
     # classificationModel
     # Based on a classification model of the calendar
     # features.
+    model <- clustering$classificationModel
+    if (class(model) == "character") {
+      tmp_class_predict <- clustering$classificationModel
+    } else {
+      tmp_class_predict <- as.character(predict(clustering$classificationModel, tmp))
+    }
+    result <- tmp
+    result$s <- tmp_class_predict
   }
-  tmp_class_predict <- data.frame(
-    "date" = tmp_spread$dates,
-    "prediction" = tmp_class_predict 
-  )
-  # Mix of different results ?
-
-  result <- tmp %>%
-    left_join(tmp_class_predict, by="date")
   return(result)
 }

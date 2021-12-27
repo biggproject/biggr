@@ -582,3 +582,61 @@ test_that("normalize load relative inputvars", {
     "Expected and obtained are different"
   )
 })
+
+test_that("Easy spectral clustering test", {
+  serie <- c(
+      rep(c(rep(100, 12), rep(200, 12)), 5),
+      rep(c(rep(90, 12), rep(190, 12)), 5),
+      rep(c(rep(10, 12), rep(20, 12)), 5),
+      rep(c(rep(5, 12), rep(10, 12)), 5)
+  )
+  testdata <- create_serie(24*20, serie, timestep = "hours")
+  testdata$time <- with_tz(force_tz(testdata$time, "Europe/Madrid"), "UTC")
+  testdata$temperature <- serie
+  kMax <- 4 
+  inputVars <- c(
+    "load_curves"
+  )
+
+  set.seed(123)
+  consumption_ <- c("time", "value")
+  temperature_ <- c("time", "temperature")
+  obtained <- clustering_dlc(testdata[, consumption_], testdata[, temperature_], "Europe/Madrid", kMax, inputVars, "absolute", 24)
+  expect(all.equal(
+      obtained$dailyClassification$s,
+      c(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)),
+    "Expected and obtained are different"
+  )
+  expected <- "test_b2back/test_cluster_1.rds"
+  expected <- readRDS(file=expected)
+  expect(all.equal(obtained, expected),
+    "Expected and obtained are different"
+  )
+})
+
+test_that("Easy spectral clustering and classification test", {
+  serie <- c(
+      rep(c(rep(100, 12), rep(200, 12)), 5),
+      rep(c(rep(90, 12), rep(190, 12)), 5),
+      rep(c(rep(10, 12), rep(20, 12)), 5),
+      rep(c(rep(5, 12), rep(10, 12)), 5)
+  )
+  testdata <- create_serie(24*20, serie, timestep = "hours")
+  testdata$time <- with_tz(force_tz(testdata$time, "Europe/Madrid"), "UTC")
+  testdata$temperature <- serie
+  kMax <- 4 
+  inputVars <- c(
+    "load_curves"
+  )
+
+  set.seed(123)
+  consumption_ <- c("time", "value")
+  temperature_ <- c("time", "temperature")
+  clustering <- clustering_dlc(testdata[, consumption_], testdata[, temperature_], "Europe/Madrid", kMax, inputVars, "absolute", 24)
+  obtained <- classification_dlc(testdata[, consumption_], testdata[, temperature_], "Europe/Madrid", clustering, "classificationModel")
+  expected <-"test_b2back/test_classification_1.rds"
+  expected <- readRDS(file=expected)
+  expect(all.equal(obtained, expected),
+    "Expected and obtained are different"
+  )
+})
