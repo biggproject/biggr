@@ -281,8 +281,7 @@ degree_raw <- function(temperature, baseTemperature, mode = "heating") {
         pmax(0, baseTemperature - temperature$value)
       } else {
         pmax(0, temperature$value - baseTemperature)
-      }
-    )
+      })
   ))
 }
 
@@ -664,7 +663,7 @@ clustering_dlc <- function(consumption, temperature, localTimeZone, kMax,
       cluster_centroids
     )
   } else {
-    # Custering failed so using mean data as single centroid 
+    # Custering failed so using mean data as single centroid
     cluster_centroids <- tmp_norm$values %>%
       summarize_all(mean, na.rm = T)
     cluster_centroids <- data.frame(
@@ -690,13 +689,14 @@ clustering_dlc <- function(consumption, temperature, localTimeZone, kMax,
     remove_rownames() %>%
     column_to_rownames(var = "s")
 
-  if (spectral_clust_valid == TRUE){
+  if (spectral_clust_valid == TRUE) {
     # Create calendar classification model using weekday as inpute feature
     mod_calendar <- multinom(
       formula = as.factor(s) ~ 1 + as.factor(weekday),
-      data = cluster_struct[cluster_struct[,"time"]>=(max(cluster_struct[,"time"])-years(1)),])
+      data = cluster_struct[cluster_struct[, "time"] >= (max(cluster_struct[, "time"]) - years(1)), ]
+    )
   } else {
-    # Create naïve classification with single cluster 
+    # Create naïve classification with single cluster
     mod_calendar <- unique(cluster_struct$s)
   }
 
@@ -733,8 +733,7 @@ clustering_dlc <- function(consumption, temperature, localTimeZone, kMax,
 #'     features.
 #' @return dailyClassification <timeSeries>
 classification_dlc <- function(consumption, temperature, localTimeZone,
-			       clustering, methodPriority) {
-
+                               clustering, methodPriority) {
   tmp <- consumption %>%
     left_join(temperature, by = "time")
 
@@ -745,7 +744,7 @@ classification_dlc <- function(consumption, temperature, localTimeZone,
   tmp_norm$values[is.na(tmp_norm$values)] <- 0
 
   clusteringCentroids <- clustering$clusteringCentroids
-  absoluteLoadCurvesCentroids <- clustering$absoluteLoadCurvesCentroids 
+  absoluteLoadCurvesCentroids <- clustering$absoluteLoadCurvesCentroids
 
   all_hours <- as.character(0:23)
   all_hours_default <- rep(NA, length(all_hours))
@@ -766,7 +765,7 @@ classification_dlc <- function(consumption, temperature, localTimeZone,
   tmp_spread <- tmp %>%
     select(date, hour, value) %>%
     spread(hour, value)
-  tmp_spread <-  add_column(tmp_spread, !!!all_hours_default[setdiff(all_hours, names(tmp_spread))]) %>%
+  tmp_spread <- add_column(tmp_spread, !!!all_hours_default[setdiff(all_hours, names(tmp_spread))]) %>%
     select(c(date, !!!all_hours))
 
   columns <- !(colnames(absoluteLoadCurvesCentroids) %in% "s")
@@ -775,13 +774,15 @@ classification_dlc <- function(consumption, temperature, localTimeZone,
   columns <- !(colnames(tmp_spread) %in% "date")
   tmp_centroids_dist <- t(proxy::dist(
     apply(as.matrix(tmp_centroids), 1:2, as.numeric),
-    as.matrix(tmp_spread[, columns])))
+    as.matrix(tmp_spread[, columns])
+  ))
 
   columns <- !(colnames(clusteringCentroids) %in% "s")
   tmp_clust <- clusteringCentroids[, columns]
   tmp_clust_dist <- t(proxy::dist(
     apply(as.matrix(tmp_clust), 1:2, as.numeric),
-    as.matrix(tmp_norm$values)))
+    as.matrix(tmp_norm$values)
+  ))
 
   # Classify across all centroids (the classification is done by calculating
   # the cross distance matrix between the centroids data frame and the
@@ -789,15 +790,19 @@ classification_dlc <- function(consumption, temperature, localTimeZone,
   # Centroids from raw data
   tmp_centroids_predict <- data.frame(
     "days" = tmp_spread$date,
-    "prediction" = 
-      sprintf("%02i", tmp_centroids_dist %>% apply(1, function(x) {ifelse(sum(is.na(x))>1, NA, order(x)[1])}))
+    "prediction" =
+      sprintf("%02i", tmp_centroids_dist %>% apply(1, function(x) {
+        ifelse(sum(is.na(x)) > 1, NA, order(x)[1])
+      }))
   )
 
   # Centroids from spectral clustering
   tmp_clust_predict <- data.frame(
     "days" = tmp_norm$date,
-    "prediction" = 
-      sprintf("%02i", tmp_clust_dist %>% apply(1, function(x) {ifelse(sum(is.na(x))>1, NA, order(x)[1])}))
+    "prediction" =
+      sprintf("%02i", tmp_clust_dist %>% apply(1, function(x) {
+        ifelse(sum(is.na(x)) > 1, NA, order(x)[1])
+      }))
   )
 
   if (methodPriority == "absoluteLoadCurvesCentroids") {
@@ -805,20 +810,20 @@ classification_dlc <- function(consumption, temperature, localTimeZone,
     tmp_class_predict <- tmp_centroids_predict$prediction
     tmp_class_predict <- data.frame(
       "date" = tmp_spread$date,
-      "s" = tmp_class_predict 
+      "s" = tmp_class_predict
     )
     result <- tmp %>%
-      left_join(tmp_class_predict, by="date")
+      left_join(tmp_class_predict, by = "date")
   } else if (methodPriority == "clusteringCentroids") {
     # Based on the inputs considered in the clustering procedure.
     # Applying the same transformations done during that process.
     tmp_class_predict <- tmp_clust_predict$prediction
     tmp_class_predict <- data.frame(
       "date" = tmp_spread$date,
-      "s" = tmp_class_predict 
+      "s" = tmp_class_predict
     )
     result <- tmp %>%
-      left_join(tmp_class_predict, by="date")
+      left_join(tmp_class_predict, by = "date")
   } else {
     # classificationModel
     # Based on a classification model of the calendar
@@ -833,4 +838,25 @@ classification_dlc <- function(consumption, temperature, localTimeZone,
     result$s <- tmp_class_predict
   }
   return(result)
+}
+
+
+#' Clustering and classification wrapper function
+#'
+#' @param consumption <timeSeries> containing the total energy consumption
+#' of a building.
+#' @param temperature <timeSeries> containing the outdoor temperature of
+#' the related building.
+#' @param localTimeZone <string> local time zone
+#' @param predictionMode <boolean> Select whether clustering (FALSE) or classification (TRUE) action
+#'
+#' Additional parameters are clustering or classification specific. See clustering_dlc and classification_dlc documentation for specific parameters details
+#' @return Return value depends on predictionMode value. If FALSE see clustering_dlc documentation. If TRUE see classification_dlc documentation.
+
+similar_dlc <- function(consumption, temperature, localTimeZone, predictionMode, ...) {
+  if (predictionMode == FALSE) {
+    clustering_dlc(consumption, temperature, localTimeZone, ...)
+  } else {
+    classification_dlc(consumption, temperature, localTimeZone, ...)
+  }
 }

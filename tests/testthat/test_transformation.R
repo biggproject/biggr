@@ -192,64 +192,64 @@ test_that("Calendar components. Summer, Without holidays", {
   )
 })
 
-# test_that("Calendar components. Winter, Without holidays", {
-#  start=ymd_hms("2020-12-27 00:00:00")
-#  testdata <- create_serie(1, rep(1, 1), timestep = "hours", start=start)
-#  obtained <- (
-#    calendar_components(testdata, "Europe/Madrid") %>% select(-c(is_holidays))
-#  )
-#  expected <- data.frame(
-#    time = testdata$time,
-#    value = testdata$value,
-#    date = ymd("2020-12-27"),
-#    weekday = 7,
-#    is_weekend = FALSE,
-#    #is_holidays = NA,
-#    year = 2020,
-#    quarter = 4,
-#    semester = 2,
-#    season = "Winter",
-#    month = 12,
-#    day = 27,
-#    hour = 1,
-#    minute = 0,
-#    second = 0
-#  )
-#  expect(
-#    all(obtained == expected),
-#    "Expected and obtained are different"
-#  )
-# })
+#test_that("Calendar components. Winter, Without holidays", {
+# start=ymd_hms("2020-12-27 00:00:00")
+# testdata <- create_serie(1, rep(1, 1), timestep = "hours", start=start)
+# obtained <- (
+#   calendar_components(testdata, "Europe/Madrid") %>% select(-c(is_holidays))
+# )
+# expected <- data.frame(
+#   time = testdata$time,
+#   value = testdata$value,
+#   date = ymd("2020-12-27"),
+#   weekday = 7,
+#   is_weekend = FALSE,
+#   #is_holidays = NA,
+#   year = 2020,
+#   quarter = 4,
+#   semester = 2,
+#   season = "Winter",
+#   month = 12,
+#   day = 27,
+#   hour = 1,
+#   minute = 0,
+#   second = 0
+# )
+# expect(
+#   all(obtained == expected),
+#   "Expected and obtained are different"
+# )
+#})
 #
-# test_that("Calendar components. Winter, With holidays", {
-#  start=ymd_hms("2020-12-27 00:00:00")
-#  testdata <- create_serie(1, rep(1, 1), timestep = "hours", start=start)
-#  holidays <- c(ymd("2020-12-27"))
-#  obtained <- (
-#    calendar_components(testdata, "Europe/Madrid", holidays)
-#  )
-#  expected <- data.frame(
-#    time = testdata$time,
-#    value = testdata$value,
-#    date = ymd("2020-12-27"),
-#    weekday = 7,
-#    is_weekend = FALSE,
-#    is_holidays = TRUE,
-#    year = 2020,
-#    quarter = 4,
-#    semester = 2,
-#    season = "Winter",
-#    month = 12,
-#    day = 27,
-#    hour = 1,
-#    minute = 0,
-#    second = 0
-#  )
-#  expect(
-#    all(obtained == expected),
-#    "Expected and obtained are different"
-#  )
-# })
+#test_that("Calendar components. Winter, With holidays", {
+# start=ymd_hms("2020-12-27 00:00:00")
+# testdata <- create_serie(1, rep(1, 1), timestep = "hours", start=start)
+# holidays <- c(ymd("2020-12-27"))
+# obtained <- (
+#   calendar_components(testdata, "Europe/Madrid", holidays)
+# )
+# expected <- data.frame(
+#   time = testdata$time,
+#   value = testdata$value,
+#   date = ymd("2020-12-27"),
+#   weekday = 7,
+#   is_weekend = FALSE,
+#   is_holidays = TRUE,
+#   year = 2020,
+#   quarter = 4,
+#   semester = 2,
+#   season = "Winter",
+#   month = 12,
+#   day = 27,
+#   hour = 1,
+#   minute = 0,
+#   second = 0
+# )
+# expect(
+#   all(obtained == expected),
+#   "Expected and obtained are different"
+# )
+#})
 
 test_that("Degree raw. Heating", {
   start <- ymd_hms("2020-12-27 00:00:00")
@@ -583,7 +583,8 @@ test_that("normalize load relative inputvars", {
   )
 })
 
-test_that("Easy spectral clustering test", {
+setup_clustering_test <- function()
+{
   serie <- c(
       rep(c(rep(100, 12), rep(200, 12)), 5),
       rep(c(rep(90, 12), rep(190, 12)), 5),
@@ -597,11 +598,59 @@ test_that("Easy spectral clustering test", {
   inputVars <- c(
     "load_curves"
   )
+  return(list(testdata=testdata, kMax=kMax, inputVars=inputVars))
+}
+
+#test_that("Easy spectral clustering test", {
+#  tmp <- setup_clustering_test()
+#  testdata <- tmp$testdata
+#  kMax <- tmp$kMax
+#  inputVars <- tmp$inputVars
+#
+#  set.seed(123)
+#  consumption_ <- c("time", "value")
+#  temperature_ <- c("time", "temperature")
+#  obtained <- clustering_dlc(testdata[, consumption_], testdata[, temperature_], "Europe/Madrid", kMax, inputVars, "absolute", 24)
+#  expect(all.equal(
+#      obtained$dailyClassification$s,
+#      c(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)),
+#    "Expected and obtained are different"
+#  )
+#  expected <- "test_b2back/test_cluster_1.rds"
+#  expected <- readRDS(file=expected)
+#  expect(all.equal(obtained, expected),
+#    "Expected and obtained are different"
+#  )
+#})
+#
+test_that("Easy spectral clustering and classification test", {
+  tmp <- setup_clustering_test()
+  testdata <- tmp$testdata
+  kMax <- tmp$kMax
+  inputVars <- tmp$inputVars
 
   set.seed(123)
   consumption_ <- c("time", "value")
   temperature_ <- c("time", "temperature")
-  obtained <- clustering_dlc(testdata[, consumption_], testdata[, temperature_], "Europe/Madrid", kMax, inputVars, "absolute", 24)
+  clustering <- clustering_dlc(testdata[, consumption_], testdata[, temperature_], "Europe/Madrid", kMax, inputVars, "absolute", 24)
+  obtained <- classification_dlc(testdata[, consumption_], testdata[, temperature_], "Europe/Madrid", clustering, "classificationModel")
+  expected <-"test_b2back/test_classification_1.rds"
+  expected <- readRDS(file=expected)
+  expect(all.equal(obtained, expected),
+    "Expected and obtained are different"
+  )
+})
+
+test_that("Easy spectral clustering test via wrapper", {
+  tmp <- setup_clustering_test()
+  testdata <- tmp$testdata
+  kMax <- tmp$kMax
+  inputVars <- tmp$inputVars
+
+  set.seed(123)
+  consumption_ <- c("time", "value")
+  temperature_ <- c("time", "temperature")
+  obtained <- similar_dlc(testdata[, consumption_], testdata[, temperature_], "Europe/Madrid", predictionMode=FALSE, kMax, inputVars, "absolute", 24)
   expect(all.equal(
       obtained$dailyClassification$s,
       c(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)),
@@ -614,28 +663,51 @@ test_that("Easy spectral clustering test", {
   )
 })
 
-test_that("Easy spectral clustering and classification test", {
-  serie <- c(
-      rep(c(rep(100, 12), rep(200, 12)), 5),
-      rep(c(rep(90, 12), rep(190, 12)), 5),
-      rep(c(rep(10, 12), rep(20, 12)), 5),
-      rep(c(rep(5, 12), rep(10, 12)), 5)
-  )
-  testdata <- create_serie(24*20, serie, timestep = "hours")
-  testdata$time <- with_tz(force_tz(testdata$time, "Europe/Madrid"), "UTC")
-  testdata$temperature <- serie
-  kMax <- 4 
-  inputVars <- c(
-    "load_curves"
-  )
+test_that("Easy spectral clustering and classification test via wrapper", {
+  tmp <- setup_clustering_test()
+  testdata <- tmp$testdata
+  kMax <- tmp$kMax
+  inputVars <- tmp$inputVars
 
   set.seed(123)
   consumption_ <- c("time", "value")
   temperature_ <- c("time", "temperature")
-  clustering <- clustering_dlc(testdata[, consumption_], testdata[, temperature_], "Europe/Madrid", kMax, inputVars, "absolute", 24)
-  obtained <- classification_dlc(testdata[, consumption_], testdata[, temperature_], "Europe/Madrid", clustering, "classificationModel")
+  clustering <- similar_dlc(testdata[, consumption_], testdata[, temperature_], "Europe/Madrid", predictionMode=FALSE, kMax, inputVars, "absolute", 24)
+  obtained <- similar_dlc(testdata[, consumption_], testdata[, temperature_], "Europe/Madrid", predictionMode=TRUE, clustering, "classificationModel")
   expected <-"test_b2back/test_classification_1.rds"
   expected <- readRDS(file=expected)
+  expect(all.equal(obtained, expected),
+    "Expected and obtained are different"
+  )
+})
+
+test_that("Easy spectral clustering and classification test via wrapper and serialization", {
+  tmp <- setup_clustering_test()
+  testdata <- tmp$testdata
+  kMax <- tmp$kMax
+  inputVars <- tmp$inputVars
+
+  set.seed(123)
+  consumption_ <- c("time", "value")
+  temperature_ <- c("time", "temperature")
+  clustering <- similar_dlc(testdata[, consumption_], testdata[, temperature_], "Europe/Madrid", predictionMode=FALSE, kMax, inputVars, "absolute", 24)
+
+  expected <-"test_b2back/test_classification_1.rds"
+  expected <- readRDS(file=expected)
+
+  filename <- tempfile("test-no-serialize")
+  save(clustering, filename, serialize=FALSE)
+  clustering <- load(filename, serialize=FALSE)
+  obtained <- similar_dlc(testdata[, consumption_], testdata[, temperature_], "Europe/Madrid", predictionMode=TRUE, clustering, "classificationModel")
+  expect(all.equal(obtained, expected),
+    "Expected and obtained are different"
+  )
+
+  filename <- tempfile("test-serialize")
+  save(clustering, filename, serialize=TRUE)
+  clustering_ <- load(filename, serialize=TRUE)
+
+  obtained <- similar_dlc(testdata[, consumption_], testdata[, temperature_], "Europe/Madrid", predictionMode=TRUE, clustering, "classificationModel")
   expect(all.equal(obtained, expected),
     "Expected and obtained are different"
   )
