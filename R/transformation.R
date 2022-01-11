@@ -195,7 +195,7 @@ calendar_components <- function(data, localTimeZone = NULL, holidays = NULL) {
       weekday = wday(localtime,
         week_start = getOption("lubridate.week.start", 1)
       ),
-      is_weekend = wday(localtime) %in% c(6, 7),
+      is_weekend = weekday %in% c(6, 7),
       is_holidays = ifelse(is.null(holidays), NA, ifelse(date %in% holidays, TRUE, FALSE)),
       year = year(localtime),
       quarter = quarter(localtime),
@@ -257,4 +257,606 @@ fs_components <- function(data, featuresNames, mask, nHarmonics) {
     data <- cbind(data, tmp)
   }
   return(data)
+}
+
+
+#' Calculate the difference between outdoor temperature and a base temperature,
+#' without considering the frequency of the original data.
+#'
+#' @param temperature <timeSeries> of outdoor temperature of a location. Maximum
+#' input frequency is daily ("D").
+#' @param baseTemperature <float> describing the Balance Point Temperature (BPT)
+#' used in the calculation. Below BPT in heating mode, heat would be required by
+#' the building. The contrary in the case of cooling, over BPT in cooling mode
+#' @param mode: string describing the calculation mode, which could be "cooling"
+#' or "heating". By default, "heating" is configured.
+#' @return series timeSeries of the difference between the temperature argument
+#' and the selected base temperature, mantaining the original frequency of
+#' temperature.
+degree_raw <- function(temperature, baseTemperature, mode = "heating") {
+  return(data.frame(
+    time = temperature$time,
+    dd = (
+      if (mode == "heating") {
+        pmax(0, baseTemperature - temperature$value)
+      } else {
+        pmax(0, temperature$value - baseTemperature)
+      })
+  ))
+}
+
+#' Calculate the degree-days with a desired output frequency and considering
+#' cooling or heating mode.
+#'
+#' @param temperature <timeSeries> of outdoor temperature of a location.
+#' Maximum input frequency is daily ("D") or higher ("H","15T",...).
+#' @param localTimeZone <string> specifying the local time zone related to
+#' the building in analysis. The format of this time zones are defined by
+#' the IANA Time Zone Database (https://www.iana.org/time-zones). This
+#' argument is optional, by default no transformation to local time zone is
+#' done.
+#' @param baseTemperature <float> describing the Balance Point
+#' Temperature (BPT) used in the calculation. Below BPT in heating mode,
+#' heat would be required by the building. The contrary in the case of
+#' cooling, over BPT in cooling mode
+#' @param mode <string> describing the calculation mode, which could be
+#' "cooling" or "heating". By default, "heating" is configured.
+#' @param outputTimeStep <string> The frequency used to resample the daily
+#' degree days. It must be a string in ISO 8601 format representing the
+#' time step. Only yearly ("Y"), monthly ("M"), daily ("D") output time
+#' steps are allowed.
+#' @return degreeDays <timeSeries> in the outputTimeStep of the heating or
+#' cooling degree days.
+degree_days <- function(temperature, localTimeZone, baseTemperature,
+                        mode = "heating", outputTimeStep = "D") {
+  tmp <- temperature %>%
+    mutate(
+      localtime = with_tz(time, localTimeZone),
+      time = as_datetime(lubridate::date(localtime))
+    ) %>%
+    group_by(time) %>%
+    summarize(
+      value = mean(value, na.rm = TRUE)
+    )
+  dd <- degree_raw(tmp, baseTemperature, mode)
+  return(dd %>%
+    mutate(group = floor_date(time, roundsteps[outputTimeStep],
+      week_start = getOption("lubridate.week.start", 1)
+    )) %>%
+    group_by(group) %>%
+    summarize(
+      dd = sum(dd, na.rm = TRUE)
+    ) %>%
+    rename(time = group) %>%
+    mutate(time = with_tz(time, "UTC")))
+}
+
+#' Range normalization method
+#'
+#' @param data <serie> containing serie to normalize
+#' @param lower <float> lower value
+#' @param upper <float> upper value
+#' @param lowerThreshold <float> lower threshold value
+#' @param upperThreshold <float> upper threshold value
+#' @return normalized serie
+normalize_range <- function(data, lower = 0, upper = 1, lowerThreshold = NULL, upperThreshold = NULL) {
+  if (!(is.null(lower) & is.null(upper))) {
+    if (lower > upper) stop("Lower > upper not supported")
+  }
+  normalize <- function(x, lower, upper, lowerThreshold, upperThreshold) {
+    lowervalue <- min(x)
+    uppervalue <- max(x)
+    if (!is.null(lower)) lowervalue <- lower
+    if (!is.null(upper)) uppervalue <- upper
+
+    minValue <- min(x, na.rm = TRUE)
+    maxValue <- max(x, na.rm = TRUE)
+    if ((minValue == maxValue) || (lowervalue == uppervalue)) {
+      result <- rep(lower, length(x))
+    } else {
+      result <- ((x - minValue) / (maxValue - minValue)) * (upper - lower) + lower
+    }
+    if (!is.null(lowerThreshold)) {
+      mask <- result < lowerThreshold
+      result[mask] <- lowerThreshold
+    }
+    if (!is.null(upperThreshold)) {
+      mask <- result > upperThreshold
+      result[mask] <- upperThreshold
+    }
+    return(result)
+  }
+  return(data %>%
+    mutate_all(normalize, lower, upper, lowerThreshold, upperThreshold))
+}
+
+#' Daily normalization method
+#'
+#' @param data <timeSeries> containing serie to normalize
+#' @param method <string> Normalization method. Supported methods
+#'   relative
+#' @return daily normalized timeserie
+normalize_daily <- function(data, method = "relative", localTimeZone) {
+  if (!(method == "relative")) stop("Method not supported")
+  time <- data$time
+  return(data %>%
+    mutate(
+      date = lubridate::date(with_tz(time, localTimeZone))
+    ) %>%
+    group_by(date) %>%
+    summarize(value = value / sum(value)) %>%
+    ungroup() %>%
+    mutate(time = time) %>%
+    select(time, value))
+}
+
+#' Zscore normalization method
+#'
+#' @param data <timeSeries> containing serie to normalize
+#' @return normalized timserie
+normalize_zscore <- function(data) {
+  return(data %>%
+    mutate(value = (value - median(value, na.rm = TRUE)) / sd(value, na.rm = TRUE)))
+}
+
+#' Normalize load
+#'
+#' @param <timeserie> data
+#' @param localTimeZone <string> timezone
+#' @param method <string> normalization method
+#' @param nDayParts <int> number of part days
+#' @param holidays <list date> holidays dates
+#' @return normalized load
+normalize_load <- function(data, localTimeZone, transformation = "relative", inputVars = c("load_curves"), nDayParts = 24, holidays = NULL) {
+  if (class(holidays) == "character") {
+    holidays <- read_csv(holidays, col_names = FALSE)
+    holidays <- holidays$X1
+  }
+
+  tmp <- data %>%
+    mutate(
+      localtime = with_tz(time, localTimeZone),
+      date = lubridate::date(localtime),
+      hour = hour(localtime),
+      daypart = ceiling(hour(localtime) / (24 / nDayParts)),
+    ) %>%
+    distinct(date, hour, .keep_all = TRUE)
+
+  tmp_daily <- tmp %>%
+    mutate(
+      weekday = wday(date,
+        week_start = getOption("lubridate.week.start", 1)
+      ),
+      is_weekend = weekday %in% c(6, 7),
+      is_holidays = date %in% holidays
+    ) %>%
+    group_by(date, weekday, is_weekend, is_holidays) %>%
+    summarize(
+      value = mean(value, na.rm = TRUE) * 24,
+      temperature = mean(temperature, na.rm = TRUE)
+    ) %>%
+    ungroup()
+
+  tmp_spread <- tmp %>%
+    group_by(date, daypart) %>%
+    summarize(value = mean(value)) %>%
+    ungroup() %>%
+    spread(daypart, value)
+
+  if (transformation == "relative") {
+    columns <- names(tmp_spread)
+    columns <- columns[!(columns %in% "date")]
+    tmp_spread[, columns] <- tmp_spread[columns] / rowSums(tmp_spread[columns], na.rm = TRUE)
+    # tmp_spread[columns] <- tmp_spread[columns] / rowSums(tmp_spread[columns], na.rm=TRUE)
+  }
+
+
+  tmp_spread <- tmp_spread %>%
+    inner_join(tmp_daily, by = "date")
+  dates <- tmp_spread$date
+  tmp_spread$date <- NULL
+  values <- normalize_range(tmp_spread, lower = 0, upper = 1)
+
+  vars <- list(
+    "load_curves" = names(tmp_spread)[!(names(tmp_spread) %in% c("is_weekend", "is_holidays", "weekday", "value", "temperature"))],
+    "days_weekend" = c("is_weekend"),
+    "daily_holidays" = c("is_holidays"),
+    "days_of_the_week" = c("weekday"),
+    "daily_cons" = c("value"),
+    "daily_temp" = c("temperature")
+  )
+
+  vars <- as.vector(unlist(vars[inputVars]))
+  return(list(
+    dates = dates,
+    values = values[vars]
+  ))
+}
+
+#' Calculate affinity
+#'  Code from https://www.di.fc.ul.pt/~jpn/r/spectralclustering/spectralclustering.html
+#' Done applying a k-nearest neighboor filter to build a representation of a graph
+#' connecting just the closest dataset points. However, to be symmetric, if
+#' Aij is selected as a nearest neighboor, so will Aji.
+#'
+#' @param S <matrix> Matrix to evaluate
+#' @param n.neighboors <int> Number of neighboors
+#' @return Affinity matrix
+make.affinity <- function(S, n.neighboors = 2) {
+  N <- length(S[, 1])
+
+  if (n.neighboors >= N) { # fully connected
+    A <- S
+  } else {
+    A <- matrix(rep(0, N^2), ncol = N)
+    for (i in 1:N) { # for each line
+      # only connect to those points with larger similarity
+      best.similarities <- sort(S[i, ], decreasing = TRUE)[1:n.neighboors]
+      for (s in best.similarities) {
+        j <- which(S[i, ] == s)
+        A[i, j] <- S[i, j]
+        A[j, i] <- S[i, j] # to make an undirected graph, ie, the matrix becomes symmetric
+      }
+    }
+  }
+  A
+}
+
+#' Calculate similarity
+#' Exponential Euclidean distance (Frobenius norm) with weighting factor
+#'
+#' @param x1 <vector> First vector
+#' @param x2 <vector> Second vector
+#' @param alpha <float> Weighting factor
+#' @return Distance between vectors
+similarity <- function(x1, x2, alpha = 1) {
+  exp(-alpha * norm(as.matrix(x1 - x2), type = "F"))
+}
+
+#' Calculate similarity matrix
+#' Code from https://www.di.fc.ul.pt/~jpn/r/spectralclustering/spectralclustering.html
+#' Similarity Matrix, S, as the matrix that at Sij=s(xi,xj) gives the
+#' similarity between observations xi and xj.
+#' Common similarity measures are euclidean (default) an gaussian
+#'
+#' @param my.data <matrix> Matrix to evaluate
+#' @param similariry <function> Similarity function
+#' @return Similarity matrix
+make.similarity <- function(my.data, similarity) {
+  N <- nrow(my.data)
+  S <- matrix(rep(NA, N^2), ncol = N)
+  for (i in 1:N) {
+    for (j in 1:N) {
+      if (i != j) {
+        S[i, j] <- similarity(my.data[i, ], my.data[j, ])
+      } else {
+        S[i, j] <- 0
+      }
+    }
+  }
+  S
+}
+
+#' Cluster similar daily load curves based on the load curves itself, calendar
+#' variables and outdoor temperature
+#'
+#' @param consumption <timeSeries> containing the total energy consumption
+#' of a building.
+#' @param temperature <timeSeries> containing the outdoor temperature of
+#' the related building.
+#' @param localTimeZone <string> specifying the local time zone related
+#' to the building in analysis
+#' @param kMax <integer> defining the maximum number of allowed groups in
+#' the clustering proceed.
+#' @param inputVars <list of strings> Select a number of features as an input
+#' of the clustering.
+#'   loadCurve: use the transformed version of the consumption daily load curve
+#'     based on loadCurveTransformation and nDayParts arguments
+#'   dailyTemperature: use the average daily outdoor temperature
+#'   dailyConsumption: use the total daily consumption
+#'   daysOfTheWeek: use a discrete value to represent the days of the week
+#'   daysWeekend: use a boolean representing whether is weekend or not
+#'   holidays: use a boolean representing whether is holiday or not
+#' @param loadCurveTransformation <string> that defines the transformation
+#' procedure over the consumption load curves. Possible values are:
+#'   relative: All daily load curves are relative to their total daily
+#'     consumption. It is the default mode.
+#'   absolute: The absolute consumption is used to define each daily
+#'     load curves.
+#' @param nDayParts <integer> defining the parts of day used to. Possible
+#'   values: 24, 12, 8, 6, 4, 3, 2.
+#' @param ignoreDate <listr dates> list of dates to ifnore (holidays, weather, ..)
+#' @return dailyClassification <timeSeries> in daily frequency, containing
+#' the classification of each daily load curve.
+#' @return absoluteLoadCurvesCentroids <matrix> with row names as the
+#' identifier of the cluster, and column names as the day hours. This matrix
+#' is filled with the hourly average consumption of each cluster detected.
+#' @return clusteringCentroids <matrix> with row names as the identifier of
+#' the cluster, and column names as the input variables used by the clustering
+#' algorithm. This matrix is filled with the average values of each input
+#' variable and cluster.
+#' @return classificationModel <object> containing a simple classification
+#' model to predict a load curve based on calendar features.
+#' @return opts: dictionary
+#'   normSpecs: matrix of aggregations used in the Z-score normalisation of
+#'     the clustering inputs. The different types of aggregations (mean,
+#'     median, std, ...) are specified as row names, and the different
+#'     input features are related with column names.
+#'   loadCurveTransformation: object
+#'   inputVars: object
+#'   nDayParts: object
+
+clustering_dlc <- function(consumption, temperature, localTimeZone, kMax,
+                           inputVars, loadCurveTransformation, nDayParts, ignoreDates = c()) {
+  tmp <- consumption %>%
+    left_join(temperature, by = "time") %>%
+    filter(!(lubridate::date(time) %in% ignoreDates))
+
+  tmp_norm <- normalize_load(tmp, localTimeZone, loadCurveTransformation, inputVars, nDayParts, ignoreDates)
+
+  # Clustering
+  # Identify best K to be used in spectral clustering
+  # Calculate eigenvalues/eigenvector and find the one
+  # with the highest eigenvalue decrease
+  S <- make.similarity(tmp_norm$values, similarity)
+  A <- make.affinity(S, 3) # use 3 neighbors (includes self)
+  D <- diag(apply(A, 1, sum))
+  U <- D - A
+  evL <- eigen(U, symmetric = TRUE)
+  evSpectrum <- log(rev(evL$values)[1:kMax] + 1e-12)
+  evSpectrum <- evSpectrum - lag(evSpectrum, 1)
+  if ((which.max(evSpectrum) - 1) <= 3) {
+    evSpectrum[1:which.max(evSpectrum)] <- NA
+  }
+  k <- which.max(evSpectrum) - 1
+
+  # Calculate spectral clustering using previous K
+  # Using polynomial spectral clustering
+  spectral_clust <- tryCatch(
+    {
+      specc(as.matrix(tmp_norm$values),
+        centers = k,
+        kernel = "polydot", kpar = list(degree = 2),
+        nystrom.red = T, nystrom.sample = nrow(tmp_norm$values)[1] / 6,
+        iterations = 400, mod.sample = 0.75, na.action = na.omit
+      )
+    },
+    error = function(e) {
+      1
+    }
+  )
+
+  # Check valif spectal clustering otherwise use single cluster
+  spectral_clust_valid <- (!(class(spectral_clust)[1] == "numeric"))
+  s <- spectral_clust
+  if (spectral_clust_valid == TRUE) s <- spectral_clust@.Data
+
+  # Cluster results with cluster identifier assignment per date
+  cluster_results <- data.frame(
+    "date" = tmp_norm$dates,
+    "s" = s
+  )
+
+  # Calendar features added and sorted
+  tmp <- tmp %>%
+    mutate(
+      localtime = with_tz(time, localTimeZone),
+      hour = hour(localtime),
+      date = lubridate::date(localtime),
+      weekday = wday(date,
+        week_start = getOption("lubridate.week.start", 1)
+      ),
+      is_weekend = weekday %in% c(6, 7)
+    ) %>%
+    distinct(date, hour, .keep_all = TRUE) %>%
+    arrange(time)
+
+  # Clustering results wit merge of both raw data and cluster properties
+  cluster_struct <- merge(tmp, cluster_results, by = "date")
+
+  # Read the clustering centroids
+  if (spectral_clust_valid == TRUE) {
+    # Clustering didn't failed so using obtained centroids
+    cluster_centroids <- spectral_clust@centers
+    cluster_centroids <- data.frame(
+      "s" = 1:nrow(cluster_centroids),
+      cluster_centroids
+    )
+  } else {
+    # Custering failed so using mean data as single centroid
+    cluster_centroids <- tmp_norm$values %>%
+      summarize_all(mean, na.rm = T)
+    cluster_centroids <- data.frame(
+      "s" = 1,
+      t(cluster_centroids)
+    )
+  }
+
+  # Reformat the cluster integer numbers to factors of 2 digits
+  cluster_struct$s <- sprintf("%02i", as.integer(as.character(cluster_struct$s)))
+  cluster_centroids <- cluster_centroids %>%
+    mutate(s = sprintf("%02i", as.integer(as.character(s)))) %>%
+    remove_rownames() %>%
+    column_to_rownames(var = "s")
+
+  # Calculate centroids using raw data mean per cluster
+  tmp_centroids <- cluster_struct %>%
+    group_by(hour, s) %>%
+    summarize(value = mean(value, na.rm = TRUE)) %>%
+    ungroup() %>%
+    arrange(s) %>%
+    spread(hour, value) %>%
+    remove_rownames() %>%
+    column_to_rownames(var = "s")
+
+  if (spectral_clust_valid == TRUE) {
+    # Create calendar classification model using weekday as inpute feature
+    mod_calendar <- multinom(
+      formula = as.factor(s) ~ 1 + as.factor(weekday),
+      data = cluster_struct[cluster_struct[, "time"] >= (max(cluster_struct[, "time"]) - years(1)), ]
+    )
+  } else {
+    # Create naïve classification with single cluster
+    mod_calendar <- unique(cluster_struct$s)
+  }
+
+  return(list(
+    dailyClassification = cluster_results,
+    absoluteLoadCurvesCentroids = tmp_centroids,
+    clusteringCentroids = cluster_centroids,
+    classificationModel = mod_calendar,
+    opts = list(
+      "normSpecs" = NULL,
+      "loadCurveTransformation" = loadCurveTransformation,
+      "inputVars" = inputVars,
+      "nDayParts" = nDayParts
+    )
+  ))
+}
+
+
+#' Classify daily load curves based on the outputs of a clustering and a
+#' new set of data
+#'
+#' @param consumption <timeSeries> containing the total energy consumption
+#' of a building.
+#' @param temperature <timeSeries> containing the outdoor temperature of
+#' the related building.
+#' @param localTimeZone <string> local time zone
+#' @param clustering <object> clustering_dlc() output
+#' @param methodPriority: list of strings Possible values:
+#'   absoluteLoadCurvesCentroids: Based on the absolute consumption load
+#'     curve
+#'   clusteringCentroids: Based on the inputs considered in the clustering
+#'     procedure. Applying the same transformations done during that process.
+#'   classificationModel: Based on a classification model of the calendar
+#'     features.
+#' @return dailyClassification <timeSeries>
+classification_dlc <- function(consumption, temperature, localTimeZone,
+                               clustering, methodPriority) {
+  tmp <- consumption %>%
+    left_join(temperature, by = "time")
+
+  loadCurveTransformation <- clustering$opts$loadCurveTransformation
+  inputVars <- clustering$opts$inputVars
+  nDayParts <- clustering$opts$nDayParts
+  tmp_norm <- normalize_load(tmp, localTimeZone, loadCurveTransformation, inputVars, nDayParts)
+  tmp_norm$values[is.na(tmp_norm$values)] <- 0
+
+  clusteringCentroids <- clustering$clusteringCentroids
+  absoluteLoadCurvesCentroids <- clustering$absoluteLoadCurvesCentroids
+
+  all_hours <- as.character(0:23)
+  all_hours_default <- rep(NA, length(all_hours))
+  names(all_hours_default) <- all_hours
+  tmp <- tmp %>%
+    mutate(
+      localtime = with_tz(time, localTimeZone),
+      date = lubridate::date(localtime),
+      hour = hour(localtime),
+      weekday = wday(date,
+        week_start = getOption("lubridate.week.start", 1)
+      ),
+      is_weekend = weekday %in% c(6, 7)
+    ) %>%
+    distinct(date, hour, .keep_all = TRUE)
+
+  # WARNING: Ignoring temperature ?
+  tmp_spread <- tmp %>%
+    select(date, hour, value) %>%
+    spread(hour, value)
+  tmp_spread <- add_column(tmp_spread, !!!all_hours_default[setdiff(all_hours, names(tmp_spread))]) %>%
+    select(c(date, !!!all_hours))
+
+  columns <- !(colnames(absoluteLoadCurvesCentroids) %in% "s")
+  tmp_centroids <- absoluteLoadCurvesCentroids[, columns]
+
+  columns <- !(colnames(tmp_spread) %in% "date")
+  tmp_centroids_dist <- t(proxy::dist(
+    apply(as.matrix(tmp_centroids), 1:2, as.numeric),
+    as.matrix(tmp_spread[, columns])
+  ))
+
+  columns <- !(colnames(clusteringCentroids) %in% "s")
+  tmp_clust <- clusteringCentroids[, columns]
+  tmp_clust_dist <- t(proxy::dist(
+    apply(as.matrix(tmp_clust), 1:2, as.numeric),
+    as.matrix(tmp_norm$values)
+  ))
+
+  # Classify across all centroids (the classification is done by calculating
+  # the cross distance matrix between the centroids data frame and the
+  # consumption data frame)
+  # Centroids from raw data
+  tmp_centroids_predict <- data.frame(
+    "days" = tmp_spread$date,
+    "prediction" =
+      sprintf("%02i", tmp_centroids_dist %>% apply(1, function(x) {
+        ifelse(sum(is.na(x)) > 1, NA, order(x)[1])
+      }))
+  )
+
+  # Centroids from spectral clustering
+  tmp_clust_predict <- data.frame(
+    "days" = tmp_norm$date,
+    "prediction" =
+      sprintf("%02i", tmp_clust_dist %>% apply(1, function(x) {
+        ifelse(sum(is.na(x)) > 1, NA, order(x)[1])
+      }))
+  )
+
+  if (methodPriority == "absoluteLoadCurvesCentroids") {
+    # Prediction based on raw data centroids
+    tmp_class_predict <- tmp_centroids_predict$prediction
+    tmp_class_predict <- data.frame(
+      "date" = tmp_spread$date,
+      "s" = tmp_class_predict
+    )
+    result <- tmp %>%
+      left_join(tmp_class_predict, by = "date")
+  } else if (methodPriority == "clusteringCentroids") {
+    # Based on the inputs considered in the clustering procedure.
+    # Applying the same transformations done during that process.
+    tmp_class_predict <- tmp_clust_predict$prediction
+    tmp_class_predict <- data.frame(
+      "date" = tmp_spread$date,
+      "s" = tmp_class_predict
+    )
+    result <- tmp %>%
+      left_join(tmp_class_predict, by = "date")
+  } else {
+    # classificationModel
+    # Based on a classification model of the calendar
+    # features.
+    model <- clustering$classificationModel
+    if (class(model) == "character") {
+      tmp_class_predict <- clustering$classificationModel
+    } else {
+      tmp_class_predict <- as.character(predict(clustering$classificationModel, tmp))
+    }
+    result <- tmp
+    result$s <- tmp_class_predict
+  }
+  return(result)
+}
+
+
+#' Clustering and classification wrapper function
+#'
+#' @param consumption <timeSeries> containing the total energy consumption
+#' of a building.
+#' @param temperature <timeSeries> containing the outdoor temperature of
+#' the related building.
+#' @param localTimeZone <string> local time zone
+#' @param predictionMode <boolean> Select whether clustering (FALSE) or classification (TRUE) action
+#'
+#' Additional parameters are clustering or classification specific. See clustering_dlc and classification_dlc documentation for specific parameters details
+#' @return Return value depends on predictionMode value. If FALSE see clustering_dlc documentation. If TRUE see classification_dlc documentation.
+
+similar_dlc <- function(consumption, temperature, localTimeZone, predictionMode, ...) {
+  if (predictionMode == FALSE) {
+    clustering_dlc(consumption, temperature, localTimeZone, ...)
+  } else {
+    classification_dlc(consumption, temperature, localTimeZone, ...)
+  }
 }
