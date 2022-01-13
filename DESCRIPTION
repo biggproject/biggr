@@ -18,6 +18,11 @@ Depends:
     testthat,
     kernlab,
     fastDummies,
-    caret
+    caret,
+    R (>= 2.10)
 License: "" 
 RoxygenNote: 7.1.2
+Suggests: 
+    rmarkdown,
+    knitr
+VignetteBuilder: knitr

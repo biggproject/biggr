@@ -305,6 +305,9 @@ degree_raw <- function (data, featuresName, baseTemperature, outputFeaturesName 
   }
 }
 
+vectorial_transformation <- function(series, outputFeatureName){
+  return(setNames(data.frame(series),outputFeatureName))
+}
 #' Calculate the degree-days with a desired output frequency and considering
 #' cooling or heating mode.
 #'
@@ -539,10 +542,12 @@ make.similarity <- function(my.data, similarity) {
 #' Cluster similar daily load curves based on the load curves itself, calendar
 #' variables and outdoor temperature
 #'
-#' @param consumption <timeSeries> containing the total energy consumption
-#' of a building.
-#' @param temperature <timeSeries> containing the outdoor temperature of
-#' the related building.
+#' @param data <timeSeries> containing the time series for total energy consumption
+#' of a building, the outdoor temperature, or whatever input is needed for clustering.
+#' @param consumptionFeature <string> containing the column name the consumption feature 
+#' in the data argument.
+#' @param outdoorTemperatureFeature <string> containing the column name of the outdoor temperature feature
+#' in the data argument.
 #' @param localTimeZone <string> specifying the local time zone related
 #' to the building in analysis
 #' @param kMax <integer> defining the maximum number of allowed groups in
@@ -555,7 +560,7 @@ make.similarity <- function(my.data, similarity) {
 #'   dailyConsumption: use the total daily consumption
 #'   daysOfTheWeek: use a discrete value to represent the days of the week
 #'   daysWeekend: use a boolean representing whether is weekend or not
-#'   holidays: use a boolean representing whether is holiday or not
+#'   holidays: use a boolean representing whether is holiday or not.
 #' @param loadCurveTransformation <string> that defines the transformation
 #' procedure over the consumption load curves. Possible values are:
 #'   relative: All daily load curves are relative to their total daily
@@ -564,19 +569,20 @@ make.similarity <- function(my.data, similarity) {
 #'     load curves.
 #' @param nDayParts <integer> defining the parts of day used to. Possible
 #'   values: 24, 12, 8, 6, 4, 3, 2.
-#' @param ignoreDate <listr dates> list of dates to ifnore (holidays, weather, ..)
-#' @return dailyClassification <timeSeries> in daily frequency, containing
+#' @param ignoreDate <list of dates> list of dates to ignore (holidays, weather, ..)
+#' @return <dict>
+#'     dailyClassification <timeSeries> in daily frequency, containing
 #' the classification of each daily load curve.
-#' @return absoluteLoadCurvesCentroids <matrix> with row names as the
+#'     absoluteLoadCurvesCentroids <matrix> with row names as the
 #' identifier of the cluster, and column names as the day hours. This matrix
 #' is filled with the hourly average consumption of each cluster detected.
-#' @return clusteringCentroids <matrix> with row names as the identifier of
+#'     clusteringCentroids <matrix> with row names as the identifier of
 #' the cluster, and column names as the input variables used by the clustering
 #' algorithm. This matrix is filled with the average values of each input
 #' variable and cluster.
-#' @return classificationModel <object> containing a simple classification
+#'     classificationModel <object> containing a simple classification
 #' model to predict a load curve based on calendar features.
-#' @return opts: dictionary
+#'     opts: <dictionary>
 #'   normSpecs: matrix of aggregations used in the Z-score normalisation of
 #'     the clustering inputs. The different types of aggregations (mean,
 #'     median, std, ...) are specified as row names, and the different
@@ -613,7 +619,7 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
   s <- as.factor(spectral_clust)
   if (spectral_clust_valid == TRUE) 
     s <- as.factor(spectral_clust@.Data)
-  cluster_results <- data.frame(date = tmp_norm$dates, s = s)
+  cluster_results <- data.frame(date = tmp_norm$dates[complete.cases(tmp_norm$values)], s = s)
   tmp <- tmp %>% 
     mutate(localtime = with_tz(time, localTimeZone), 
            hour = hour(localtime), 
@@ -658,31 +664,32 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
 #' Classify daily load curves based on the outputs of a clustering and a
 #' new set of data
 #'
-#' @param consumption <timeSeries> containing the total energy consumption
-#' of a building.
-#' @param temperature <timeSeries> containing the outdoor temperature of
-#' the related building.
+#' @param data <timeSeries> containing the time series for total energy consumption
+#' of a building, the outdoor temperature, or whatever input is needed for clustering.
+#' @param consumptionFeature <string> containing the column name the consumption feature 
+#' in the data argument.
+#' @param temperature <string> containing the column name of the outdoor temperature feature
+#' in the data argument.
 #' @param localTimeZone <string> local time zone
 #' @param clustering <object> clustering_dlc() output
-#' @param methodPriority: list of strings Possible values:
+#' @param methodPriority: <list of strings>. Possible values:
 #'   absoluteLoadCurvesCentroids: Based on the absolute consumption load
 #'     curve
 #'   clusteringCentroids: Based on the inputs considered in the clustering
 #'     procedure. Applying the same transformations done during that process.
 #'   classificationModel: Based on a classification model of the calendar
 #'     features.
-#' @return dailyClassification <timeSeries>
+#' @return dailyClassification: <timeSeries>
 classification_dlc <- function(consumption, temperature, localTimeZone,
                                clustering, methodPriority) {
   
-  stop("Still under development")
   tmp <- consumption %>%
     left_join(temperature, by = "time")
   
-  loadCurveTransformation <- clustering$loadCurveTransformation
-  inputVars <- clustering$inputVars
-  nDayParts <- clustering$nDayParts
-  tmp_norm <- normalise_dlc(tmp, localTimeZone, loadCurveTransformation, inputVars, nDayParts)
+  loadCurveTransformation <- clustering$opts$loadCurveTransformation
+  inputVars <- clustering$opts$inputVars
+  nDayParts <- clustering$opts$nDayParts
+  tmp_norm <- normalize_load(tmp, localTimeZone, loadCurveTransformation, inputVars, nDayParts)
   tmp_norm$values[is.na(tmp_norm$values)] <- 0
   
   clusteringCentroids <- clustering$clusteringCentroids
@@ -690,24 +697,33 @@ classification_dlc <- function(consumption, temperature, localTimeZone,
   
   all_hours <- as.character(0:23)
   all_hours_default <- rep(NA, length(all_hours))
-  names(default) <- all_hours
+  names(all_hours_default) <- all_hours
   tmp <- tmp %>%
     mutate(
       localtime = with_tz(time, localTimeZone),
       date = lubridate::date(localtime),
       hour = hour(localtime),
+      weekday = wday(date,
+                     week_start = getOption("lubridate.week.start", 1)
+      ),
+      is_weekend = weekday %in% c(6, 7)
     ) %>%
     distinct(date, hour, .keep_all = TRUE)
+  
+  # WARNING: Ignoring temperature ?
   tmp_spread <- tmp %>%
-    spread(hour, value) %>%
-    add_column(tmp_spread, !!!all_hours_default[setdiff(all_hours, names(tmp_spread))]) %>%
-    select(!!!all_hours)
+    select(date, hour, value) %>%
+    spread(hour, value)
+  tmp_spread <-  add_column(tmp_spread, !!!all_hours_default[setdiff(all_hours, names(tmp_spread))]) %>%
+    select(c(date, !!!all_hours))
   
   columns <- !(colnames(absoluteLoadCurvesCentroids) %in% "s")
   tmp_centroids <- absoluteLoadCurvesCentroids[, columns]
+  
+  columns <- !(colnames(tmp_spread) %in% "date")
   tmp_centroids_dist <- t(proxy::dist(
     apply(as.matrix(tmp_centroids), 1:2, as.numeric),
-    as.matrix(tmp_spread)))
+    as.matrix(tmp_spread[, columns])))
   
   columns <- !(colnames(clusteringCentroids) %in% "s")
   tmp_clust <- clusteringCentroids[, columns]
@@ -718,39 +734,52 @@ classification_dlc <- function(consumption, temperature, localTimeZone,
   # Classify across all centroids (the classification is done by calculating
   # the cross distance matrix between the centroids data frame and the
   # consumption data frame)
+  # Centroids from raw data
   tmp_centroids_predict <- data.frame(
-    "days" = tmp_spread$dates,
-    "classification_load_curve" = 
+    "days" = tmp_spread$date,
+    "prediction" = 
       sprintf("%02i", tmp_centroids_dist %>% apply(1, function(x) {ifelse(sum(is.na(x))>1, NA, order(x)[1])}))
   )
   
+  # Centroids from spectral clustering
   tmp_clust_predict <- data.frame(
-    "days" = tmp_norm$dates,
-    "classification_clustering_centroids" = 
+    "days" = tmp_norm$date,
+    "prediction" = 
       sprintf("%02i", tmp_clust_dist %>% apply(1, function(x) {ifelse(sum(is.na(x))>1, NA, order(x)[1])}))
   )
   
   if (methodPriority == "absoluteLoadCurvesCentroids") {
-    # Based on the absolute consumption load curve
-    tmp_class_predict <- tmp_centroids_predict$classification_load_curve
+    # Prediction based on raw data centroids
+    tmp_class_predict <- tmp_centroids_predict$prediction
+    tmp_class_predict <- data.frame(
+      "date" = tmp_spread$date,
+      "s" = tmp_class_predict 
+    )
+    result <- tmp %>%
+      left_join(tmp_class_predict, by="date")
   } else if (methodPriority == "clusteringCentroids") {
-    stop("Implementation pending")
     # Based on the inputs considered in the clustering procedure.
     # Applying the same transformations done during that process.
+    tmp_class_predict <- tmp_clust_predict$prediction
+    tmp_class_predict <- data.frame(
+      "date" = tmp_spread$date,
+      "s" = tmp_class_predict 
+    )
+    result <- tmp %>%
+      left_join(tmp_class_predict, by="date")
   } else {
-    stop("Implementation pending")
     # classificationModel
     # Based on a classification model of the calendar
     # features.
+    model <- clustering$classificationModel
+    if (class(model) == "character") {
+      tmp_class_predict <- clustering$classificationModel
+    } else {
+      tmp_class_predict <- as.character(predict(clustering$classificationModel, tmp))
+    }
+    result <- tmp
+    result$s <- tmp_class_predict
   }
-  tmp_class_predict <- data.frame(
-    "date" = tmp_spread$dates,
-    "prediction" = tmp_class_predict 
-  )
-  # Mix of different results ?
-  
-  result <- tmp %>%
-    left_join(tmp_class_predict, by="date")
   return(result)
 }
 
@@ -762,13 +791,13 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
   transformationItems <- list()
   if(!is.null(transformationSentences)){
     for (feature in unique(c(names(transformationSentences), features))){
-      #feature <- features[2]
+      #feature <- unique(c(names(transformationSentences), features))[5]
       trFields <- list()
       trData <- NULL
       attach(data,warn.conflicts = F)
       if(feature %in% names(transformationSentences)){
         for (trFunc in transformationSentences[[feature]]){
-          #trFunc <- transformationSentences[[feature]][2]
+          #trFunc <- transformationSentences[[feature]][1]
           if(grepl("[.]{3}",trFunc)){trFunc <- gsub("[.]{3}","data=data",trFunc)}
           if(grepl("clustering_wrapper\\(",trFunc,perl = T) && feature %in% names(transformationResults)){
             trFunc <- gsub("clustering_wrapper\\(","clustering_wrapper\\(results=transformationResults[[feature]],",trFunc,perl = T)
@@ -777,10 +806,14 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
           if(grepl("clustering_wrapper\\(",trFunc)){
             transformationResults[[feature]] <- trDataElem
             trDataElem <- setNames(trDataElem$labels,feature)
-          } else if(any(class(trDataElem) %in% c("factor","character"))){
+          } else if(any(class(trDataElem) %in% c("factor","character","logical"))){
             trDataElem <- fastDummies::dummy_cols(as.factor(trDataElem),remove_selected_columns = T)
             colnames(trDataElem) <- gsub(".data",trFunc,colnames(trDataElem))
+          } else if(any(class(trDataElem) %in% c("numeric","integer"))){
+            trDataElem <- data.frame(trDataElem)
+            colnames(trDataElem) <- trFunc
           }
+          
           trData <- if(!is.null(trData)){cbind(trData,trDataElem)} else {trDataElem}
           if(feature %in% features){
             trFields[[length(trFields)+1]] <- colnames(trDataElem)

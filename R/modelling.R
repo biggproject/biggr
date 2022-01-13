@@ -2,6 +2,192 @@
 ### Model candidates definition ----
 ###
 
+PenalisedLM <- function(input_parameters){
+  input_parameters$label <- input_parameters$parameters
+  modelFramework <- list(
+    label = "penalisedRegression",
+    library = NULL,
+    type = "Regression",
+    ## Define the ARX parameters
+    parameters = input_parameters,
+    grid = 
+      function(x, y, len = NULL, search = "grid") {
+        p <- ncol(x)
+        r <- nrow(x)
+        if(search == "grid") {
+          grid <- expand.grid(mapply(function(k)1:len,1:r))
+          colnames(grid) <- colnames(x)
+        } else {
+          grid <- expand.grid(mapply(function(k)sample(1:p, size = len),1:r))
+          colnames(grid) <- colnames(x)
+        }
+      },
+    loop = NULL,
+    fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, 
+                   transformationSentences=NULL, forcePositiveTerms=NULL) {
+      # x<<-x
+      # y<<-y
+      # params <<- param
+      # #param <- params
+      # formulaTerms <<- formulaTerms
+      # transformationSentences <<- transformationSentences
+      # forcePositiveTerms <<- forcePositiveTerms
+      
+      features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
+      outputName <- all.vars(formulaTerms)[1]
+      
+      # Join x and y in a single data.frame
+      data <- if(is.data.frame(x)) x else as.data.frame(x)
+      data[,outputName] <- y
+      
+      # Transform input data if it is needed
+      transformation <- data_transformation_wrapper(
+        data=data, features=features, transformationSentences = transformationSentences, 
+        param = param)
+      data <- transformation$data
+      features <- transformation$features
+      featuresAll <- transformation$featuresAll
+      transformationItems <- transformation$items
+      transformationResults <- transformation$results
+      
+      # Generate the lags, if needed
+      data <- data[complete.cases(data[,featuresAll]),]
+      
+      # Generate the formula
+      form <- as.formula(
+        sprintf("%s ~ %s",
+                outputName,
+                paste("0",
+                      paste0(do.call(
+                        c,
+                        lapply(
+                          features,
+                          function(f){
+                            f_ <- f
+                            if(f %in% names(transformationItems)){
+                              f <- transformationItems[[f]]$formula
+                            }
+                            f
+                          }
+                        )
+                      ),
+                      collapse="+"),
+                      sep=" + ")
+        )
+      )
+      positivityOfTerms <- do.call(
+        c,
+        lapply(
+          features,
+          function(f){
+            f_ <- f
+            if(f %in% names(transformationItems)){
+              f <- transformationItems[[f]]$formula
+            }
+            if(f_ %in% forcePositiveTerms){
+              rep(T,length(f))
+            } else {
+              rep(F,length(f))
+            }
+          }
+        )
+      )
+      
+      # Train the model
+      y <- model.frame(form,data)[,1]
+      y <- log(y)
+      x <- as.matrix(model.matrix(form,data))
+      mod <- list("model"=tryCatch({
+        penalized::penalized(
+          y,x,~0,positive = positivityOfTerms,
+          lambda1 = 1,lambda2 = 0,
+          #startbeta = ifelse(grepl("temperature|GHI|windSpeed",colnames(x)),0,1),
+          trace=F
+        )
+      }, error=function(e){
+        penalized::penalized(
+          y,x,~0,positive = positivityOfTerms,
+          lambda1 = 0.5,lambda2 = 0.5,
+          #startbeta = ifelse(grepl("temperature|GHI|windSpeed",colnames(x)),0,1),
+          trace=F
+        )
+      }))
+
+      # Store the meta variables
+      mod$meta <- list(
+        features = features,
+        outputName = outputName,
+        formula = form,
+        param = param,
+        transformationSentences = transformationSentences,
+        transformationResults = transformationResults
+      )
+      mod
+      
+    },
+    predict = function(modelFit, newdata, submodels, forceGlobalInputFeatures=NULL) {
+      
+      newdata <- as.data.frame(newdata)
+      features <- modelFit$meta$features
+      param <- modelFit$meta$param
+      
+      # Initialize the global input features if needed
+      # Change the inputs if are specified in forceGlobalInputFeatures
+      if (!is.null(forceGlobalInputFeatures)){
+        for (f in names(forceGlobalInputFeatures)){
+          if(!(length(forceGlobalInputFeatures[[f]])==1 || 
+               length(forceGlobalInputFeatures[[f]])==nrow(newdata))){
+            stop(sprintf("forceGlobalInputFeatures[[%s]] needs to have a length of 1 
+                     or equal to the number of rows of newdata argument (%s).",f, nrow(newdata)))
+          }
+          newdata[,f] <- forceGlobalInputFeatures[[f]]
+        }
+      }
+      
+      # Load the model input and output initialisation features directly from the model
+      transformationSentences <- modelFit$meta$transformationSentences
+      transformationResults <- modelFit$meta$transformationResults
+      
+      # Transform input data if it is needed
+      transformation <- data_transformation_wrapper(
+        data=newdata, features=features, transformationSentences = transformationSentences, 
+        transformationResults = transformationResults, param = param)
+      newdata <- transformation$data
+      features <- transformation$features
+      featuresAll <- transformation$featuresAll
+      
+      # Change the inputs if are specified in forceGlobalInputFeatures
+      if (!is.null(forceGlobalInputFeatures)){
+        for (f in names(forceGlobalInputFeatures)){
+          if(!(length(forceGlobalInputFeatures[[f]])==1 || 
+               length(forceGlobalInputFeatures[[f]])==nrow(newdata))){
+            stop(sprintf("forceGlobalInputFeatures[[%s]] needs to have a length of 1 
+                     or equal to the number of rows of newdata argument (%s).",f, nrow(newdata)))
+          }
+          newdata[,f] <- forceGlobalInputFeatures[[f]]
+        }
+      }
+      
+      # Predict
+      options(na.action='na.pass')
+      newdata[,modelFit$meta$outputName] <- exp(as.numeric(
+        (
+          as.matrix(
+            model.matrix(modelFit$meta$formula[-2],newdata)
+          )[,names(coef(modelFit$model))]
+        ) %*% coef(modelFit$model)
+      ))
+      newdata[,modelFit$meta$outputName]
+    },
+    prob = NULL,
+    varImp = NULL,
+    predictors = function(x, ...) predictors(x$terms),
+    levels = NULL,
+    sort = function(x) x)
+  
+  return(modelFramework)
+}
+
 ARX <- function(input_parameters){
   input_parameters$label <- input_parameters$parameters
   modelFramework <- list(
@@ -140,6 +326,19 @@ ARX <- function(input_parameters){
       param <- modelFit$meta$param
       maxLag <- modelFit$meta$maxLag
       
+      # Initialize the global input features if needed
+      # Change the inputs if are specified in forceGlobalInputFeatures
+      if (!is.null(forceGlobalInputFeatures)){
+        for (f in names(forceGlobalInputFeatures)){
+          if(!(length(forceGlobalInputFeatures[[f]])==1 || 
+               length(forceGlobalInputFeatures[[f]])==nrow(data))){
+            stop(sprintf("forceGlobalInputFeatures[[%s]] needs to have a length of 1 
+                     or equal to the number of rows of data argument (%s).",f, nrow(data)))
+          }
+          newdata[,f] <- forceGlobalInputFeatures[[f]]
+        }
+      }
+      
       # Load the model input and output initialisation features directly from the model
       forceInitInputFeatures <- if(is.null(forceInitInputFeatures)){modelFit$meta$inputInit}else{forceInitInputFeatures}
       forceInitOutputFeatures <- if(is.null(forceInitOutputFeatures)){modelFit$meta$outputInit}else{forceInitOutputFeatures}
@@ -228,6 +427,7 @@ train.formula <- function (form, data, weights, subset, na.action = na.fail,
   x <- model.matrix(Terms, m, contrasts)
   cons <- attr(x, "contrast")
   int_flag <- grepl("(Intercept)", colnames(x))
+  
   if (any(int_flag)) 
     x <- x[, !int_flag, drop = FALSE]
   w <- as.vector(model.weights(m))

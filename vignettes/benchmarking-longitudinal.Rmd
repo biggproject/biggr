@@ -1,0 +1,267 @@
+---
+title: "benchmarking-longitudinal"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{benchmarking-longitudinal}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+Along this vignette, the implementation of the longitudinal benchmarking used in Business Case 1 of the BIGG project is represented. This methodology basically consists on the statistical modelling of the general consumption of a building using weather and calendar features as inputs. Afterwards, the model is used to calculate several indicators that are compared in time
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# Load the needed libraries
+
+```{r setup,echo=FALSE}
+library(data.table)
+library(ggplot2)
+library(gridExtra)
+library(plotly)
+library(padr)
+library(htmlwidgets)
+library(carrier)
+library(biggr)
+#install.packages("easystats", repos="https://easystats.r-universe.dev")
+library(easystats)
+library(mlflow)
+mlflow_wd = "/Users/gmor-air/PyInterpreters/mlflow_framework"
+Sys.setenv("MLFLOW_BIN"=paste0(mlflow_wd,"/bin/mlflow"))
+Sys.setenv("MLFLOW_PYTHON_BIN"=paste0(mlflow_wd,"/bin/python3"))
+```
+
+# Load an example dataset
+
+The biggr package has internally preloaded six datasets containing hourly electricity consumption and weather data from six different buildings.
+
+```{r}
+data(biggr)
+df <- electricity5 %>% calendar_components(localTimeZone = "Europe/Madrid")
+df <- cbind(df, do.call(cbind,oce::sunAngle(df$time,latitude=41.5,longitude=1))[,c("azimuth","altitude")])
+head(df)
+```
+
+```{r}
+# Time series plots
+ts_p <- ggplot(
+    reshape2::melt( df %>% select(time, Qe, temperature, windSpeed, GHI) %>% pad(), 
+                    "time")
+  ) + 
+  geom_line(
+    aes(time,value)
+  ) + 
+  facet_wrap(~variable, scales = "free_y", ncol=1) +
+  theme_bw()
+ts_p <- ggplotly(ts_p)
+ts_p
+```
+
+```{r}
+# Scatter plots of the electricity consumption and outdoor temperature
+grid.arrange(
+  ggplot(df) + 
+      geom_point(
+        aes(temperature, Qe),
+        size=0.05
+    )
+)
+```
+
+```{r}
+# All daily load curves at once
+ggplot(df) + 
+  geom_line(
+    aes(hour, Qe, group=date),
+    alpha=0.05
+  ) + xlab("hour of the day")
+```
+
+```{r}
+# All weekly load curves at once
+ggplot(df) + 
+  geom_line(
+    aes(weekhour, Qe, group=paste(strftime(localtime,"%Y"),strftime(localtime,"%U"))),
+    alpha=0.1
+  ) + xlab("hour of the week")
+```
+
+# Clustering the daily load curves
+
+```{r}
+clust <- clustering_dlc(
+  data = df,
+  consumptionFeature = "Qe", 
+  outdoorTemperatureFeature = "temperature", 
+  localTimeZone = "Europe/Madrid", 
+  kMax = 8, 
+  inputVars = c("loadCurves"),
+  loadCurveTransformation = "absolute",
+  nDayParts = 24
+)
+if("s" %in% colnames(df))
+  df <- df %>% select(-s) 
+df <- df %>% left_join(clust$dailyClassification)
+df <- df[!is.na(df$s),] # Once the classification procedure works, no need for this.
+```
+
+```{r}
+# All daily load curves depending the patterns detected
+p <- ggplotly(
+  ggplot(df) + 
+    geom_line(
+      aes(hour, Qe, group=date, col=s),
+      alpha=0.05
+    ) + 
+    xlab("hour of the day") + 
+    facet_wrap(~s) +
+    theme_bw()
+  )
+saveWidget(p, "clustering_dlc.html", selfcontained = T)
+p
+```
+
+# Initialize the MLFlow framework
+
+```{r}
+buildingId <- "AFSG31"
+
+# Start or continue an MLFlow experiment using the buildingId as the name of the experiment 
+experimentId <- tryCatch(
+  mlflow_create_experiment(buildingId, artifact_location = paste0(mlflow_wd,"/mlruns")),
+  error = function(e){
+    experiment <- mlflow_get_experiment(name=buildingId)
+    if (experiment$lifecycle_stage!="active") mlflow_restore_experiment(experiment$experiment_id)
+    experiment$experiment_id
+  }
+)
+```
+
+# Adjust a regression model
+
+```{r}
+#mlflow_end_run(run_id="d11dcf05691e47aba7d8aacf05d6deea")
+with(mlflow_start_run(experiment_id = experimentId),{
+  mod <- train(
+    Qe ~ hour + th + tc + wh + wc + isolh + isolc,
+    data=df,
+    method = PenalisedLM(
+     data.frame(parameter = c('nhar','tbalh','tbalc','alpha'),
+                class = c('integer','float','float','float'))
+    ),
+    trControl = trainControl(method = "timeslice", initialWindow = ceiling(nrow(df)*0.5), 
+                            horizon = ceiling(nrow(df)*0.1), skip = ceiling(nrow(df)*0.1)-1, fixedWindow = T),
+    tuneGrid = expand.grid("nhar"=c(5),"tbalh"=c(16),"tbalc"=c(24),"alpha"=c(0.1)),
+    transformationSentences = list(
+     #"s"='clustering_wrapper("Qe", "temperature", "Europe/Madrid", 7, c("loadCurves"),"relative",8)',
+     #"intercept_dlc"=c("intercept","s"),
+     "hour"=c("fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
+              "isWeekend"),
+     "tlpf"="lpf_ts(...,featuresNames='temperature',smoothingTimeScaleParameter=param$alpha,
+              outputFeaturesNames='temperatureLpf')",
+     "th"=c("degree_raw(...,featuresName='temperatureLpf',baseTemperature=param$tbalh, 
+              mode='heating',outputFeaturesName='heating',inplace=F)",
+            "hourBy3",
+            #"fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
+            "isWeekend"
+            ),
+     "tc"=c("degree_raw(...,featuresName='temperatureLpf',baseTemperature=param$tbalc, 
+              mode='cooling',outputFeaturesName='cooling',inplace=F)",
+            "hourBy3",
+            #"fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
+            "isWeekend"
+           ),
+     "wh"=c("heating",
+            "hourBy3",
+            "windSpeed",
+            "isWeekend"),
+     "wc"=c("cooling",
+            "hourBy3",
+            "windSpeed",
+            "isWeekend"),
+     "GHIh"="vectorial_transformation(ifelse(heating>0,-GHI,0),outputFeatureName='GHIh')",
+     "GHIc"="vectorial_transformation(ifelse(cooling>0,GHI,0),outputFeatureName='GHIc')",
+     "isolh"=c("GHIh",
+              "fs_components(...,featuresName='azimuth',nHarmonics=3,inplace=F)",
+              "isWeekend"),
+     "isolc"=c("GHIc",
+              "fs_components(...,featuresName='azimuth',nHarmonics=3,inplace=F)",
+              "isWeekend")
+    ),
+    forcePositiveTerms = c("th","tc","wh","wc","isolh","isolc")
+  )
+  
+  # Generate the predictor object with the trained model
+  predictor <- crate(function(x,forceGlobalInputFeatures=NULL){
+    biggr::predict.train(
+      object = !!mod, 
+      newdata = x, 
+      forceGlobalInputFeatures = forceGlobalInputFeatures
+    )
+  })
+  
+  
+  # Predict with the validation set
+  # df_for_pred <- df[df$time>=as.POSIXct("2017-01-01 00:00:00") & df$time<=as.POSIXct("2017-12-31 23:59:59"),]
+  df_for_pred <- df
+  df_for_pred$Qe_pred <- predictor(df_for_pred)
+  
+  # Save the prediction plot, comparing with the actual data
+  p <- ggplotly(
+    ggplot(df_for_pred) + 
+      geom_line(aes(time,Qe), col="black") + 
+      geom_line(aes(time,Qe_pred),col="red",alpha=0.5))
+  saveWidget(p, "series_comparison.html", selfcontained = T)
+  
+  # Save the residuals
+  p <- ggplotly(
+    ggplot(df_for_pred) + 
+      geom_line(aes(time,Qe-Qe_pred), col="black"))
+  saveWidget(p, "residuals.html", selfcontained = T)
+  
+  for (i in 1:ncol(mod$bestTune)) mlflow_log_param(colnames(mod$bestTune)[i],as.character(mod$bestTune[1,i]))
+  mlflow_log_metric("MAE", MAE(df_for_pred$Qe,df_for_pred$Qe_pred,na.rm = T))
+  mlflow_log_metric("RMSE", RMSE(df_for_pred$Qe,df_for_pred$Qe_pred,na.rm = T))
+  mlflow_log_metric("CVRMSE", RMSE(df_for_pred$Qe,df_for_pred$Qe_pred,na.rm = T)/mean(df_for_pred$Qe,na.rm=T))
+  mlflow_log_metric("r2", cor(df_for_pred$Qe,df_for_pred$Qe_pred,use = "na.or.complete")^2)
+  mlflow_log_artifact("series_comparison.html")
+  mlflow_log_artifact("residuals.html")
+  mlflow_log_artifact("clustering_dlc.html")
+  mlflow_log_model(predictor, "model")
+  
+  #mlflow_load_model()
+  # mlflow_create_registered_model("total_electricity")
+  # mlflow_end_run(run_id=as.character(runId$run_uuid))
+  # mlflow_delete_run(run_id=as.character(runId$run_uuid))
+})
+```
+
+```{r}
+mlflow_ui()
+```
+
+```{r}
+predictor_loaded<-mlflow_load_model("runs:/12a88a4eef804e349b2c62f1fbf8cf52/model")
+
+# Forcing only heating and only cooling dependency
+baseload_and_cooling <- predictor_loaded( df_for_pred, forceGlobalInputFeatures = list("temperature"=ifelse(df_for_pred$temperature>20,df_for_pred$temperature,20)) )
+baseload_and_heating <- predictor_loaded( df_for_pred, forceGlobalInputFeatures = list("temperature"=ifelse(df_for_pred$temperature>20,20,df_for_pred$temperature)) )
+
+# Estimate the baseload consumption along the period
+baseload <- predictor_loaded( df_for_pred, forceGlobalInputFeatures = list("temperature"=20))
+
+disaggregated_df <- data.frame(
+      "time"=df_for_pred$time,
+      "baseload"=baseload,
+      "heating"=baseload_and_heating-baseload, 
+      "cooling"=baseload_and_cooling-baseload)
+
+fig <- plot_ly(disaggregated_df, x = ~time, y = ~baseload, name = 'Baseload', type = 'scatter', mode = 'none', stackgroup = 'one', fillcolor = '#BFBBBB')
+fig <- fig %>% add_trace(y = ~heating, name = 'Heating', fillcolor = '#CF3737')
+fig <- fig %>% add_trace(y = ~cooling, name = 'Cooling', fillcolor = '#1D8DEB')
+fig
+```
