@@ -21,3 +21,7 @@ Depends:
     testthat
 License: "" 
 RoxygenNote: 7.1.2
+Suggests:
+    rmarkdown,
+    knitr
+VignetteBuilder: knitr

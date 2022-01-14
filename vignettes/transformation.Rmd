@@ -1,0 +1,153 @@
+---
+title: "Data transformation"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{biggr}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(biggr)
+library(ggplot2)
+library(lubridate)
+data(biggr)
+```
+
+# Transformation
+
+Multiple helper functions are provided
+
+
+## Decompose calendar
+
+Decompose the time in date, day of the year, day of the week, day of the
+weekend, working day, non-working day, season, month, hour, minute, ...
+
+```{r, echo=FALSE}
+create_serie <- function(n, values, timestep = "hours", start = ymd_hms("2020-01-01 00:00:00")) {
+  funcs <- list(
+    "mins" = minutes,
+    "hours" = hours,
+    "days" = days,
+    "months" = months,
+    "years" = years
+  )
+  func <- funcs[[timestep]]
+  return(
+    data.frame(
+      time = seq(start, start + func(n - 1), by = timestep),
+      value = values
+    )
+  )
+}
+```
+
+```{r}
+# Get time serie calendar properties
+start <- ymd_hms("2020-07-01 00:00:00")
+testdata <- create_serie(5, rep(1, 5), timestep = "hours", start = start)
+calendar_components(testdata, "Europe/Madrid") %>% select(-c(is_holidays))
+```
+
+## Calculate deegree raw and degree days
+
+Calculate the difference between outdoor temperature and a base temperature
+
+```{r}
+start <- ymd_hms("2020-12-27 00:00:00")
+testdata <- create_serie(7, c(26, 27, 28, 29, 30, 31, 32), timestep = "days")
+baseTemperature <- 25
+newtestdata <- degree_raw(testdata, baseTemperature, "cooling")
+
+print(testdata)
+print(newtestdata)
+```
+
+```{r}
+start <- ymd_hms("2020-12-27 00:00:00")
+testdata <- create_serie(7, c(26, 27, 28, 29, 30, 31, 32), timestep = "days")
+baseTemperature <- 25
+newtestdata <- degree_days(testdata, "Europe/Madrid", baseTemperature, "cooling", "D")
+
+print(testdata)
+print(newtestdata)
+```
+
+## Normalization
+
+Multiple normalization methods are provided
+
+- Range int
+- Daily
+- ZScore
+- Profile
+
+### Range int normalization
+
+```{r}
+testdata <- data.frame(
+  value1 = c(0, 0, 25, 25, 100, 100),
+  value2 = c(0, 0, 50, 50, 100, 100)
+)
+newtestdata <- normalize_range(testdata, lower = 0, upper = 1, 0.30, 0.75)
+
+print(testdata)
+print(newtestdata)
+```
+
+### Daily normalization
+
+```{r, fig.width=7,fig.height=4}
+serie <- electricity5 %>%
+  mutate(
+    time=ymd_hms(time)
+  ) %>%
+  rename(c("value"="Qe")) %>%
+  select(time, value) %>%
+  head(24*6)
+newserie <- normalize_daily(serie, localTimeZone = "Europe/Madrid")
+
+serie %>% ggplot(aes(x=time, y=value)) + geom_point() + ggtitle("ante")
+newserie %>% ggplot(aes(x=time, y=value)) + geom_point() + ggtitle("post")
+```
+
+### Zscore normalization
+
+```{r, fig.width=7,fig.height=4}
+serie <- electricity5 %>%
+  mutate(
+    time=ymd_hms(time)
+  ) %>%
+  rename(c("value"="Qe")) %>%
+  select(time, value) %>%
+  head(24*6)
+newserie <- normalize_zscore(serie)
+
+serie %>% ggplot(aes(x=time, y=value)) + geom_point() + ggtitle("ante")
+newserie %>% ggplot(aes(x=time, y=value)) + geom_point() + ggtitle("post")
+```
+
+### Profile normalization
+
+```{r, fig.width=7,fig.height=4}
+serie <- electricity5 %>%
+  mutate(
+    time=ymd_hms(time)
+  ) %>%
+  rename(c("value"="Qe")) %>%
+  mutate(temperature=value) %>%
+  select(time, value, temperature) %>%
+  head(24*31)
+newserie <- normalize_load(serie, "Europe/Madrid")
+
+serie %>% ggplot(aes(x=time, y=value)) + geom_point() + ggtitle("ante")
+newserie
+```
