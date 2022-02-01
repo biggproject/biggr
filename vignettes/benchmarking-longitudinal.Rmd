@@ -16,6 +16,22 @@ knitr::opts_chunk$set(
 )
 ```
 
+# Only first time
+
+Install MLFlow in your system or your server.
+
+    mkdir PyVenvs
+    cd PyVenvs
+    virtualenv -p python3 mlflow
+    source bin/activate
+    pip3 install mlflow
+    mkdir mlflow/default_artifact
+    sqlite3 mlflow/backend.db
+    mlflow server \
+        --backend-store-uri sqlite:///mlflow/backend.db \
+        --default-artifact-root mlflow/default_artifact \
+        --host 127.0.0.1
+
 # Load the needed libraries
 
 ```{r setup,echo=FALSE}
@@ -30,9 +46,12 @@ library(biggr)
 #install.packages("easystats", repos="https://easystats.r-universe.dev")
 library(easystats)
 library(mlflow)
-mlflow_wd = "/Users/gmor-air/PyInterpreters/mlflow_framework"
-Sys.setenv("MLFLOW_BIN"=paste0(mlflow_wd,"/bin/mlflow"))
-Sys.setenv("MLFLOW_PYTHON_BIN"=paste0(mlflow_wd,"/bin/python3"))
+mlflow_wd = "/Users/gmor-air/PyVenvs/mlflow"
+Sys.setenv(MLFLOW_PYTHON_BIN=paste0(mlflow_wd,"/bin/python3"))
+Sys.setenv(MLFLOW_TRACKING_URI="http://127.0.0.1:5000")
+Sys.setenv(MLFLOW_VERBOSE=FALSE)
+Sys.setenv(MLFLOW_BIN=paste0(mlflow_wd,"/bin/mlflow"))
+#mlflow_client(mlflow_set_tracking_uri("http://127.0.0.1:5000"))
 ```
 
 # Load an example dataset
@@ -128,7 +147,7 @@ p
 # Initialize the MLFlow framework
 
 ```{r}
-buildingId <- "AFSG31"
+buildingId <- "BIDEXAMPLE"
 
 # Start or continue an MLFlow experiment using the buildingId as the name of the experiment 
 experimentId <- tryCatch(
@@ -144,7 +163,7 @@ experimentId <- tryCatch(
 # Adjust a regression model
 
 ```{r}
-#mlflow_end_run(run_id="d11dcf05691e47aba7d8aacf05d6deea")
+# mlflow_end_run(run_id="912e8b7ea39644e9a70c2e9737eeb0fa")
 with(mlflow_start_run(experiment_id = experimentId),{
   mod <- train(
     Qe ~ hour + th + tc + wh + wc + isolh + isolc,
@@ -153,7 +172,7 @@ with(mlflow_start_run(experiment_id = experimentId),{
      data.frame(parameter = c('nhar','tbalh','tbalc','alpha'),
                 class = c('integer','float','float','float'))
     ),
-    trControl = trainControl(method = "timeslice", initialWindow = ceiling(nrow(df)*0.5), 
+    trControl = trainControl(method = "timeslice", initialWindow = ceiling(nrow(df)*0.5),
                             horizon = ceiling(nrow(df)*0.1), skip = ceiling(nrow(df)*0.1)-1, fixedWindow = T),
     tuneGrid = expand.grid("nhar"=c(5),"tbalh"=c(16),"tbalc"=c(24),"alpha"=c(0.1)),
     transformationSentences = list(
@@ -163,13 +182,13 @@ with(mlflow_start_run(experiment_id = experimentId),{
               "isWeekend"),
      "tlpf"="lpf_ts(...,featuresNames='temperature',smoothingTimeScaleParameter=param$alpha,
               outputFeaturesNames='temperatureLpf')",
-     "th"=c("degree_raw(...,featuresName='temperatureLpf',baseTemperature=param$tbalh, 
+     "th"=c("degree_raw(...,featuresName='temperatureLpf',baseTemperature=param$tbalh,
               mode='heating',outputFeaturesName='heating',inplace=F)",
             "hourBy3",
             #"fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
             "isWeekend"
             ),
-     "tc"=c("degree_raw(...,featuresName='temperatureLpf',baseTemperature=param$tbalc, 
+     "tc"=c("degree_raw(...,featuresName='temperatureLpf',baseTemperature=param$tbalc,
               mode='cooling',outputFeaturesName='cooling',inplace=F)",
             "hourBy3",
             #"fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
@@ -204,7 +223,6 @@ with(mlflow_start_run(experiment_id = experimentId),{
     )
   })
   
-  
   # Predict with the validation set
   # df_for_pred <- df[df$time>=as.POSIXct("2017-01-01 00:00:00") & df$time<=as.POSIXct("2017-12-31 23:59:59"),]
   df_for_pred <- df
@@ -228,9 +246,9 @@ with(mlflow_start_run(experiment_id = experimentId),{
   mlflow_log_metric("RMSE", RMSE(df_for_pred$Qe,df_for_pred$Qe_pred,na.rm = T))
   mlflow_log_metric("CVRMSE", RMSE(df_for_pred$Qe,df_for_pred$Qe_pred,na.rm = T)/mean(df_for_pred$Qe,na.rm=T))
   mlflow_log_metric("r2", cor(df_for_pred$Qe,df_for_pred$Qe_pred,use = "na.or.complete")^2)
-  mlflow_log_artifact("series_comparison.html")
+  mlflow_log_artifact("series_comparison.html",)
   mlflow_log_artifact("residuals.html")
-  mlflow_log_artifact("clustering_dlc.html")
+  # mlflow_log_artifact("clustering_dlc.html")
   mlflow_log_model(predictor, "model")
   
   #mlflow_load_model()
@@ -238,10 +256,6 @@ with(mlflow_start_run(experiment_id = experimentId),{
   # mlflow_end_run(run_id=as.character(runId$run_uuid))
   # mlflow_delete_run(run_id=as.character(runId$run_uuid))
 })
-```
-
-```{r}
-mlflow_ui()
 ```
 
 ```{r}
