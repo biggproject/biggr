@@ -92,8 +92,8 @@ detect_time_step <- function(data, maxMissingTimeSteps = 0, approxTimeSteps = FA
     summarize(freq = n()) %>%
     arrange(
       ifelse(maxMissingTimeSteps > 0, desc(freq), secs)
-    )
-
+    ) %>% filter(secs>=0)
+  
   secs <- as.character(crosstab$secs[1])
   # WARNING: Expecting significative amount of samples in
   # standard frequency (seconds interval) otherwise fails
@@ -290,9 +290,9 @@ detect_ts_min_max_outliers <- function(data, min, max, minSeries = NULL, maxSeri
 #' and frequency, only assigning true values when an element should be
 #' considered as an outlier.
 
-detect_ts_zscore_outliers <- function(data, zScoreThreshold, window = NULL, zScoreExtremesSensitive = TRUE) {
+detect_ts_zscore_outliers <- function(data, zScoreThreshold, window = NULL, zScoreExtremesSensitive = TRUE, na.rm=T) {
   func <- ifelse(zScoreExtremesSensitive == TRUE, mean, median)
-  zScore <- ((data$value - func(data$value)) / sd(data$value))
+  zScore <- ((data$value - func(data$value,na.rm=T)) / sd(data$value,na.rm=na.rm))
   if (!is.null(window)) {
     timestep <- detect_time_step(data)
     timesteps_ <- invert(timesteps)
@@ -305,9 +305,14 @@ detect_ts_zscore_outliers <- function(data, zScoreThreshold, window = NULL, zSco
   return(abs(zScore) >= zScoreThreshold)
 }
 
-fs <- function(data) {
-  # naive implementation
-  return(sin(data * 2 * pi))
+fs <- function(X, featureName, nHarmonics) {
+  cbind(do.call(cbind,lapply(1:nHarmonics, function(i) {
+    value <- list(sin(i * X * 2 * pi), cos(i * X * 2 * 
+                                             pi))
+    names(value) <- paste0(featureName, c("_sin_", "_cos_"), 
+                           i)
+    return(as.data.frame(value))
+  })), setNames(data.frame(rep(1,length(X))),paste0(featureName,"_fs_int")))
 }
 
 detect_ts_calendar_model_outliers_window <- function(data,
@@ -327,7 +332,7 @@ detect_ts_calendar_model_outliers_window <- function(data,
       W = week(time) / 52,
       m = month(time) / 12,
       Y = as.factor(year(time)),
-      HOL = as_date(time) %in% holidaysCalendar,
+      HOL = as_date(time) %in% holidaysCalendar | strftime(time,"%w") %in% c(6,0),
       intercept = 1
     )
 
@@ -393,6 +398,8 @@ detect_ts_calendar_model_outliers_window <- function(data,
 #' @return predicted timeSeries of the predicted values of the original
 #' timeSeries based on the calendar regression model.
 detect_ts_calendar_model_outliers <- function(data,
+                                              localTimeColumn="localtime",
+                                              valueColumn=outputName,
                                               calendarFeatures = c("HOL", "H"),
                                               mode = "upperAndLower",
                                               upperModelPercentile = 90,
@@ -401,6 +408,7 @@ detect_ts_calendar_model_outliers <- function(data,
                                               lowerPercentualThreshold = 30,
                                               holidaysCalendar = c(),
                                               window = NULL) {
+  data <- setNames(data[,c(localTimeColumn, valueColumn)],c("time","value"))
   if (is.null(window)) {
     return(
       detect_ts_calendar_model_outliers_window(
@@ -426,6 +434,7 @@ detect_ts_calendar_model_outliers <- function(data,
       tmp <- newdata[newdata$window == window, ]
       result <- detect_ts_calendar_model_outliers_window(
         tmp,
+        
         calendarFeatures,
         mode,
         upperModelPercentile,

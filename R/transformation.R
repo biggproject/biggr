@@ -246,15 +246,6 @@ calendar_components <- function (data, localTimeZone = NULL, holidays = NULL, in
 #' plus the transformed objects -True- , or only the transformed series -False.
 #' @return data <timeSeries> containing the same initial information of data input argument, plus the sine-cosine components of the Fourier Series as new columns.
 fs_components <- function (data, featuresNames, mask=NULL, nHarmonics, inplace=T) {
-  fs <- function(X, featureName, nHarmonics) {
-    cbind(do.call(cbind,lapply(1:nHarmonics, function(i) {
-      value <- list(sin(i * X * 2 * pi), cos(i * X * 2 * 
-                                               pi))
-      names(value) <- paste0(featureName, c("_sin_", "_cos_"), 
-                             i)
-      return(as.data.frame(value))
-    })), setNames(data.frame(rep(1,length(X))),paste0(featureName,"_fs_int")))
-  }
   data_ <- data
   fs_multiple <- NULL
   for (featureName in featuresNames) {
@@ -264,6 +255,23 @@ fs_components <- function (data, featuresNames, mask=NULL, nHarmonics, inplace=T
     }
     fs_tmp <- fs(data_[[featureName]], featureName, nHarmonics)
     if(!is.null(fs_multiple)) { fs_multiple <- cbind(fs_multiple, fs_tmp)} else { fs_multiple <- fs_tmp }
+  }
+  if(inplace==T){
+    return(cbind(data,fs_multiple))
+  } else {
+    return(fs_multiple)    
+  }
+}
+
+
+bs_components <- function (data, featuresNames, mask=NULL, degree, inplace=T) {
+  # data <- df_for_pred
+  # featureName <- "temperature"
+  data_ <- data
+  bs_multiple <- NULL
+  for (featureName in featuresNames) {
+    bs_tmp <- splines::bs(data_[[featureName]], intercept = F, degree = 2, Boundary.knots = c(5,15,25))
+    if(!is.null(fs_multiple)) { fs_multiple <- cbind(fs_multiple, fs_tmp) } else { fs_multiple <- fs_tmp }
   }
   if(inplace==T){
     return(cbind(data,fs_multiple))
@@ -821,7 +829,22 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
           # trData <- trData[,(ncol(data)+1):(ncol(trData))]
         }
       } else {
-        trData <- cbind(trData, eval(parse(text=feature)))
+        trData <- tryCatch(
+          cbind(trData, eval(parse(text=feature))),
+          error=function(e){
+            if(is.null(trData)){
+              setNames(
+                data.frame(rep(0,nrow(data))),
+                feature
+              )
+            } else {
+              cbind(trData, setNames(
+                  data.frame(rep(0,nrow(data))),
+                  feature
+                )
+              )
+            }
+          })
         trFields[[length(trFields)+1]] <- feature
       }
       detach(data,unload = T)
@@ -831,6 +854,7 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
         "vars" = do.call(c,trFields)
       )
     }
+    
     featuresAll <- features[!(features %in% names(transformationItems))]
     for(trFeat in names(transformationItems)[names(transformationItems) %in% features]){
       featuresAll <- c(featuresAll, transformationItems[[trFeat]]$vars)
