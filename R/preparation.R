@@ -322,23 +322,25 @@ detect_ts_calendar_model_outliers_window <- function(data,
                                                      lowerModelPercentile = 10,
                                                      upperPercentualThreshold = 30,
                                                      lowerPercentualThreshold = 30,
-                                                     holidaysCalendar = c()) {
+                                                     holidaysCalendar = c(),
+                                                     outputPredictors = F,
+                                                     logValueColumn = F) {
 
   # WARNING: First naive approach
   newdata <- data %>%
     mutate(
-      H = hour(time) / 24,
-      U = day(time) / 365,
-      W = week(time) / 52,
-      m = month(time) / 12,
-      Y = as.factor(year(time)),
-      HOL = as_date(time) %in% holidaysCalendar | strftime(time,"%w") %in% c(6,0),
+      H = (hour(time)) / 24,
+      U = (as.numeric(strftime(time,"%u"))-1) / 7,
+      W = as.numeric(strftime(time,"%U")) / 53,
+      m = (as.numeric(strftime(time,"%m"))-1) / 12,#as.numeric(strftime(time,"%j")) / 366,
+      HOL = as_date(time) %in% holidaysCalendar | strftime(time,"%u") %in% c("6","7"),
       intercept = 1
     )
-
+  if (logValueColumn) newdata$value <- log(newdata$value)
   cols_to_fs <- c("H", "U", "W", "m")
-  calendarFeatures <- ifelse(calendarFeatures %in% cols_to_fs, paste0("fs(", calendarFeatures, ")"), calendarFeatures)
-  formula <- as.formula(paste("value", paste(calendarFeatures, collapse = "+"),
+  calendarFeatures <- ifelse(calendarFeatures %in% cols_to_fs, 
+                             paste0("as.matrix(fs(", calendarFeatures, ",featureName=\"", calendarFeatures,"\",nHarmonics=5))"), calendarFeatures)
+  formula <- as.formula(paste("value", paste0("0 +", paste(calendarFeatures, collapse = ":")),
     sep = "~"
   ))
   model <- rq(
@@ -348,12 +350,22 @@ detect_ts_calendar_model_outliers_window <- function(data,
   )
   prediction <- as.data.frame(predict.rq(model, newdata))
   names(prediction) <- c("lower", "upper")
-
+  if (logValueColumn) {
+    prediction$lower <- exp(prediction$lower)
+    prediction$upper <- exp(prediction$upper)
+  }
+  
+  # plot(prediction$upper,type="l",col="blue")
+  # lines(prediction$lower,col="yellow")
+  # lines(newdata$value,col="black")
+  
   lowerPrediction <- (1 - lowerPercentualThreshold / 100.0) * prediction$lower
   upperPrediction <- (1 + upperPercentualThreshold / 100.0) * prediction$upper
 
   if (mode == "lower") {
     mask <- data$value < lowerPrediction
+    lowerPrediction
+    upperPrediction 
   }
   if (mode == "upper") {
     mask <- data$value > upperPrediction
@@ -361,7 +373,12 @@ detect_ts_calendar_model_outliers_window <- function(data,
   if (mode == "upperAndLower") {
     mask <- (data$value < lowerPrediction) | (data$value > upperPrediction)
   }
-  return(mask)
+  if (outputPredictors){
+    return(data.frame("time" = data$time, "outliers" = mask, 
+                      setNames(prediction,c("lowerPredCalendarModel","upperPredCalendarModel"))))
+  } else {
+    return(data.frame("time" = data$time, "outliers" = mask))
+  }
 }
 
 #' Detect elements of the time series out of a confidence threshold based
@@ -407,11 +424,24 @@ detect_ts_calendar_model_outliers <- function(data,
                                               upperPercentualThreshold = 30,
                                               lowerPercentualThreshold = 30,
                                               holidaysCalendar = c(),
-                                              window = NULL) {
-  data <- setNames(data[,c(localTimeColumn, valueColumn)],c("time","value"))
+                                              window = NULL,
+                                              outputPredictors = F,
+                                              logValueColumn = F) {
+  if(class(window)=="integer"){
+    start <- as.integer(seconds(data$time[1]))
+    windowsize <- as.integer(duration(window, units = "seconds"))
+    data <- data %>%
+      mutate(
+        window = (as.integer(seconds(time)) - start) %/% windowsize
+      )
+  } else if (class(window)=="character"){
+    data <- data %>% unite("window",window,sep="~")
+  } else {
+    data$window <- 0
+  }
+  data <- setNames(data[,c(localTimeColumn, valueColumn, "window")],c("time","value","window"))
   if (is.null(window)) {
-    return(
-      detect_ts_calendar_model_outliers_window(
+    result <- detect_ts_calendar_model_outliers_window(
         data,
         calendarFeatures,
         mode,
@@ -419,32 +449,33 @@ detect_ts_calendar_model_outliers <- function(data,
         lowerModelPercentile,
         upperPercentualThreshold,
         lowerPercentualThreshold,
-        holidaysCalendar
+        holidaysCalendar,
+        outputPredictors,
+        logValueColumn
       )
-    )
+    colnames(result)[1] <- localTimeColumn
+    return(result)
   } else {
-    start <- as.integer(seconds(data$time[1]))
-    windowsize <- as.integer(duration(window, units = "seconds"))
-    newdata <- data %>%
-      mutate(
-        window = (as.integer(seconds(time)) - start) %/% windowsize
-      )
+    newdata <- data
     windows <- unique(newdata$window)
     result <- lapply(windows, function(window) {
       tmp <- newdata[newdata$window == window, ]
       result <- detect_ts_calendar_model_outliers_window(
         tmp,
-        
         calendarFeatures,
         mode,
         upperModelPercentile,
         lowerModelPercentile,
         upperPercentualThreshold,
         lowerPercentualThreshold,
-        holidaysCalendar
+        holidaysCalendar,
+        outputPredictors,
+        logValueColumn
       )
     })
-    return(unlist(result))
+    result <- do.call(rbind,result)
+    colnames(result)[1] <- localTimeColumn
+    return(result)
   }
 }
 

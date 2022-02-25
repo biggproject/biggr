@@ -49,7 +49,7 @@ PenalisedLM <- function(input_parameters){
       },
     loop = NULL,
     fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, 
-                   transformationSentences=NULL, forcePositiveTerms=NULL) {
+                   transformationSentences=NULL, forcePositiveTerms=NULL, logOutput=F) {
       # x<<-x
       # y<<-y
       # params <<- param
@@ -120,8 +120,10 @@ PenalisedLM <- function(input_parameters){
       
       # Train the model
       y <- model.frame(form,data)[,1]
-      y <- log(y)
-      x <- as.matrix(model.matrix(form,data))
+      if(logOutput) y <- log(y)
+      x <- as.matrix(model.matrix.lm(form,data,na.action=na.pass))
+      y <- y[complete.cases(x)] 
+      x <- x[complete.cases(x)]
       mod <- list("model"=tryCatch({
         penalized::penalized(
           y,x,~0,positive = positivityOfTerms,
@@ -142,6 +144,7 @@ PenalisedLM <- function(input_parameters){
       mod$meta <- list(
         features = features,
         outputName = outputName,
+        logOutput = logOutput,
         formula = form,
         param = param,
         transformationSentences = transformationSentences,
@@ -155,6 +158,7 @@ PenalisedLM <- function(input_parameters){
       newdata <- as.data.frame(newdata)
       features <- modelFit$meta$features
       param <- modelFit$meta$param
+      logOutput <- modelFit$meta$logOutput
       
       # Initialize the global input features if needed
       # Change the inputs if are specified in forceGlobalInputFeatures
@@ -195,13 +199,14 @@ PenalisedLM <- function(input_parameters){
       
       # Predict
       options(na.action='na.pass')
-      newdata[,modelFit$meta$outputName] <- exp(as.numeric(
+      newdata[,modelFit$meta$outputName] <- as.numeric(
         (
           as.matrix(
             model.matrix(modelFit$meta$formula[-2],newdata)
           )[,names(coef(modelFit$model))]
         ) %*% coef(modelFit$model)
-      ))
+      )
+      if(logOutput) newdata[,modelFit$meta$outputName] <- exp(newdata[,modelFit$meta$outputName])
       newdata[,modelFit$meta$outputName]
     },
     prob = NULL,
@@ -425,12 +430,11 @@ RLS <- function(input_parameters){
       },
     loop = NULL,
     fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, 
-                   transformationSentences=NULL) {
-      
-      x <<- x
-      y <<- y
-      transformationSentences <<- transformationSentences
-      formulaTerms <<- formulaTerms
+                   transformationSentences=NULL, logOutput=F) {
+      # x <<- x
+      # y <<- y
+      # transformationSentences <<- transformationSentences
+      # formulaTerms <<- formulaTerms
 
       features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
       outputName <- all.vars(formulaTerms)[1]
@@ -494,46 +498,9 @@ RLS <- function(input_parameters){
         )
       )
       
-      data <- data[order(data$time),]
-      
-      modlm <- lm(ARX_form, data)
-      data2 <- data
-      
-      data2$outliers <- detect_ts_calendar_model_outliers(data = data, localTimeColumn="localtime", valueColumn=outputName,
-                                        window = 2*31*24*60*60)
-      outlier_dates <- (data2[,c("localtime","outliers")] %>% group_by(date = as.Date(localtime)) %>%
-        summarise(outliers = sum(outliers)) %>% filter(outliers > 0) %>% select(date))$date
-      
-      # data2$pred <- predict.lm(modlm,data)
-      # data2$rmse <- sqrt((data2[,outputName]-data2$pred)^2)
-      # data3 <- data2[,c("season","localtime",outputName)] %>% 
-      #   group_by(year_weekday=strftime(localtime,"%Y-%w"),season) %>% 
-      #   summarise(median_output=mean(Qe,na.rm=T))
-      # data2 <-
-      # data2 <- aggregate(data2[,c(outputName,"pred","rmse")],by=list(date=as.Date(data2$localtime)),
-      #                    FUN=mean,na.rm=T)
-      # data2$daily_rmse <- sqrt((data2[,outputName]-data2$pred)^2)
-      # 
-      # # data2$rmse <- na.locf(na.locf(
-      # #   rollmean(data2$rmse,24,align="center",partial=T,fill = c(NA,NA,NA)),
-      # #   na.rm=F
-      # # ),fromLast = T,na.rm=F)
-      # data2$window <- strftime(data2$date,tz="UTC","%Y-%m")
-      # roll_window <- as.numeric(names(sort(table(table(data2$window)),decreasing = T))[1])
-      # data2$rmse_outliers <- 
-      #   detect_ts_zscore_outliers(setNames(data2[,c("date","rmse")],c("time","value")),
-      #                           zScoreThreshold = 2,
-      #                           zScoreExtremesSensitive = T,window = roll_window*24*60*60) #roll window in seconds
-      # # ggplotly(ggplot(data2)+geom_line(aes(date,Qe))+geom_line(aes(date,pred),col="red")+
-      # #            geom_point(aes(date,ifelse(rmse_outliers,Qe,NA)),col="yellow")+
-      # #            geom_line(aes(date,rmse),col="blue",alpha=0.3) + geom_line(aes(date,daily_rmse),col="green",alpha=0.3)
-      # # )
-      # outlier_dates <- data2$date[data2$rmse_outliers]
-      # # outlier_dates <- (data2[,c("localtime","rmse_outliers")] %>% group_by(date = as.Date(localtime)) %>%
-      # #   summarise(outliers = sum(rmse_outliers)) %>% filter(outliers > 0) %>% select(date))$date
+      data <- data[order(data$localtime),]
       
       # Generate the expanded dataset for inputs
-      data <- data[!(as.Date(data$localtime) %in% outlier_dates),]
       data_matrix <- model.matrix(ARX_form,data)
       colnames(data_matrix) <- gsub(":","_",colnames(data_matrix))
       
@@ -550,9 +517,9 @@ RLS <- function(input_parameters){
                function(x) data.frame("k0"=data_matrix[,x])),
         colnames(data_matrix)
       )
-      data_for_rls[["t"]] <- data$time
-      data_for_rls[[outputName]] <- data[,outputName]
-      data_for_rls$scoreperiod <- sample(c(F,T),length(data_for_rls$t),replace = T,prob = c(0.5,0.5))
+      data_for_rls[["t"]] <- data$localtime
+      data_for_rls[[outputName]] <- log(data[,outputName])
+      data_for_rls$scoreperiod <- sample(c(F,T),length(data_for_rls$t),replace = T,prob = c(0.9,0.1))
       
       # Fit the RLS model and obtain the time-varying coefficients
       mod_rls <- rls_fit(c("lambda"=param$lambda),model, data_for_rls, scorefun = rmse, printout = F)
@@ -560,13 +527,14 @@ RLS <- function(input_parameters){
       # Store the meta variables
       mod <- list()
       mod$coefficients <- mod_rls$Lfitval$k0
-      mod$time <- mod_rls$data$t
+      mod$localtime <- mod_rls$data$t
       mod$yreal <- mod_rls$data$Qe
-      mod$yhat <- mod_rls$Yhat$k0
+      mod$yhat <- if(logOutput){exp(mod_rls$Yhat$k0)}else{mod_rls$Yhat$k0}
       mod$meta <- list(
         features = features,
         outputName = outputName,
         formula = ARX_form,
+        logOutput = logOutput,
         outputInit = setNames(
           list(data[min(nrow(data),nrow(data)-maxLag+1):nrow(data),outputName]),
           outputName
@@ -586,13 +554,14 @@ RLS <- function(input_parameters){
     },
     predict = function(modelFit, newdata, submodels, forceGlobalInputFeatures=NULL, forceInitInputFeatures=NULL,
                        forceInitOutputFeatures=NULL, model_horizon_in_hours=1, model_window="%Y-%m-%d", model_selection="rmse") {
-      # modelFit <<- modelFit
-      # newdata <<- newdata
+      modelFit <<- modelFit
+      newdata <<- newdata
       newdata <- as.data.frame(newdata)
-      newdata <- newdata[order(newdata$time),]
+      newdata <- newdata[order(newdata$localtime),]
       features <- modelFit$meta$features
       param <- modelFit$meta$param
       maxLag <- modelFit$meta$maxLag
+      logOutput <- modelFit$meta$logOutput
       
       # Initialize the global input features if needed
       # Change the inputs if are specified in forceGlobalInputFeatures
@@ -641,55 +610,53 @@ RLS <- function(input_parameters){
       
       # Data transformation for RLS framework
       model_formula <- update.formula(modelFit$meta$formula,NULL~.)
-      newdata_matrix <- model.matrix(model_formula,newdata)
+      newdata_matrix <- model.matrix.lm(model_formula, newdata, na.action=na.pass)
       colnames(newdata_matrix) <- gsub(":","_",colnames(newdata_matrix))
       
-      all_times <- suppressMessages(pad(data.frame("time"=newdata$time),by = "time"))
+      all_times <- suppressMessages(pad(data.frame("localtime"=newdata$localtime),by = "localtime"))
       mod_coef <- suppressMessages(cbind(
+        data.frame("yhat" = modelFit$yhat),
         data.frame("yreal" = modelFit$yreal),
-        data.frame("time" = modelFit$time),
+        data.frame("localtime" = modelFit$localtime),
         modelFit$coefficients) %>% full_join(all_times))
-      mod_coef <- mod_coef[order(mod_coef$time),]
+      mod_coef <- mod_coef[order(mod_coef$localtime),]
       mod_coef <- zoo::na.locf(mod_coef)
       
       # Predict at multi-step ahead or one-step ahead prediction, 
       # depending if some AR input is considered using the output variable
-      if(model_horizon_in_hours == 1){
-        if(paste("AR",modelFit$meta$outputName,sep="_") %in% colnames(param)){
-          for (i in 1:nrow(newdata)){
-            newdata <- lag_components(data = newdata,
-                                      maxLag = maxLag,
-                                      featuresNames = featuresAll,
-                                      predictionStep = i-1,
-                                      forceInitInputFeatures = forceInitInputFeatures,
-                                      forceInitOutputFeatures = forceInitOutputFeatures)
-            newdata[i,modelFit$meta$outputName] <- sum(
-              newdata_matrix[i,colnames(modelFit$coefficients)] * 
-                mod_coef[mod_coef$time==newdata$time[i],colnames(modelFit$coefficients)]
-            )
-          }
-        } else {
-          newdata[,modelFit$meta$outputName] <- rowSums(
-            newdata_matrix[,colnames(modelFit$coefficients)] * 
-              mod_coef[mod_coef$time %in% newdata$time,colnames(modelFit$coefficients)],
-            na.rm=T
+      if(paste("AR",modelFit$meta$outputName,sep="_") %in% colnames(param)){
+        for (i in 1:nrow(newdata)){
+          newdata <- lag_components(data = newdata,
+                                    maxLag = maxLag,
+                                    featuresNames = featuresAll,
+                                    predictionStep = i-1,
+                                    forceInitInputFeatures = forceInitInputFeatures,
+                                    forceInitOutputFeatures = forceInitOutputFeatures)
+          newdata[i,modelFit$meta$outputName] <- sum(
+            newdata_matrix[i,colnames(modelFit$coefficients)] * 
+              mod_coef[mod_coef$localtime==newdata$localtime[i],colnames(modelFit$coefficients)]
           )
         }
+      } else {
+        newdata[,modelFit$meta$outputName] <- rowSums(
+          newdata_matrix[,colnames(modelFit$coefficients)] * 
+            mod_coef[mod_coef$localtime %in% newdata$localtime,colnames(modelFit$coefficients)],
+          na.rm=T
+        )
+      }
         # return the output
-        newdata[,modelFit$meta$outputName]
+      if(model_horizon_in_hours == 1){
+        if (logOutput) { exp(newdata[,modelFit$meta$outputName]) } else { newdata[,modelFit$meta$outputName] }
       } else {
         # When predicting a fixed horizon with each model coefficients set
         if(paste("AR",modelFit$meta$outputName,sep="_") %in% colnames(param)){
           stop("Horizons per step higher than 1 are not allowed when predicting multiple step ahead of ARX models")
         } else {
-          mod_coef_timestep <- detect_time_step(mod_coef)
-          mod_coef <- mod_coef[mod_coef$time %in% newdata$time,]
-          mod_coef$yhat <- rowSums(
-            newdata_matrix[,colnames(modelFit$coefficients)] * 
-              mod_coef[,colnames(modelFit$coefficients)],
-            na.rm=T
-          )
-          mod_coef$window <- strftime(mod_coef$time,tz="UTC",model_window)
+          mod_coef <- mod_coef[
+            mod_coef$localtime >= min(newdata$localtime)-years(1) &
+            mod_coef$localtime <= max(newdata$localtime),
+          ]
+          mod_coef$window <- strftime(mod_coef$localtime,model_window)
           roll_window <- as.numeric(names(sort(table(table(mod_coef$window)),decreasing = T))[1])
           mod_coef$rmse <- sqrt((mod_coef$yhat-mod_coef$yreal)**2)
           mod_coef$rmse <- zoo::rollapply(mod_coef$rmse,width = roll_window,align = "center",fill = c(NA,NA,NA),partial=T,
@@ -697,30 +664,35 @@ RLS <- function(input_parameters){
           mod_coef_summary <- mod_coef %>% 
             group_by(window) %>% 
             summarise(
-              min_rmse = time[which.min(rmse)],
-              random_select = sample(time,size = 1)
+              min_rmse = localtime[which.min(rmse)],
+              random_select = sample(localtime,size = 1)
             )
           if(model_selection=="random"){
             mod_coef <- mod_coef %>% 
               left_join(mod_coef_summary,by = "window") %>%
-              filter(time==random_select)
+              filter(localtime==random_select)
           } else if(model_selection=="rmse"){
             mod_coef <- mod_coef %>% 
               left_join(mod_coef_summary,by = "window") %>%
-              filter(time==min_rmse)
+              filter(localtime==min_rmse)
           }
           multiple_preds <- lapply(1:nrow(mod_coef),
                  function(x){
                    mod_coef_aux <- mod_coef[x,]
-                   allowed_times <- newdata$time >= mod_coef_aux[1,"time"] & 
-                       newdata$time <= mod_coef_aux[1,"time"] + hours(model_horizon_in_hours)
+                   allowed_times <- newdata$localtime >= mod_coef_aux[1,"localtime"] & 
+                       newdata$localtime <= mod_coef_aux[1,"localtime"] + hours(model_horizon_in_hours)
                    setNames(
                      data.frame(
-                      newdata$time[allowed_times],
-                      newdata_matrix[allowed_times,colnames(modelFit$coefficients)] %*% 
-                        t(mod_coef_aux[,colnames(modelFit$coefficients)])
-                     ), c("time",
-                        paste0("yhat_",strftime(mod_coef_aux[1,"time"],format="%Y%m%dT%H%M%S",tz = "UTC")))
+                      newdata$localtime[allowed_times],
+                      if (logOutput) {
+                        exp(newdata_matrix[allowed_times,colnames(modelFit$coefficients)] %*% 
+                          t(mod_coef_aux[,colnames(modelFit$coefficients)]))
+                      } else {
+                        newdata_matrix[allowed_times,colnames(modelFit$coefficients)] %*% 
+                          t(mod_coef_aux[,colnames(modelFit$coefficients)])
+                      }
+                     ), c("localtime",
+                        paste0("yhat_",strftime(mod_coef_aux[1,"localtime"],format="%Y%m%dT%H%M%S",tz = "UTC")))
                    )
                  })
           all_preds <- Reduce(
@@ -728,18 +700,22 @@ RLS <- function(input_parameters){
             multiple_preds
           )
           cbind(
-            "time"=all_preds$time,
-            "n"=sum(!(colnames(all_preds) %in% "time" )) - 
+            "localtime"=all_preds$localtime,
+            "n"=sum(!(colnames(all_preds) %in% "localtime" )) - 
               matrixStats::rowCounts(
-                as.matrix(all_preds[,!(colnames(all_preds) %in% "time" )]),value=NA),
+                as.matrix(all_preds[,!(colnames(all_preds) %in% "localtime" )]),value=NA),
+            data.frame(
+              "pred"= if (logOutput) { exp(newdata[,modelFit$meta$outputName]) } 
+                      else { newdata[,modelFit$meta$outputName] }
+            ),
             as.data.frame(
-              matrixStats::rowQuantiles(as.matrix(all_preds[,!(colnames(all_preds) %in% "time" )]),
+              matrixStats::rowQuantiles(as.matrix(all_preds[,!(colnames(all_preds) %in% "localtime" )]),
                                     probs = c(0.05,0.1,0.25,0.375,0.5,0.625,0.75,0.9,0.95),na.rm = T)),
             setNames(data.frame(
-              matrixStats::rowRanges(as.matrix(all_preds[,!(colnames(all_preds) %in% "time" )]),na.rm=T)),
+              matrixStats::rowRanges(as.matrix(all_preds[,!(colnames(all_preds) %in% "localtime" )]),na.rm=T)),
               c("min","max")),
             setNames(data.frame(
-              matrixStats::rowMeans2(as.matrix(all_preds[,!(colnames(all_preds) %in% "time" )]),na.rm=T)),
+              matrixStats::rowMeans2(as.matrix(all_preds[,!(colnames(all_preds) %in% "localtime" )]),na.rm=T)),
               c("mean"))
           )
         }

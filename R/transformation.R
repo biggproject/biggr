@@ -245,11 +245,15 @@ calendar_components <- function (data, localTimeZone = NULL, holidays = NULL, in
 #' @param inplace: <boolean> indicating if the output should be the original data argument, 
 #' plus the transformed objects -True- , or only the transformed series -False.
 #' @return data <timeSeries> containing the same initial information of data input argument, plus the sine-cosine components of the Fourier Series as new columns.
-fs_components <- function (data, featuresNames, mask=NULL, nHarmonics, inplace=T) {
+fs_components <- function (data, featuresNames, nHarmonics, mask=NULL, inplace=T, normMode="divided_by_max_plus_one") {
   data_ <- data
   fs_multiple <- NULL
   for (featureName in featuresNames) {
-    data_[[featureName]] <- (data_[[featureName]]-min(data_[[featureName]]))/(max(data_[[featureName]])-min(data_[[featureName]]))
+    if (normMode=="min_max_range") {
+      data_[[featureName]] <- (data_[[featureName]]-min(data_[[featureName]],na.rm=T))/(max(data_[[featureName]],na.rm=T)-min(data_[[featureName]],na.rm=T))
+    } else if (normMode=="divided_by_max_plus_one") {
+      data_[[featureName]] <- data_[[featureName]]/(max(data_[[featureName]],na.rm=T)+1)
+    }
     if (!is.null(mask)) {
       data_[mask, featureName] <- 0
     }
@@ -799,7 +803,7 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
   transformationItems <- list()
   if(!is.null(transformationSentences)){
     for (feature in unique(c(names(transformationSentences), features))){
-      #feature <- unique(c(names(transformationSentences), features))[5]
+      #feature <- unique(c(names(transformationSentences), features))[10]
       trFields <- list()
       trData <- NULL
       attach(data,warn.conflicts = F)
