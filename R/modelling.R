@@ -430,7 +430,7 @@ RLS <- function(input_parameters){
       },
     loop = NULL,
     fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, 
-                   transformationSentences=NULL, logOutput=F) {
+                   transformationSentences=NULL, logOutput=F, minMonthsTraining=NULL) {
       # x <<- x
       # y <<- y
       # transformationSentences <<- transformationSentences
@@ -438,6 +438,7 @@ RLS <- function(input_parameters){
 
       features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
       outputName <- all.vars(formulaTerms)[1]
+      minMonthsTraining <- if(is.null(minMonthsTraining)) 0 else minMonthsTraining
       if(paste0("AR_",outputName) %in% colnames(param)){
         if(as.logical(param[paste0("AR_",outputName)]==0)){
           param <- param[,-which(colnames(param) %in% paste0("AR_",outputName))]
@@ -526,7 +527,23 @@ RLS <- function(input_parameters){
       
       # Store the meta variables
       mod <- list()
-      mod$coefficients <- mod_rls$Lfitval$k0
+      if((min(mod_rls$data$t) + months(minMonthsTraining)) < max(mod_rls$data$t)){
+        mod$coefficients <- mod_rls$Lfitval$k0[mod_rls$data$t >= 
+                                                 (min(mod_rls$data$t) + months(minMonthsTraining)),]
+        mod$coefficients <- rbind(
+          setNames(
+            as.data.frame(
+              matrix(
+                rep(mod$coefficients[1,], sum(mod_rls$data$t < 
+                                           (min(mod_rls$data$t) + months(minMonthsTraining)))),
+                ncol = ncol(mod$coefficients))
+            ),
+            colnames(mod$coefficients)),
+          mod$coefficients
+        )
+      } else {
+        mod$coefficients <- mod_rls$Lfitval$k0
+      }
       mod$localtime <- mod_rls$data$t
       mod$yreal <- mod_rls$data$Qe
       mod$yhat <- if(logOutput){exp(mod_rls$Yhat$k0)}else{mod_rls$Yhat$k0}
@@ -554,8 +571,8 @@ RLS <- function(input_parameters){
     },
     predict = function(modelFit, newdata, submodels, forceGlobalInputFeatures=NULL, forceInitInputFeatures=NULL,
                        forceInitOutputFeatures=NULL, model_horizon_in_hours=1, model_window="%Y-%m-%d", model_selection="rmse") {
-      modelFit <<- modelFit
-      newdata <<- newdata
+      # modelFit <<- modelFit
+      # newdata <<- newdata
       newdata <- as.data.frame(newdata)
       newdata <- newdata[order(newdata$localtime),]
       features <- modelFit$meta$features
