@@ -79,6 +79,9 @@ invert <- function(x) {
 #' the function will return None.
 detect_time_step <- function(data, maxMissingTimeSteps = 0, approxTimeSteps = FALSE) {
   if (approxTimeSteps == TRUE) timesteps <- approx_timesteps(timesteps)
+  if (class(data)[1]=="POSIXct"){
+    data <- data.frame("time"=data)
+  }
   # Use contingency table to identify
   # most common frequency
   crosstab <- data %>%
@@ -197,6 +200,21 @@ detect_time_step <- function(data, maxMissingTimeSteps = 0, approxTimeSteps = FA
     )
   }
   return(timestep)
+}
+
+hourly_timesteps <- function(nHours, original_timestep) {
+  timesteps_to_hour <- list(
+    "S" = 3600,
+    "T" = 60,
+    "H" = 1,
+    "D" = 1/24,
+    "W" = 1/168,
+    "M" = 1/(30*24),
+    "MS" = 1/(30*24),
+    "Y" = 1/(365*24),
+    "YS" = 1/(365*24)
+  )
+  return(ceiling(timesteps_to_hour[[original_timestep]]*nHours))
 }
 
 resample <- function(data, timestep) {
@@ -339,14 +357,16 @@ detect_ts_calendar_model_outliers_window <- function(data,
   if (logValueColumn) newdata$value <- log(newdata$value)
   cols_to_fs <- c("H", "U", "W", "m")
   calendarFeatures <- ifelse(calendarFeatures %in% cols_to_fs, 
-                             paste0("as.matrix(fs(", calendarFeatures, ",featureName=\"", calendarFeatures,"\",nHarmonics=5))"), calendarFeatures)
+                             paste0("as.matrix(fs(", calendarFeatures, ",featureName=\"", 
+                                    calendarFeatures,"\",nHarmonics=3))"), calendarFeatures)
   formula <- as.formula(paste("value", paste0("0 +", paste(calendarFeatures, collapse = ":")),
     sep = "~"
   ))
+  newdata$value <- ifelse(is.finite(newdata$value),newdata$value,NA)
   model <- rq(
     formula,
     tau = c(lowerModelPercentile / 100.0, upperModelPercentile / 100.0),
-    data = newdata
+    data = newdata[complete.cases(newdata),]
   )
   prediction <- as.data.frame(predict.rq(model, newdata))
   names(prediction) <- c("lower", "upper")
@@ -364,13 +384,9 @@ detect_ts_calendar_model_outliers_window <- function(data,
 
   if (mode == "lower") {
     mask <- data$value < lowerPrediction
-    lowerPrediction
-    upperPrediction 
-  }
-  if (mode == "upper") {
+  } else if (mode == "upper") {
     mask <- data$value > upperPrediction
-  }
-  if (mode == "upperAndLower") {
+  } else if (mode == "upperAndLower") {
     mask <- (data$value < lowerPrediction) | (data$value > upperPrediction)
   }
   if (outputPredictors){
@@ -427,14 +443,14 @@ detect_ts_calendar_model_outliers <- function(data,
                                               window = NULL,
                                               outputPredictors = F,
                                               logValueColumn = F) {
-  if(class(window)=="integer"){
+  if(class(window)=="numeric"){
     start <- as.integer(seconds(data$time[1]))
     windowsize <- as.integer(duration(window, units = "seconds"))
     data <- data %>%
       mutate(
         window = (as.integer(seconds(time)) - start) %/% windowsize
       )
-  } else if (class(window)=="character"){
+  } else if (class(window)=="character") {
     data <- data %>% unite("window",window,sep="~")
   } else {
     data$window <- 0
@@ -458,10 +474,14 @@ detect_ts_calendar_model_outliers <- function(data,
   } else {
     newdata <- data
     windows <- unique(newdata$window)
-    result <- lapply(windows, function(window) {
-      tmp <- newdata[newdata$window == window, ]
+    result <- lapply(windows, function(w) {
+      tmp <- newdata[newdata$window == w,]
       result <- detect_ts_calendar_model_outliers_window(
-        tmp,
+        if(class(window)=="numeric"){
+          newdata[newdata$window %in% c(w-1,w,w+1),]
+        } else {
+          newdata[newdata$window == w,]
+        },
         calendarFeatures,
         mode,
         upperModelPercentile,
@@ -472,6 +492,7 @@ detect_ts_calendar_model_outliers <- function(data,
         outputPredictors,
         logValueColumn
       )
+      merge(tmp, result, by="time")
     })
     result <- do.call(rbind,result)
     colnames(result)[1] <- localTimeColumn

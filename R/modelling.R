@@ -2,6 +2,59 @@
 ### Model candidates auxiliar functions ----
 ###
 
+estimate_occupancy <- function(real=NULL, predicted, minOccupancy, timestep){
+  
+  if(is.null(real)){
+    return((minOccupancy+1)/2)
+  }
+  
+  residuals <- real - predicted
+  
+  mean_rolled_residuals <- loess(y~x,
+                                 data.frame("x"=1:length(residuals),"y"=residuals),
+                                 na.action = na.omit)
+  mean_norm_residuals <- residuals - predict(mean_rolled_residuals,
+                                             data.frame("x"=1:length(residuals)))
+  
+  sd_residuals <- roll_sd(mean_norm_residuals,
+                          width = hourly_timesteps(168,timestep),
+                          center = T,
+                          complete_obs = T)
+  
+  density_sd_res <- density(sd_residuals,na.rm=T)
+  tp <- pastecs::turnpoints(ts(density_sd_res$y))
+  importance <- density_sd_res$y[tp$tppos]
+  x_values <- density_sd_res$x[tp$tppos]
+  shifted_importance <- c(0,shift(importance,1)[is.finite(shift(importance,1))])
+  min_max <- ifelse(importance-shifted_importance>0,"max","min")
+  sd_threshold <- min(x_values[x_values > x_values[which.max(importance)] &
+                                 min_max =="min"],na.rm=T)
+  
+  theoretical_occupancy <- normalise_range(
+    ifelse(sd_residuals>=sd_threshold, 
+            normalise_range(
+              rollmean(mean_norm_residuals,k=hourly_timesteps(31*24,timestep),
+                     align="center",fill=c(NA,NA,NA),partial=T),
+              0,1),
+             # rollapply(mean_norm_residuals,
+             #          FUN=function(x){mean(normalise_range(x,0,1),na.rm=T)},
+             #          width=hourly_timesteps(31*24,timestep),
+             #          align = "center", fill = c(NA,NA,NA), 
+             #          partial=T),
+           0),
+    minOccupancy,1)
+  
+  return(theoretical_occupancy)
+}
+
+regression_metrics <- function(data, lev=NULL, model=NULL){
+  c(
+    CVRMSE = 1/RMSE(data$obs,data$pred,na.rm = T)/mean(data$obs,na.rm=T),
+    RMSE = 1/RMSE(data$obs,data$pred,na.rm = T),
+    R2 = cor(data$obs,data$pred,use = "na.or.complete")^2
+  ) 
+}
+
 AR_term <- function(features,orders){
   paste(
     mapply(features,FUN=function(feat){
@@ -239,7 +292,8 @@ ARX <- function(input_parameters){
         }
       },
     loop = NULL,
-    fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, transformationSentences=NULL) {
+    fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, 
+                   transformationSentences=NULL, logOutput=T) {
       
       features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
       outputName <- all.vars(formulaTerms)[1]
@@ -251,11 +305,13 @@ ARX <- function(input_parameters){
       }
       # Join x and y in a single data.frame
       data <- if(is.data.frame(x)) x else as.data.frame(x)
-      data[,outputName] <- y
+      if(logOutput) {data[,outputName] <- log(y)} else {data[,outputName] <- y}
       
       # Transform input data if it is needed
       transformation <- data_transformation_wrapper(
-        data=data, features=features, transformationSentences = transformationSentences, 
+        data=data, 
+        features=features, 
+        transformationSentences = transformationSentences, 
         param = param)
       data <- transformation$data
       features <- transformation$features
@@ -312,6 +368,7 @@ ARX <- function(input_parameters){
       mod$meta <- list(
         features = features,
         outputName = outputName,
+        logOutput = logOutput,
         outputInit = setNames(
           list(data[min(nrow(data),nrow(data)-maxLag+1):nrow(data),outputName]),
           outputName
@@ -335,6 +392,7 @@ ARX <- function(input_parameters){
       features <- modelFit$meta$features
       param <- modelFit$meta$param
       maxLag <- modelFit$meta$maxLag
+      logOutput <- modelFit$meta$logOutput
       
       # Initialize the global input features if needed
       # Change the inputs if are specified in forceGlobalInputFeatures
@@ -396,7 +454,11 @@ ARX <- function(input_parameters){
       } else {
         newdata[,modelFit$meta$outputName] <- predict(modelFit,newdata)
       }
-      newdata[,modelFit$meta$outputName]
+      if(logOutput) { 
+        exp(newdata[,modelFit$meta$outputName])
+      } else {
+        newdata[,modelFit$meta$outputName]
+      }
       
     },
     prob = NULL,
@@ -430,15 +492,17 @@ RLS <- function(input_parameters){
       },
     loop = NULL,
     fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, 
-                   transformationSentences=NULL, logOutput=F, minMonthsTraining=NULL) {
-      # x <<- x
-      # y <<- y
-      # transformationSentences <<- transformationSentences
-      # formulaTerms <<- formulaTerms
-
+                   transformationSentences=NULL, logOutput=F, 
+                   minMonthsTraining=0, continuousTime=T, estimateTheoreticalOccupancy=F, 
+                   theoreticalOccupancyColumnName="theoreticalOccupancy") {
+      x <<- x
+      y <<- y
+      transformationSentences <<- transformationSentences
+      formulaTerms <<- formulaTerms
+      print(paste(paste(colnames(param),param[1,],sep=": "),collapse=", "))
+      
       features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
       outputName <- all.vars(formulaTerms)[1]
-      minMonthsTraining <- if(is.null(minMonthsTraining)) 0 else minMonthsTraining
       if(paste0("AR_",outputName) %in% colnames(param)){
         if(as.logical(param[paste0("AR_",outputName)]==0)){
           param <- param[,-which(colnames(param) %in% paste0("AR_",outputName))]
@@ -501,7 +565,30 @@ RLS <- function(input_parameters){
       
       data <- data[order(data$localtime),]
       
+      if(estimateTheoreticalOccupancy){
+        if(!("minocc" %in% colnames(param)))
+          stop("minocc param is needed when estimating the theoretical 
+               occupancy")
+        mod_lm <- lm(ARX_form,data)
+        theoretical_occupancy <- estimate_occupancy(
+          real = data[,outputName], 
+          predicted = predict(mod_lm,data), 
+          minOccupancy = param$minocc,
+          timestep = detect_time_step(data$localtime))
+        # ggplotly(
+        #   ggplot() +
+        #     geom_line(aes(1:length(theoretical_occupancy),theoretical_occupancy)) +
+        #     geom_line(aes(1:nrow(data),data$Qe/max(data$Qe,na.rm=T)),alpha=0.5,col="red")
+        #   )
+        data[,theoreticalOccupancyColumnName] <- theoretical_occupancy
+      }
+      # plot(mod_lm$model$Qe, type="l")
+      # lines(mod_lm$fitted.values,col="red")
+      
       # Generate the expanded dataset for inputs
+      
+      data <- data[complete.cases(
+        model.frame(ARX_form,data,na.action = 'na.pass')),]
       data_matrix <- model.matrix(ARX_form,data)
       colnames(data_matrix) <- gsub(":","_",colnames(data_matrix))
       
@@ -518,13 +605,23 @@ RLS <- function(input_parameters){
                function(x) data.frame("k0"=data_matrix[,x])),
         colnames(data_matrix)
       )
-      data_for_rls[["t"]] <- data$localtime
-      data_for_rls[[outputName]] <- log(data[,outputName])
+      data_for_rls[[outputName]] <- if (logOutput){
+        log(ifelse(data[,outputName]>0,data[,outputName],0.01))
+      } else { data[,outputName] }
+      if(continuousTime==F){
+        data_for_rls[["t"]] <- seq(min(data$localtime),
+                                   min(data$localtime) + hours(length(data$localtime)), by="hour")
+        data_for_rls[["t"]] <- data_for_rls[["t"]][1:length(data_for_rls[[outputName]])] 
+      } else {
+        data_for_rls[["t"]] <- data$localtime
+      }
       data_for_rls$scoreperiod <- sample(c(F,T),length(data_for_rls$t),replace = T,prob = c(0.9,0.1))
       
       # Fit the RLS model and obtain the time-varying coefficients
       mod_rls <- rls_fit(c("lambda"=param$lambda),model, data_for_rls, scorefun = rmse, printout = F)
-      
+      if(continuousTime==F){
+        mod_rls$data$t <- data$localtime
+      }
       # Store the meta variables
       mod <- list()
       if((min(mod_rls$data$t) + months(minMonthsTraining)) < max(mod_rls$data$t)){
@@ -534,9 +631,9 @@ RLS <- function(input_parameters){
           setNames(
             as.data.frame(
               matrix(
-                rep(mod$coefficients[1,], sum(mod_rls$data$t < 
+                rep(as.numeric(mod$coefficients[1,]), sum(mod_rls$data$t < 
                                            (min(mod_rls$data$t) + months(minMonthsTraining)))),
-                ncol = ncol(mod$coefficients))
+                ncol = ncol(mod$coefficients), byrow = T)
             ),
             colnames(mod$coefficients)),
           mod$coefficients
@@ -545,13 +642,20 @@ RLS <- function(input_parameters){
         mod$coefficients <- mod_rls$Lfitval$k0
       }
       mod$localtime <- mod_rls$data$t
-      mod$yreal <- mod_rls$data$Qe
+      mod$yreal <- if(logOutput){exp(mod_rls$data[[outputName]])}else{mod_rls$data[[outputName]]}
       mod$yhat <- if(logOutput){exp(mod_rls$Yhat$k0)}else{mod_rls$Yhat$k0}
       mod$meta <- list(
         features = features,
         outputName = outputName,
         formula = ARX_form,
         logOutput = logOutput,
+        minMonthsTraining = minMonthsTraining,
+        estimateTheoreticalOccupancy = if(estimateTheoreticalOccupancy){
+          list("mod" = mod_lm, "minocc"=param$minocc, 
+               "columnName" = theoreticalOccupancyColumnName)
+        } else {
+          list()
+        },
         outputInit = setNames(
           list(data[min(nrow(data),nrow(data)-maxLag+1):nrow(data),outputName]),
           outputName
@@ -566,19 +670,30 @@ RLS <- function(input_parameters){
         transformationResults = transformationResults
       )
       mod
+      
+      # ggplotly(ggplot()+geom_line(aes(mod$localtime,mod$yreal)) +
+      #            geom_line(aes(mod$localtime,mod$yhat),col="red",alpha=0.4)+
+      #   geom_line(aes(mod$localtime,data$heatingLpf), col="blue",alpha=0.3))
+      
+      # ggplotly(ggplot()+geom_line(aes(mod_rls$data$t,mod_rls$Lfitval$k0$hour_cos_4_isWeekend_TRUE_coolingLpf)))
+      
       # colnames(mod$coefficients)[60]
       # ggplotly(ggplot()+geom_line(aes(mod$time,mod$coefficients[,60])))
     },
-    predict = function(modelFit, newdata, submodels, forceGlobalInputFeatures=NULL, forceInitInputFeatures=NULL,
-                       forceInitOutputFeatures=NULL, model_horizon_in_hours=1, model_window="%Y-%m-%d", model_selection="rmse") {
-      # modelFit <<- modelFit
-      # newdata <<- newdata
+    predict = function(modelFit, newdata, submodels, forceGlobalInputFeatures=NULL, 
+                       forceInitInputFeatures=NULL, forceInitOutputFeatures=NULL, 
+                       modelHorizonInHours=1, modelWindow="%Y-%m-%d", 
+                       modelSelection="rmse") {
+      modelFit <<- modelFit
+      newdata <<- newdata
       newdata <- as.data.frame(newdata)
       newdata <- newdata[order(newdata$localtime),]
       features <- modelFit$meta$features
       param <- modelFit$meta$param
       maxLag <- modelFit$meta$maxLag
       logOutput <- modelFit$meta$logOutput
+      outputName <- modelFit$meta$outputName
+      estimateTheoreticalOccupancy <- modelFit$meta$estimateTheoreticalOccupancy
       
       # Initialize the global input features if needed
       # Change the inputs if are specified in forceGlobalInputFeatures
@@ -639,6 +754,20 @@ RLS <- function(input_parameters){
       mod_coef <- mod_coef[order(mod_coef$localtime),]
       mod_coef <- zoo::na.locf(mod_coef)
       
+      if(length(estimateTheoreticalOccupancy)>0){
+        theoretical_occupancy <- estimate_occupancy(
+          real = newdata[[outputName]], 
+          predicted = predict(estimateTheoreticalOccupancy$mod,newdata), 
+          minOccupancy = estimateTheoreticalOccupancy$minocc,
+          timestep = detect_time_step(newdata$localtime))
+        # ggplotly(
+        #   ggplot() +
+        #     geom_line(aes(1:length(theoretical_occupancy),theoretical_occupancy)) +
+        #     geom_line(aes(1:nrow(newdata),newdata$Qe/max(newdata$Qe,na.rm=T)),alpha=0.5,col="red")
+        #   )
+        newdata[,estimateTheoreticalOccupancy$columnName] <- theoretical_occupancy
+      }
+      
       # Predict at multi-step ahead or one-step ahead prediction, 
       # depending if some AR input is considered using the output variable
       if(paste("AR",modelFit$meta$outputName,sep="_") %in% colnames(param)){
@@ -657,13 +786,14 @@ RLS <- function(input_parameters){
       } else {
         newdata[,modelFit$meta$outputName] <- rowSums(
           newdata_matrix[,colnames(modelFit$coefficients)] * 
-            mod_coef[mod_coef$localtime %in% newdata$localtime,colnames(modelFit$coefficients)],
+            as.matrix(mod_coef[mod_coef$localtime %in% newdata$localtime,colnames(modelFit$coefficients)]),
           na.rm=T
         )
       }
         # return the output
-      if(model_horizon_in_hours == 1){
-        if (logOutput) { exp(newdata[,modelFit$meta$outputName]) } else { newdata[,modelFit$meta$outputName] }
+      if(modelHorizonInHours == 1){
+        if (logOutput) { exp(newdata[,modelFit$meta$outputName]) 
+        } else { newdata[,modelFit$meta$outputName] }
       } else {
         # When predicting a fixed horizon with each model coefficients set
         if(paste("AR",modelFit$meta$outputName,sep="_") %in% colnames(param)){
@@ -673,7 +803,7 @@ RLS <- function(input_parameters){
             mod_coef$localtime >= min(newdata$localtime)-years(1) &
             mod_coef$localtime <= max(newdata$localtime),
           ]
-          mod_coef$window <- strftime(mod_coef$localtime,model_window)
+          mod_coef$window <- strftime(mod_coef$localtime,modelWindow)
           roll_window <- as.numeric(names(sort(table(table(mod_coef$window)),decreasing = T))[1])
           mod_coef$rmse <- sqrt((mod_coef$yhat-mod_coef$yreal)**2)
           mod_coef$rmse <- zoo::rollapply(mod_coef$rmse,width = roll_window,align = "center",fill = c(NA,NA,NA),partial=T,
@@ -684,11 +814,11 @@ RLS <- function(input_parameters){
               min_rmse = localtime[which.min(rmse)],
               random_select = sample(localtime,size = 1)
             )
-          if(model_selection=="random"){
+          if(modelSelection=="random"){
             mod_coef <- mod_coef %>% 
               left_join(mod_coef_summary,by = "window") %>%
               filter(localtime==random_select)
-          } else if(model_selection=="rmse"){
+          } else if(modelSelection=="rmse"){
             mod_coef <- mod_coef %>% 
               left_join(mod_coef_summary,by = "window") %>%
               filter(localtime==min_rmse)
@@ -697,7 +827,7 @@ RLS <- function(input_parameters){
                  function(x){
                    mod_coef_aux <- mod_coef[x,]
                    allowed_times <- newdata$localtime >= mod_coef_aux[1,"localtime"] & 
-                       newdata$localtime <= mod_coef_aux[1,"localtime"] + hours(model_horizon_in_hours)
+                       newdata$localtime <= (mod_coef_aux[1,"localtime"] + hours(modelHorizonInHours))
                    setNames(
                      data.frame(
                       newdata$localtime[allowed_times],
@@ -712,22 +842,33 @@ RLS <- function(input_parameters){
                         paste0("yhat_",strftime(mod_coef_aux[1,"localtime"],format="%Y%m%dT%H%M%S",tz = "UTC")))
                    )
                  })
+          
           all_preds <- Reduce(
             function(x, y, ...) merge(x, y, all = TRUE, ...),
             multiple_preds
           )
-          cbind(
+          # all_preds <- all_preds[all_preds$localtime %in% newdata$localtime,]
+          # all_preds <- all_preds %>% 
+          #   right_join(data.frame("localtime"=newdata$localtime),"localtime")
+          timeN <- data.frame(
             "localtime"=all_preds$localtime,
             "n"=sum(!(colnames(all_preds) %in% "localtime" )) - 
               matrixStats::rowCounts(
-                as.matrix(all_preds[,!(colnames(all_preds) %in% "localtime" )]),value=NA),
+                as.matrix(all_preds[,!(colnames(all_preds) %in% "localtime" )]),value=NA)
+          )
+          timePred <- 
             data.frame(
+              "localtime"=newdata$localtime,
               "pred"= if (logOutput) { exp(newdata[,modelFit$meta$outputName]) } 
                       else { newdata[,modelFit$meta$outputName] }
-            ),
-            as.data.frame(
+            )
+          probs <- c(0.025,0.05,0.1,0.25,0.375,0.5,0.625,0.75,0.9,0.95,0.975)
+          timeDistribPred <- cbind(
+            "localtime"=all_preds$localtime,
+            setNames(data.frame(
               matrixStats::rowQuantiles(as.matrix(all_preds[,!(colnames(all_preds) %in% "localtime" )]),
-                                    probs = c(0.05,0.1,0.25,0.375,0.5,0.625,0.75,0.9,0.95),na.rm = T)),
+                                    probs = probs,na.rm = T)),
+              mapply(function(x)sprintf("%0.1f%%",x*100),probs)),
             setNames(data.frame(
               matrixStats::rowRanges(as.matrix(all_preds[,!(colnames(all_preds) %in% "localtime" )]),na.rm=T)),
               c("min","max")),
@@ -735,6 +876,8 @@ RLS <- function(input_parameters){
               matrixStats::rowMeans2(as.matrix(all_preds[,!(colnames(all_preds) %in% "localtime" )]),na.rm=T)),
               c("mean"))
           )
+          result <- merge(timeN, timePred,by="localtime", all=T)
+          merge(result, timeDistribPred,by="localtime", all=T)
         }
         
       }
@@ -760,6 +903,7 @@ train.formula <- function (form, data, weights, subset, na.action = na.fail,
   if (!("intercept" %in% colnames(data))){
     data$intercept <- 1
   }
+  
   # Add features that are not directly specified in data, but are defined during
   # the transformation process
   transformationSentences <- m$...$transformationSentences
@@ -879,8 +1023,8 @@ predict.train <- function (object, newdata = NULL, type = "raw", na.action = na.
   if ("xNames" %in% names(object$finalModel) & is.null(object$preProcess$method$pca) & 
       is.null(object$preProcess$method$ica))
     newdata <- newdata[, colnames(newdata) %in% object$finalModel$xNames,drop = FALSE]
-  if ("outputName" %in% names(object$finalModel$meta))
-    newdata_ini <- newdata_ini[,!(colnames(newdata_ini) %in% c(object$finalModel$meta$outputName))]
+  # if ("outputName" %in% names(object$finalModel$meta))
+  #   newdata_ini <- newdata_ini[,!(colnames(newdata_ini) %in% c(object$finalModel$meta$outputName))]
   newdata <- cbind(
     newdata[,!(colnames(newdata) %in% colnames(newdata_ini))],
     newdata_ini

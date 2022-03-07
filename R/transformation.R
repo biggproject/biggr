@@ -267,23 +267,6 @@ fs_components <- function (data, featuresNames, nHarmonics, mask=NULL, inplace=T
   }
 }
 
-
-bs_components <- function (data, featuresNames, mask=NULL, degree, inplace=T) {
-  # data <- df_for_pred
-  # featureName <- "temperature"
-  data_ <- data
-  bs_multiple <- NULL
-  for (featureName in featuresNames) {
-    bs_tmp <- splines::bs(data_[[featureName]], intercept = F, degree = 2, Boundary.knots = c(5,15,25))
-    if(!is.null(fs_multiple)) { fs_multiple <- cbind(fs_multiple, fs_tmp) } else { fs_multiple <- fs_tmp }
-  }
-  if(inplace==T){
-    return(cbind(data,fs_multiple))
-  } else {
-    return(fs_multiple)    
-  }
-}
-
 #' Calculate the difference between outdoor temperature and a base temperature,
 #' without considering the frequency of the original data.
 #'
@@ -383,8 +366,8 @@ normalise_range <- function(data, lower = 0, upper = 1, lowerThreshold = NULL, u
     if (lower > upper) stop("Lower > upper not supported")
   }
   normalise <- function(x, lower, upper, lowerThreshold, upperThreshold) {
-    lowervalue <- min(x)
-    uppervalue <- max(x)
+    lowervalue <- min(x, na.rm=T)
+    uppervalue <- max(x, na.rm=T)
     if (!is.null(lower)) lowervalue <- lower
     if (!is.null(upper)) uppervalue <- upper
     
@@ -405,8 +388,12 @@ normalise_range <- function(data, lower = 0, upper = 1, lowerThreshold = NULL, u
     }
     return(result)
   }
-  return(data %>%
+  if(class(data)[1] %in% c("matrix","data.frame")){
+    return(data %>%
            mutate_all(normalise, lower, upper, lowerThreshold, upperThreshold))
+  } else {
+    return(normalise(data, lower, upper, lowerThreshold, upperThreshold))
+  }
 }
 
 #' Daily normalization method
