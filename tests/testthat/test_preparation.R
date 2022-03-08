@@ -324,11 +324,13 @@ test_that("Detect outlier elements based on calendar model. No window", {
   data <- readdata(filename)
   obtained <- detect_ts_calendar_model_outliers(
     data,
+    localTimeColumn = "time",
+    valueColumn = "value",
     holidaysCalendar = as_date("2020-03-02")
   )
   expected <- rep(FALSE, 97)
   expect(
-    all(obtained == expected),
+    all(obtained$outliers == expected),
     "Expected and obtained are different"
   )
 })
@@ -341,13 +343,14 @@ test_that("Detect outlier elements based on calendar model. With window", {
   data <- readdata(filename)
   obtained <- detect_ts_calendar_model_outliers(
     data,
+    localTimeColumn = "time",
+    valueColumn = "value",
     calendarFeatures = c("H"),
-    holidaysCalendar = as_date("2020-03-02"),
-    window = "10H"
+    holidaysCalendar = as_date("2020-03-02")
   )
   expected <- rep(FALSE, 97)
   expect(
-    all(obtained == expected),
+    all(obtained$outliers == expected),
     "Expected and obtained are different"
   )
 })

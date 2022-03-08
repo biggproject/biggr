@@ -288,6 +288,7 @@ fs_components <- function (data, featuresNames, nHarmonics, mask=NULL, inplace=T
 #' temperature.
 degree_raw <- function (data, featuresName, baseTemperature, outputFeaturesName = NULL, 
                         mode = "heating", inplace=T){
+ 
   result <- setNames(data.frame((if (mode == "heating") {
     pmax(0, baseTemperature - data[,featuresName])
   } else {
@@ -325,25 +326,26 @@ vectorial_transformation <- function(series, outputFeatureName){
 #' steps are allowed.
 #' @return degreeDays <timeSeries> in the outputTimeStep of the heating or
 #' cooling degree days.
-degree_days <- function(temperature, localTimeZone, baseTemperature,
+degree_days <- function(data, featuresName, localTimeZone, baseTemperature, outputFeaturesName = NULL,
                         mode = "heating", outputTimeStep = "D") {
-  tmp <- temperature %>%
+  tmp <- data %>%
     mutate(
       localtime = with_tz(time, localTimeZone),
       time = as_datetime(lubridate::date(localtime))
     ) %>%
     group_by(time) %>%
     summarize(
-      value = mean(value, na.rm = TRUE)
+      !!featuresName := mean(!!as.name(featuresName), na.rm = TRUE)
     )
-  dd <- degree_raw(tmp, baseTemperature, mode)
+  dd <- degree_raw(tmp, featuresName, baseTemperature, outputFeaturesName, mode)
+  outputFeaturesName_ <- if(is.null(outputFeaturesName)){mode} else {outputFeaturesName}
   return(dd %>%
            mutate(group = floor_date(time, roundsteps[outputTimeStep],
                                      week_start = getOption("lubridate.week.start", 1)
            )) %>%
            group_by(group) %>%
            summarize(
-             dd = sum(dd, na.rm = TRUE)
+             !!outputFeaturesName_ := sum(!!as.name(outputFeaturesName_), na.rm = TRUE)
            ) %>%
            rename(time = group) %>%
            mutate(time = with_tz(time, "UTC")))

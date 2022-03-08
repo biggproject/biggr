@@ -432,7 +432,7 @@ detect_ts_calendar_model_outliers_window <- function(data,
 #' timeSeries based on the calendar regression model.
 detect_ts_calendar_model_outliers <- function(data,
                                               localTimeColumn="localtime",
-                                              valueColumn=outputName,
+                                              valueColumn="value",
                                               calendarFeatures = c("HOL", "H"),
                                               mode = "upperAndLower",
                                               upperModelPercentile = 90,
