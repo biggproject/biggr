@@ -1,0 +1,8 @@
+*.DS_Store
+*.Rbuildignore
+*.Rproj.user
+*.Rhistory
+.RData
+*.Ruserdata
+inst/doc
+.Rproj.user

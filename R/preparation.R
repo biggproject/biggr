@@ -79,6 +79,9 @@ invert <- function(x) {
 #' the function will return None.
 detect_time_step <- function(data, maxMissingTimeSteps = 0, approxTimeSteps = FALSE) {
   if (approxTimeSteps == TRUE) timesteps <- approx_timesteps(timesteps)
+  if (class(data)[1]=="POSIXct"){
+    data <- data.frame("time"=data)
+  }
   # Use contingency table to identify
   # most common frequency
   crosstab <- data %>%
@@ -92,8 +95,8 @@ detect_time_step <- function(data, maxMissingTimeSteps = 0, approxTimeSteps = FA
     summarize(freq = n()) %>%
     arrange(
       ifelse(maxMissingTimeSteps > 0, desc(freq), secs)
-    )
-
+    ) %>% filter(secs>=0)
+  
   secs <- as.character(crosstab$secs[1])
   # WARNING: Expecting significative amount of samples in
   # standard frequency (seconds interval) otherwise fails
@@ -199,6 +202,21 @@ detect_time_step <- function(data, maxMissingTimeSteps = 0, approxTimeSteps = FA
   return(timestep)
 }
 
+hourly_timesteps <- function(nHours, original_timestep) {
+  timesteps_to_hour <- list(
+    "S" = 3600,
+    "T" = 60,
+    "H" = 1,
+    "D" = 1/24,
+    "W" = 1/168,
+    "M" = 1/(30*24),
+    "MS" = 1/(30*24),
+    "Y" = 1/(365*24),
+    "YS" = 1/(365*24)
+  )
+  return(ceiling(timesteps_to_hour[[original_timestep]]*nHours))
+}
+
 resample <- function(data, timestep) {
   # Resample (upsample) by creating synthetic comple serie
   data$time_ <- floor_date(data$time, roundsteps[timestep],
@@ -290,9 +308,9 @@ detect_ts_min_max_outliers <- function(data, min, max, minSeries = NULL, maxSeri
 #' and frequency, only assigning true values when an element should be
 #' considered as an outlier.
 
-detect_ts_zscore_outliers <- function(data, zScoreThreshold, window = NULL, zScoreExtremesSensitive = TRUE) {
+detect_ts_zscore_outliers <- function(data, zScoreThreshold, window = NULL, zScoreExtremesSensitive = TRUE, na.rm=T) {
   func <- ifelse(zScoreExtremesSensitive == TRUE, mean, median)
-  zScore <- ((data$value - func(data$value)) / sd(data$value))
+  zScore <- ((data$value - func(data$value,na.rm=T)) / sd(data$value,na.rm=na.rm))
   if (!is.null(window)) {
     timestep <- detect_time_step(data)
     timesteps_ <- invert(timesteps)
@@ -305,9 +323,14 @@ detect_ts_zscore_outliers <- function(data, zScoreThreshold, window = NULL, zSco
   return(abs(zScore) >= zScoreThreshold)
 }
 
-fs <- function(data) {
-  # naive implementation
-  return(sin(data * 2 * pi))
+fs <- function(X, featureName, nHarmonics) {
+  cbind(do.call(cbind,lapply(1:nHarmonics, function(i) {
+    value <- list(sin(i * X * 2 * pi), cos(i * X * 2 * 
+                                             pi))
+    names(value) <- paste0(featureName, c("_sin_", "_cos_"), 
+                           i)
+    return(as.data.frame(value))
+  })), setNames(data.frame(rep(1,length(X))),paste0(featureName,"_fs_int")))
 }
 
 detect_ts_calendar_model_outliers_window <- function(data,
@@ -317,46 +340,61 @@ detect_ts_calendar_model_outliers_window <- function(data,
                                                      lowerModelPercentile = 10,
                                                      upperPercentualThreshold = 30,
                                                      lowerPercentualThreshold = 30,
-                                                     holidaysCalendar = c()) {
+                                                     holidaysCalendar = c(),
+                                                     outputPredictors = F,
+                                                     logValueColumn = F) {
 
   # WARNING: First naive approach
   newdata <- data %>%
     mutate(
-      H = hour(time) / 24,
-      U = day(time) / 365,
-      W = week(time) / 52,
-      m = month(time) / 12,
-      Y = as.factor(year(time)),
-      HOL = as_date(time) %in% holidaysCalendar,
+      H = (hour(time)) / 24,
+      U = (as.numeric(strftime(time,"%u"))-1) / 7,
+      W = as.numeric(strftime(time,"%U")) / 53,
+      m = (as.numeric(strftime(time,"%m"))-1) / 12,#as.numeric(strftime(time,"%j")) / 366,
+      HOL = as_date(time) %in% holidaysCalendar | strftime(time,"%u") %in% c("6","7"),
       intercept = 1
     )
-
+  if (logValueColumn) newdata$value <- log(newdata$value)
   cols_to_fs <- c("H", "U", "W", "m")
-  calendarFeatures <- ifelse(calendarFeatures %in% cols_to_fs, paste0("fs(", calendarFeatures, ")"), calendarFeatures)
-  formula <- as.formula(paste("value", paste(calendarFeatures, collapse = "+"),
+  calendarFeatures <- ifelse(calendarFeatures %in% cols_to_fs, 
+                             paste0("as.matrix(fs(", calendarFeatures, ",featureName=\"", 
+                                    calendarFeatures,"\",nHarmonics=3))"), calendarFeatures)
+  formula <- as.formula(paste("value", paste0("0 +", paste(calendarFeatures, collapse = ":")),
     sep = "~"
   ))
+  newdata$value <- ifelse(is.finite(newdata$value),newdata$value,NA)
   model <- rq(
     formula,
     tau = c(lowerModelPercentile / 100.0, upperModelPercentile / 100.0),
-    data = newdata
+    data = newdata[complete.cases(newdata),]
   )
   prediction <- as.data.frame(predict.rq(model, newdata))
   names(prediction) <- c("lower", "upper")
-
+  if (logValueColumn) {
+    prediction$lower <- exp(prediction$lower)
+    prediction$upper <- exp(prediction$upper)
+  }
+  
+  # plot(prediction$upper,type="l",col="blue")
+  # lines(prediction$lower,col="yellow")
+  # lines(newdata$value,col="black")
+  
   lowerPrediction <- (1 - lowerPercentualThreshold / 100.0) * prediction$lower
   upperPrediction <- (1 + upperPercentualThreshold / 100.0) * prediction$upper
 
   if (mode == "lower") {
     mask <- data$value < lowerPrediction
-  }
-  if (mode == "upper") {
+  } else if (mode == "upper") {
     mask <- data$value > upperPrediction
-  }
-  if (mode == "upperAndLower") {
+  } else if (mode == "upperAndLower") {
     mask <- (data$value < lowerPrediction) | (data$value > upperPrediction)
   }
-  return(mask)
+  if (outputPredictors){
+    return(data.frame("time" = data$time, "outliers" = mask, 
+                      setNames(prediction,c("lowerPredCalendarModel","upperPredCalendarModel"))))
+  } else {
+    return(data.frame("time" = data$time, "outliers" = mask))
+  }
 }
 
 #' Detect elements of the time series out of a confidence threshold based
@@ -393,6 +431,8 @@ detect_ts_calendar_model_outliers_window <- function(data,
 #' @return predicted timeSeries of the predicted values of the original
 #' timeSeries based on the calendar regression model.
 detect_ts_calendar_model_outliers <- function(data,
+                                              localTimeColumn="localtime",
+                                              valueColumn=outputName,
                                               calendarFeatures = c("HOL", "H"),
                                               mode = "upperAndLower",
                                               upperModelPercentile = 90,
@@ -400,10 +440,24 @@ detect_ts_calendar_model_outliers <- function(data,
                                               upperPercentualThreshold = 30,
                                               lowerPercentualThreshold = 30,
                                               holidaysCalendar = c(),
-                                              window = NULL) {
+                                              window = NULL,
+                                              outputPredictors = F,
+                                              logValueColumn = F) {
+  if(class(window)=="numeric"){
+    start <- as.integer(seconds(data$time[1]))
+    windowsize <- as.integer(duration(window, units = "seconds"))
+    data <- data %>%
+      mutate(
+        window = (as.integer(seconds(time)) - start) %/% windowsize
+      )
+  } else if (class(window)=="character") {
+    data <- data %>% unite("window",window,sep="~")
+  } else {
+    data$window <- 0
+  }
+  data <- setNames(data[,c(localTimeColumn, valueColumn, "window")],c("time","value","window"))
   if (is.null(window)) {
-    return(
-      detect_ts_calendar_model_outliers_window(
+    result <- detect_ts_calendar_model_outliers_window(
         data,
         calendarFeatures,
         mode,
@@ -411,31 +465,38 @@ detect_ts_calendar_model_outliers <- function(data,
         lowerModelPercentile,
         upperPercentualThreshold,
         lowerPercentualThreshold,
-        holidaysCalendar
+        holidaysCalendar,
+        outputPredictors,
+        logValueColumn
       )
-    )
+    colnames(result)[1] <- localTimeColumn
+    return(result)
   } else {
-    start <- as.integer(seconds(data$time[1]))
-    windowsize <- as.integer(duration(window, units = "seconds"))
-    newdata <- data %>%
-      mutate(
-        window = (as.integer(seconds(time)) - start) %/% windowsize
-      )
+    newdata <- data
     windows <- unique(newdata$window)
-    result <- lapply(windows, function(window) {
-      tmp <- newdata[newdata$window == window, ]
+    result <- lapply(windows, function(w) {
+      tmp <- newdata[newdata$window == w,]
       result <- detect_ts_calendar_model_outliers_window(
-        tmp,
+        if(class(window)=="numeric"){
+          newdata[newdata$window %in% c(w-1,w,w+1),]
+        } else {
+          newdata[newdata$window == w,]
+        },
         calendarFeatures,
         mode,
         upperModelPercentile,
         lowerModelPercentile,
         upperPercentualThreshold,
         lowerPercentualThreshold,
-        holidaysCalendar
+        holidaysCalendar,
+        outputPredictors,
+        logValueColumn
       )
+      merge(tmp, result, by="time")
     })
-    return(unlist(result))
+    result <- do.call(rbind,result)
+    colnames(result)[1] <- localTimeColumn
+    return(result)
   }
 }
 

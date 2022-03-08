@@ -245,20 +245,15 @@ calendar_components <- function (data, localTimeZone = NULL, holidays = NULL, in
 #' @param inplace: <boolean> indicating if the output should be the original data argument, 
 #' plus the transformed objects -True- , or only the transformed series -False.
 #' @return data <timeSeries> containing the same initial information of data input argument, plus the sine-cosine components of the Fourier Series as new columns.
-fs_components <- function (data, featuresNames, mask=NULL, nHarmonics, inplace=T) {
-  fs <- function(X, featureName, nHarmonics) {
-    cbind(do.call(cbind,lapply(1:nHarmonics, function(i) {
-      value <- list(sin(i * X * 2 * pi), cos(i * X * 2 * 
-                                               pi))
-      names(value) <- paste0(featureName, c("_sin_", "_cos_"), 
-                             i)
-      return(as.data.frame(value))
-    })), setNames(data.frame(rep(1,length(X))),paste0(featureName,"_fs_int")))
-  }
+fs_components <- function (data, featuresNames, nHarmonics, mask=NULL, inplace=T, normMode="divided_by_max_plus_one") {
   data_ <- data
   fs_multiple <- NULL
   for (featureName in featuresNames) {
-    data_[[featureName]] <- (data_[[featureName]]-min(data_[[featureName]]))/(max(data_[[featureName]])-min(data_[[featureName]]))
+    if (normMode=="min_max_range") {
+      data_[[featureName]] <- (data_[[featureName]]-min(data_[[featureName]],na.rm=T))/(max(data_[[featureName]],na.rm=T)-min(data_[[featureName]],na.rm=T))
+    } else if (normMode=="divided_by_max_plus_one") {
+      data_[[featureName]] <- data_[[featureName]]/(max(data_[[featureName]],na.rm=T)+1)
+    }
     if (!is.null(mask)) {
       data_[mask, featureName] <- 0
     }
@@ -313,7 +308,6 @@ vectorial_transformation <- function(series, outputFeatureName){
 #'
 #' @param temperature <timeSeries> of outdoor temperature of a location.
 #' Maximum input frequency is daily ("D") or higher ("H","15T",...).
-#' @param featuresNames <string> giving the column name of the outdoor temperature feature.
 #' @param localTimeZone <string> specifying the local time zone related to
 #' the building in analysis. The format of this time zones are defined by
 #' the IANA Time Zone Database (https://www.iana.org/time-zones). This
@@ -331,7 +325,7 @@ vectorial_transformation <- function(series, outputFeatureName){
 #' steps are allowed.
 #' @return degreeDays <timeSeries> in the outputTimeStep of the heating or
 #' cooling degree days.
-degree_days <- function(temperature, featuresName, localTimeZone, baseTemperature,
+degree_days <- function(temperature, localTimeZone, baseTemperature,
                         mode = "heating", outputTimeStep = "D") {
   tmp <- temperature %>%
     mutate(
@@ -340,16 +334,16 @@ degree_days <- function(temperature, featuresName, localTimeZone, baseTemperatur
     ) %>%
     group_by(time) %>%
     summarize(
-      value = mean(!!sym(featuresName), na.rm = TRUE)
+      value = mean(value, na.rm = TRUE)
     )
-  dd <- degree_raw(tmp, featuresName, baseTemperature, mode=mode)
+  dd <- degree_raw(tmp, baseTemperature, mode)
   return(dd %>%
            mutate(group = floor_date(time, roundsteps[outputTimeStep],
                                      week_start = getOption("lubridate.week.start", 1)
            )) %>%
            group_by(group) %>%
            summarize(
-             dd = sum(!!sym(mode), na.rm = TRUE)
+             dd = sum(dd, na.rm = TRUE)
            ) %>%
            rename(time = group) %>%
            mutate(time = with_tz(time, "UTC")))
@@ -372,8 +366,8 @@ normalise_range <- function(data, lower = 0, upper = 1, lowerThreshold = NULL, u
     if (lower > upper) stop("Lower > upper not supported")
   }
   normalise <- function(x, lower, upper, lowerThreshold, upperThreshold) {
-    lowervalue <- min(x)
-    uppervalue <- max(x)
+    lowervalue <- min(x, na.rm=T)
+    uppervalue <- max(x, na.rm=T)
     if (!is.null(lower)) lowervalue <- lower
     if (!is.null(upper)) uppervalue <- upper
     
@@ -394,8 +388,12 @@ normalise_range <- function(data, lower = 0, upper = 1, lowerThreshold = NULL, u
     }
     return(result)
   }
-  return(data %>%
+  if(class(data)[1] %in% c("matrix","data.frame")){
+    return(data %>%
            mutate_all(normalise, lower, upper, lowerThreshold, upperThreshold))
+  } else {
+    return(normalise(data, lower, upper, lowerThreshold, upperThreshold))
+  }
 }
 
 #' Daily normalization method
@@ -792,7 +790,7 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
   transformationItems <- list()
   if(!is.null(transformationSentences)){
     for (feature in unique(c(names(transformationSentences), features))){
-      #feature <- unique(c(names(transformationSentences), features))[5]
+      #feature <- unique(c(names(transformationSentences), features))[10]
       trFields <- list()
       trData <- NULL
       attach(data,warn.conflicts = F)
@@ -822,7 +820,22 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
           # trData <- trData[,(ncol(data)+1):(ncol(trData))]
         }
       } else {
-        trData <- cbind(trData, eval(parse(text=feature)))
+        trData <- tryCatch(
+          cbind(trData, eval(parse(text=feature))),
+          error=function(e){
+            if(is.null(trData)){
+              setNames(
+                data.frame(rep(0,nrow(data))),
+                feature
+              )
+            } else {
+              cbind(trData, setNames(
+                  data.frame(rep(0,nrow(data))),
+                  feature
+                )
+              )
+            }
+          })
         trFields[[length(trFields)+1]] <- feature
       }
       detach(data,unload = T)
