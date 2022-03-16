@@ -691,11 +691,12 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
 #'   classificationModel: Based on a classification model of the calendar
 #'     features.
 #' @return dailyClassification: <timeSeries>
-classification_dlc <- function(consumption, temperature, localTimeZone,
+classification_dlc <- function(data, consumptionFeature, outdoorTemperatureFeature,
+			       localTimeZone,
                                clustering, methodPriority) {
   
-  tmp <- consumption %>%
-    left_join(temperature, by = "time")
+  tmp <- data %>% select(time, all_of(consumptionFeature), all_of(outdoorTemperatureFeature)) %>% 
+      rename(consumption = consumptionFeature, temperature = outdoorTemperatureFeature)
   
   loadCurveTransformation <- clustering$opts$loadCurveTransformation
   inputVars <- clustering$opts$inputVars
