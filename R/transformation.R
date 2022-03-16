@@ -233,15 +233,15 @@ calendar_components <- function (data, localTimeZone = NULL, holidays = NULL, in
 #' transformed. Optionally, other variables that are not declared in
 #' featuresNames can be bypassed to the output.
 #' @param featuresNames <list string> selecting the series to transform.
-#' @param mask <boolean serie> containing the timestamps that should be
-#' accounted for the transformation. The timestamps set to false will
-#' consider 0's for all their related sine-cosine components. By default,
-#' all elements of the time series are considered.
 #' @param nHarmonics <integer> defines the number of harmonics considered
 #' in the Fourier Series. A high number allows to model more precisely
 #' the relation, but it considerably increase the cost of computation.
 #' The number of harmonics is related with the number of features in
 #' the output matrix
+#' @param mask <boolean serie> containing the timestamps that should be
+#' accounted for the transformation. The timestamps set to false will
+#' consider 0's for all their related sine-cosine components. By default,
+#' all elements of the time series are considered.
 #' @param inplace: <boolean> indicating if the output should be the original data argument, 
 #' plus the transformed objects -True- , or only the transformed series -False.
 #' @return data <timeSeries> containing the same initial information of data input argument, plus the sine-cosine components of the Fourier Series as new columns.
@@ -270,14 +270,12 @@ fs_components <- function (data, featuresNames, nHarmonics, mask=NULL, inplace=T
 #' Calculate the difference between outdoor temperature and a base temperature,
 #' without considering the frequency of the original data.
 #'
-#' @param temperature <timeSeries> of outdoor temperature of a location. 
-#' Optionally, other variables that are not declared in
-#' featuresNames can be bypassed to the output.
+#' @param data <timeSeries> containing the series to transform.
 #' @param featuresNames <string> giving the column name of the outdoor temperature feature.
 #' @param baseTemperature <float> describing the Balance Point Temperature (BPT)
 #' used in the calculation. Below BPT in heating mode, heat would be required by
 #' the building. The contrary in the case of cooling, over BPT in cooling mode.
-#' @param featuresNames <string> giving the column name used as output of the transformation.
+#' @param outputFeaturesNames <string> giving the column name used as output of the transformation.
 #' By default, "heating" or "cooling" depending the mode used in the transformation.
 #' @param mode: <string> describing the calculation mode, which could be "cooling"
 #' or "heating". By default, "heating" is configured.
@@ -304,11 +302,13 @@ degree_raw <- function (data, featuresName, baseTemperature, outputFeaturesName 
 vectorial_transformation <- function(series, outputFeatureName){
   return(setNames(data.frame(series),outputFeatureName))
 }
+
 #' Calculate the degree-days with a desired output frequency and considering
 #' cooling or heating mode.
 #'
-#' @param temperature <timeSeries> of outdoor temperature of a location.
+#' @param data <timeSeries> containing the series to transform.
 #' Maximum input frequency is daily ("D") or higher ("H","15T",...).
+#' @param featuresNames <string> giving the column name of the outdoor temperature feature.
 #' @param localTimeZone <string> specifying the local time zone related to
 #' the building in analysis. The format of this time zones are defined by
 #' the IANA Time Zone Database (https://www.iana.org/time-zones). This
@@ -318,6 +318,8 @@ vectorial_transformation <- function(series, outputFeatureName){
 #' Temperature (BPT) used in the calculation. Below BPT in heating mode,
 #' heat would be required by the building. The contrary in the case of
 #' cooling, over BPT in cooling mode
+#' @param outputFeaturesNames <string> giving the column name used as output of the transformation.
+#' By default, "heating" or "cooling" depending the mode used in the transformation.
 #' @param mode <string> describing the calculation mode, which could be
 #' "cooling" or "heating". By default, "heating" is configured.
 #' @param outputTimeStep <string> The frequency used to resample the daily
@@ -403,6 +405,11 @@ normalise_range <- function(data, lower = 0, upper = 1, lowerThreshold = NULL, u
 #' @param data <timeSeries> containing serie to normalise
 #' @param method <string> Normalization method. Supported methods
 #'   relative
+#' @param localTimeZone <string> specifying the local time zone related to
+#' the building in analysis. The format of this time zones are defined by
+#' the IANA Time Zone Database (https://www.iana.org/time-zones). This
+#' argument is optional, by default no transformation to local time zone is
+#' done.
 #' @return daily normalised timeserie
 normalise_daily <- function(data, method = "relative", localTimeZone) {
   if (!(method == "relative")) stop("Method not supported")
@@ -431,7 +438,10 @@ normalise_zscore <- function(data) {
 #'
 #' @param <timeserie> data
 #' @param localTimeZone <string> timezone
-#' @param method <string> normalization method
+#' @param transformation <string>  data transformation required.
+#' Both "relative" and "absolute" supported. By default "absolute"
+#' @param inputVars <list of strings> Select a number of features as
+#' output for further steps 
 #' @param nDayParts <int> number of part days
 #' @param holidays <list date> holidays dates
 #' @return normalised load
@@ -669,7 +679,7 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
 #' of a building, the outdoor temperature, or whatever input is needed for clustering.
 #' @param consumptionFeature <string> containing the column name the consumption feature 
 #' in the data argument.
-#' @param temperature <string> containing the column name of the outdoor temperature feature
+#' @param outdoorTemperatureFeature <string> containing the column name of the outdoor temperature feature
 #' in the data argument.
 #' @param localTimeZone <string> local time zone
 #' @param clustering <object> clustering_dlc() output
