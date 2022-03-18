@@ -701,7 +701,7 @@ classification_dlc <- function(data, consumptionFeature, outdoorTemperatureFeatu
   loadCurveTransformation <- clustering$opts$loadCurveTransformation
   inputVars <- clustering$opts$inputVars
   nDayParts <- clustering$opts$nDayParts
-  tmp_norm <- normalize_load(tmp, localTimeZone, loadCurveTransformation, inputVars, nDayParts)
+  tmp_norm <- normalise_dlc(tmp, localTimeZone, loadCurveTransformation, inputVars, nDayParts)
   tmp_norm$values[is.na(tmp_norm$values)] <- 0
   
   clusteringCentroids <- clustering$clusteringCentroids
@@ -724,8 +724,8 @@ classification_dlc <- function(data, consumptionFeature, outdoorTemperatureFeatu
   
   # WARNING: Ignoring temperature ?
   tmp_spread <- tmp %>%
-    select(date, hour, value) %>%
-    spread(hour, value)
+    select(date, hour, consumption) %>%
+    spread(hour, consumption)
   tmp_spread <-  add_column(tmp_spread, !!!all_hours_default[setdiff(all_hours, names(tmp_spread))]) %>%
     select(c(date, !!!all_hours))
   
