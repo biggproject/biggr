@@ -1,0 +1,203 @@
+@prefix ns0: <https://bigg-project.eu/ontology#> .
+@prefix ns1: <https://sws.geonames.org> .
+
+<https://icaen.cat#BUILDING-00109> a ns0:Building ;
+    ns0:buildingIDFromOrganization "00109" ;
+    ns0:buildingName "Institut Eugeni d`Ors" ;
+    ns0:buildingUseType "Others" ;
+    ns0:hasCadastralInfos <https://icaen.cat#5276508DF3857E0001ES> ;
+    ns0:hasLocationInfo <https://icaen.cat#LOCATION-00109> ;
+    ns0:hasSpace <https://icaen.cat#BUILDINGSPACE-00109> .
+
+<https://icaen.cat#5276508DF3857E0001ES> a ns0:CadastralInfo ;
+    ns0:landArea "8723.0" ;
+    ns0:landCadastralReference "5276508DF3857E0001ES" ;
+    ns0:landType "Urban" .
+
+<https://icaen.cat#AREA-GrossFloorArea-GPG-00109> a ns0:Area ;
+    ns0:areaType "GrossFloorArea" ;
+    ns0:areaUnitOfMeasurement "m2" ;
+    ns0:areaValue "10279.0" .
+
+<https://icaen.cat#AREA-GrossFloorArea-gemweb-00109> a ns0:Area ;
+    ns0:areaType "GrossFloorArea" ;
+    ns0:areaUnitOfMeasurement "m2" ;
+    ns0:areaValue "10279" .
+
+<https://icaen.cat#AREA-GrossFloorAreaAboveGround-GPG-00109> a ns0:Area ;
+    ns0:areaType "GrossFloorAreaAboveGround" ;
+    ns0:areaUnitOfMeasurement "m2" ;
+    ns0:areaValue "10279.0" .
+
+<https://icaen.cat#AREA-GrossFloorAreaUnderGround-GPG-00109> a ns0:Area ;
+    ns0:areaType "GrossFloorAreaUnderGround" ;
+    ns0:areaUnitOfMeasurement "m2" ;
+    ns0:areaValue "0.0" .
+
+<https://icaen.cat#BUILDINGSPACE-00109> a ns0:BuildingSpace ;
+    ns0:buildingSpaceName "Building" ;
+    ns0:buildingSpaceUseType "Others" ;
+    ns0:hasAreas <https://icaen.cat#AREA-GrossFloorArea-GPG-00109>,
+        <https://icaen.cat#AREA-GrossFloorArea-gemweb-00109>,
+        <https://icaen.cat#AREA-GrossFloorAreaAboveGround-GPG-00109>,
+        <https://icaen.cat#AREA-GrossFloorAreaUnderGround-GPG-00109> ;
+    ns0:hasUtilityPointOfDelivery <https://icaen.cat#SUPPLY-ES0031405408542001VD0F> ;
+    ns0:isAssociatedWithElements <https://icaen.cat#ELEMENT-00109> ;
+    ns0:isObservedBy <https://icaen.cat#94821-DEVICE-gemweb>,
+        <https://icaen.cat#ES0031405408542001VD0F-DEVICE-datadis>,
+        <https://weather.beegroup-cimne.com#41.434~2.232>,
+        <https://icaen.cat#ES12231041GAS-DEVICE-nedgia>,
+        <https://icaen.cat#ES12231051GAS-DEVICE-nedgia> ;
+    ns0:hasDeviceAggregator <https://icaen.cat#DEVICEAGG-ELECTRICITY-TOTAL-00109>,
+        <https://icaen.cat#DEVICEAGG-METEO-TEMPERATURE-00109>,
+        <https://icaen.cat#DEVICEAGG-METEO-HUMIDITYRATIO-00109>,
+        <https://icaen.cat#DEVICEAGG-GAS-TOTAL-00109>.
+
+<https://icaen.cat#ELEMENT-00109> a ns0:BuildingConstructionElement ;
+    ns0:buildingConstructionElementType "Building" .
+
+<https://icaen.cat#LOCATION-00109> a ns0:LocationInfo ;
+    ns0:addressCity "Badalona" ;
+    ns0:addressCountry "Catalonia" ;
+    ns0:addressPostalCode "08918" ;
+    ns0:addressProvince "Barcelona" ;
+    ns0:addressStreetName "Maresme" ;
+    ns0:addressStreetNumber "192-212" ;
+    ns0:addressLocalTimeZone "Europe/Madrid" .
+
+<https://icaen.cat#ES12231041GAS-DEVICE-nedgia> a ns0:Device ;
+    ns0:deviceName "ES12231041GAS" ;
+    ns0:deviceType "EnergyConsumptionGas" ;
+    ns0:hasSensor <https://icaen.cat#ES12231041GAS-DEVICE-nedgia-LIST-RAW> .
+
+<https://icaen.cat#ES12231051GAS-DEVICE-nedgia> a ns0:Device ;
+    ns0:deviceName "ES12231051GAS" ;
+    ns0:deviceType "EnergyConsumptionGas" ;
+    ns0:hasSensor <https://icaen.cat#ES12231051GAS-DEVICE-nedgia-LIST-RAW> .
+    
+<https://icaen.cat#DEVICEAGG-GAS-TOTAL-00109> a ns0:DeviceAggregator ;
+    ns0:deviceAggregatorProperty "EnergyConsumptionGas" ;
+    ns0:deviceAggregatorName "totalGasConsumption" ;
+    ns0:deviceAggregatorFrequency "P1M" ;
+    ns0:deviceAggregatorTimeAggregationFunction "SUM" ;
+    ns0:deviceAggregatorFormula "<mi>401898a024310399210beb4d7f7bb890c568714cc006e7e6429cc6869ccb215c</mi><mo>+</mo><mi>501898a024310399210beb4d7f7bb890c568714cc006e7e6429cc6869ccb215c</mi>" ;
+    ns0:includesDevice <https://icaen.cat#ES12231041GAS-DEVICE-nedgia>,<https://icaen.cat#ES12231051GAS-DEVICE-nedgia> .
+
+<https://icaen.cat#ES12231041GAS-DEVICE-nedgia-LIST-RAW> a ns0:Sensor ;
+    ns0:sensorIsRegular "false" ;
+    ns0:sensorIsCumulative "false" ;
+    ns0:sensorIsOnChange "false" ;
+    ns0:sensorTimeAggregationFunction "SUM" ;
+    ns0:sensorId "401898a024310399210beb4d7f7bb890c568714cc006e7e6429cc6869ccb215c" ;
+    ns0:sensorProperty "EnergyConsumptionGas" ;
+    ns0:sensorEnd "2020-05-02T23:59:59Z" ;
+    ns0:sensorUnit "kWh" ;
+    ns0:sensorStart "2020-01-01T00:03:51Z" ;
+    ns0:sensorEstimationMethod "Naive" .
+
+<https://icaen.cat#ES12231051GAS-DEVICE-nedgia-LIST-RAW> a ns0:Sensor ;
+    ns0:sensorIsRegular "false" ;
+    ns0:sensorIsCumulative "true" ;
+    ns0:sensorIsOnChange "false" ;
+    ns0:sensorTimeAggregationFunction "SUM" ;
+    ns0:sensorId "501898a024310399210beb4d7f7bb890c568714cc006e7e6429cc6869ccb215c" ;
+    ns0:sensorProperty "EnergyConsumptionGas" ;
+    ns0:sensorEnd "2020-05-02T00:00:00Z" ;
+    ns0:sensorUnit "kWh" ;
+    ns0:sensorStart "2020-01-01T00:00:00Z" ;
+    ns0:sensorEstimationMethod "Naive" .
+
+<https://icaen.cat#DEVICEAGG-METEO-TEMPERATURE-00109> a ns0:DeviceAggregator ;
+    ns0:deviceAggregatorProperty "Temperature" ;
+    ns0:deviceAggregatorName "outdoorTemperature" ;
+    ns0:deviceAggregatorFrequency "PT1H" ;
+    ns0:deviceAggregatorTimeAggregationFunction "CDD","HDD","AVG" ;
+    ns0:deviceAggregatorFormula "<mi>430bd44826d194eef39d379cc7ef8f2ae7c7139a36be7920bb9d9b15e6d696f8</mi>" ;
+    ns0:includesDevice <https://weather.beegroup-cimne.com#41.434~2.232> .
+
+<https://icaen.cat#DEVICEAGG-METEO-HUMIDITYRATIO-00109> a ns0:DeviceAggregator ;
+    ns0:deviceAggregatorProperty "HumidityRatio" ;
+    ns0:deviceAggregatorName "outdoorHumidityRatio" ;
+    ns0:deviceAggregatorFrequency "PT1H" ;
+    ns0:deviceAggregatorTimeAggregationFunction "AVG" ;
+    ns0:deviceAggregatorFormula "<mi>430bd44826d194eef39d379cc7ef8f2ae7c7139a36be7920bb9d9b15e6d696f9</mi>" ;
+    ns0:includesDevice <https://weather.beegroup-cimne.com#41.434~2.232> .
+
+<https://weather.beegroup-cimne.com#41.434~2.232> a ns0:Device,
+        ns0:WeatherStation,
+        ns1:SpatialThing ;
+    ns0:hasSensor <https://weather.beegroup-cimne.com#41.434~2.232-DEVICE-LIST-RAW-PT1H-temperature>,
+     <https://weather.beegroup-cimne.com#41.434~2.232-DEVICE-LIST-RAW-PT1H-humidityratio>, <https://weather.beegroup-cimne.com#41.434~2.232-DEVICE-LIST-RAW-PT5M-temperature2> ;
+    ns1:lat "41.434" ;
+    ns1:long "2.232" .
+
+<https://weather.beegroup-cimne.com#41.434~2.232-DEVICE-LIST-RAW-PT1H-temperature> a ns0:Sensor ;
+    ns0:sensorIsRegular "true" ;
+    ns0:sensorIsCumulative "false" ;
+    ns0:sensorIsOnChange "false" ;
+    ns0:sensorFrequency "PT1H" ;
+    ns0:sensorTimeAggregationFunction "AVG" ;
+    ns0:sensorId "430bd44826d194eef39d379cc7ef8f2ae7c7139a36be7920bb9d9b15e6d696f8" ;
+    ns0:sensorProperty "Temperature" ;
+    ns0:sensorEnd "2022-03-16T14:00:00Z" ;
+    ns0:sensorUnit "ºC" ;
+    ns0:sensorStart "2017-12-31T23:00:00Z" ;
+    ns0:sensorEstimationMethod "TrustedModel" .
+
+<https://weather.beegroup-cimne.com#41.434~2.232-DEVICE-LIST-RAW-PT1H-humidityratio> a ns0:Sensor ;
+    ns0:sensorIsRegular "true" ;
+    ns0:sensorIsCumulative "false" ;
+    ns0:sensorIsOnChange "false" ;
+    ns0:sensorFrequency "PT1H" ;
+    ns0:sensorTimeAggregationFunction "AVG" ;
+    ns0:sensorId "430bd44826d194eef39d379cc7ef8f2ae7c7139a36be7920bb9d9b15e6d696f9" ;
+    ns0:sensorProperty "HumidityRatio" ;
+    ns0:sensorEnd "2022-03-16T14:00:00Z" ;
+    ns0:sensorUnit "%" ;
+    ns0:sensorStart "2017-12-31T23:00:00Z" ;
+    ns0:sensorEstimationMethod "TrustedModel" .
+
+<https://weather.beegroup-cimne.com#41.434~2.232-DEVICE-LIST-RAW-PT5M-temperature2> a ns0:Sensor ;
+    ns0:sensorIsRegular "true" ;
+    ns0:sensorIsCumulative "false" ;
+    ns0:sensorIsOnChange "false" ;
+    ns0:sensorFrequency "PT5M" ;
+    ns0:sensorTimeAggregationFunction "AVG" ;
+    ns0:sensorId "101898a024310399210beb4d7f7bb890c568714cc006e7e6429cc6869ccb215c" ;
+    ns0:sensorProperty "Temperature" ;
+    ns0:sensorEnd "2020-05-01T00:08:50Z" ;
+    ns0:sensorUnit "ºC" ;
+    ns0:sensorStart "2020-01-01T00:03:51Z" ;
+    ns0:sensorEstimationMethod "Interpolated" .
+
+<https://icaen.cat#ES0031405408542001VD0F-DEVICE-datadis> a ns0:Device ;
+    ns0:deviceName "ES0031405408542001VD0F" ;
+    ns0:deviceType "EnergyConsumptionGridElectricity" ;
+    ns0:hasSensor <https://icaen.cat#ES0031405408542001VD0F-DEVICE-datadis-LIST-RAW-PT1H> .
+
+<https://icaen.cat#SUPPLY-ES0031405408542001VD0F> a ns0:UtilityPointOfDelivery ;
+    ns0:hasDevice <https://icaen.cat#94821-DEVICE-gemweb>,
+        <https://icaen.cat#ES0031405408542001VD0F-DEVICE-datadis> ;
+    ns0:pointOfDeliveryIDFromUser "ES0031405408542001VD0F" ;
+    ns0:utilityType "electricityConsumption" .
+
+<https://icaen.cat#DEVICEAGG-ELECTRICITY-TOTAL-00109> a ns0:DeviceAggregator ;
+    ns0:deviceAggregatorProperty "EnergyConsumptionGridElectricity" ;
+    ns0:deviceAggregatorName "totalElectricityConsumption" ;
+    ns0:deviceAggregatorFrequency "PT1H" ;
+    ns0:deviceAggregatorTimeAggregationFunction "SUM" ;
+    ns0:deviceAggregatorFormula "<mi>941898a024310399210beb4d7f7bb890c568714cc006e7e6429cc6869ccb215c</mi>" ;
+    ns0:includesDevice <https://icaen.cat#ES0031405408542001VD0F-DEVICE-datadis> .
+    
+<https://icaen.cat#ES0031405408542001VD0F-DEVICE-datadis-LIST-RAW-PT1H> a ns0:Sensor ;
+    ns0:sensorProperty "EnergyConsumptionGridElectricity" ;
+    ns0:sensorIsRegular "true" ;
+    ns0:sensorIsCumulative "false" ;
+    ns0:sensorIsOnChange "false" ;
+    ns0:sensorFrequency "PT1H" ;
+    ns0:sensorTimeAggregationFunction "SUM" ;
+    ns0:sensorId "941898a024310399210beb4d7f7bb890c568714cc006e7e6429cc6869ccb215c" ;
+    ns0:sensorEnd "2021-11-01T05:00:00Z" ;
+    ns0:sensorStart "2020-11-11T23:00:00Z" ;
+    ns0:sensorUnit "kWh" ;
+    ns0:sensorEstimationMethod "Profiling" .

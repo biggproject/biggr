@@ -36,7 +36,8 @@ Install MLFlow in your system or your server.
 
 # Load the needed libraries
 
-```{r setup, error=F, warning=F, message=F}
+```{r error=F, warning=F, message=F}
+library(biggr)
 library(data.table)
 library(ggplot2)
 library(gridExtra)
@@ -44,9 +45,9 @@ library(plotly)
 library(padr)
 library(htmlwidgets)
 library(carrier)
-library(biggr)
 library(mlflow)
 library(fs)
+library(tidyr)
 mlflow_wd = as.character(path_home("PyVenvs/mlflow"))
 Sys.setenv(MLFLOW_PYTHON_BIN=paste0(mlflow_wd,"/bin/python3"))
 Sys.setenv(MLFLOW_TRACKING_URI="http://127.0.0.1:5000")
@@ -55,25 +56,45 @@ Sys.setenv(MLFLOW_BIN=paste0(mlflow_wd,"/bin/mlflow"))
 #mlflow_client(mlflow_set_tracking_uri("http://127.0.0.1:5000"))
 ```
 
+# Read the harmonised datasets
+```{r}
+buildingsRdf <- rdf_parse("~/Nextcloud/Beegroup/Projects/Desenvolupaments_TIC_BIGG-ENTRACK/6_Data_analytics/data_example/one_building2.ttl", format = "turtle")
+timeseriesObject <- jsonlite::fromJSON("~/Nextcloud/Beegroup/Projects/Desenvolupaments_TIC_BIGG-ENTRACK/6_Data_analytics/data_example/one_building_series2.json")
+
+buildings_df <- get_device_aggregators_by_building(
+  buildingsRdf, timeseriesObject, 
+  allowedBuildingId=c("00109"), 
+  allowedDeviceAggregators=c("totalElectricityConsumption","outdoorTemperature"), 
+  useEstimatedValues=F, ratioCorrection=T)
+```
+
+# Get the data for a specific building
+```{r}
+df <- buildings_df$`00109`
+
+plot(buildings_df$`00109`$time,buildings_df$`00109`$outdoorTemperature.AVG,type="l")
+lines(buildings_df$`00109`$time,buildings_df$`00109`$totalElectricityConsumption.SUM,col="red")
+```
+
 # Load an example dataset
 
 The biggr package has internally preloaded six datasets containing hourly electricity consumption and weather data from six different buildings.
 
-```{r}
-data(biggr)
-buildingId <- "electricity1"
-df <- electricity1 %>% calendar_components(localTimeZone = "Europe/Madrid")
-df$theoreticalOccupancy <- 1
-df <- df[order(df$localtime),]
-df <- cbind(df, do.call(cbind,
-        oce::sunAngle(df$time,latitude=41.5,longitude=1))[,c("azimuth","altitude")])
-df <- df %>% filter(!duplicated(df$time))
-```
+# ```{r}
+# data(biggr)
+# buildingId <- "electricity3"
+# df <- eval(expr = parse(text = buildingId)) %>% calendar_components(localTimeZone = "Europe/Madrid")
+# df$theoreticalOccupancy <- 1
+# df <- df[order(df$localtime),]
+# df <- cbind(df, do.call(cbind,
+#         oce::sunAngle(df$time,latitude=41.5,longitude=1))[,c("azimuth","altitude")])
+# df <- df %>% filter(!duplicated(df$time))
+# ```
 
 ```{r}
 # Time series plots
 ts_p <- ggplot(
-    reshape2::melt( df %>% select(time, Qe, temperature, windSpeed, GHI) %>% pad(), 
+    reshape2::melt( df %>% select(time, Qe, temperature) %>% pad(), 
                     "time")
   ) + 
   geom_line(
@@ -88,7 +109,8 @@ ts_p
 ```{r}
 # Scatter plots of the electricity consumption and outdoor temperature
 grid.arrange(
-  ggplot(aggregate(df[,c("temperature","Qe")],by=list("date"=as.Date(df$localtime)),FUN=mean)) + 
+  ggplot(df[,c("temperature","Qe")])+
+    #aggregate(df[,c("temperature","Qe")],by=list("date"=as.Date(df$localtime)),FUN=mean)) + 
       geom_point(
         aes(temperature, Qe),
         size=0.05
@@ -171,7 +193,6 @@ df <- df %>%
   # ) %>% mutate(
   #   outliers = ifelse(rollmean(as.numeric(outliers),k = 5,fill = c(F,F,F),align = "center")>0,T,F)
   )
-df[,"outliers"] <- F
 g <- ggplot(df[,c("localtime","Qe","outliers","upperPredCalendarModel","lowerPredCalendarModel")]) +
            geom_line(aes(localtime,Qe)) +
            geom_ribbon(aes(localtime,ymax=upperPredCalendarModel,ymin=lowerPredCalendarModel),
@@ -196,41 +217,58 @@ experimentId <- tryCatch(
 )
 ```
 
-# Adjust a time-varying regression model
+# Get the change
 
 ```{r}
-with(mlflow_start_run(experiment_id = experimentId),{
-  mod <- train(
-    Qe ~ weekhour + th + tc + thint + tcint,
-    data=df[df$outliers==F,],
-    method = RLS(
-     data.frame(parameter = c('nhar','tbalh','tbalc','alpha','lambda','minocc'),
-                class = c('integer','float','float','float','float','float'))
-    ),
-    tuneGrid = expand.grid(
-      # "nhar"=c(4),"tbalh"=c(16),"tbalc"=c(16),"alpha"=c(0.95),
-      "nhar"=c(16),"tbalh"=c(16,18,20),"tbalc"=c(22,24,26),"alpha"=c(0.95),
-      "lambda"=c(
-        get_lpf_smoothing_time_scale(data.frame("time"=df$time),24*30*12)
-      ),"minocc"=c(0.7,0.8)),
-    metric="CVRMSE",
-    trControl = #trainControl(method="none"),
-      trainControl(method = "timeslice",
-                   initialWindow = hourly_timesteps(365*24,detect_time_step(df$time)),
-                   horizon = hourly_timesteps(14*24,detect_time_step(df$time)),
-                   skip = hourly_timesteps(365/6*24,detect_time_step(df$time))-1,
-                   fixedWindow = T,
-                   summaryFunction = regression_metrics),
-    logOutput = T,
-    minMonthsTraining = 12,
-    continuousTime = T,
-    estimateTheoreticalOccupancy = F,
-    transformationSentences = list(
+wdep <- get_change_point_temperature(
+  consumptionData = df[,c("time","Qe")],
+  weatherData =  df[,c("time","temperature")], 
+  consumptionFeature = "Qe", 
+  temperatureFeature = "temperature",
+  localTimeZone = "Europe/Madrid", 
+  plot=T)
+```
+
+# Parameters and data transformation processes to optimise
+```{r}
+general_params <- list(
+      "nhar"=list(
+        "class"="integer",
+        "values"=4
+      ),
+      "tbalh"=list(
+        "class"="float",
+        "values"=seq(wdep$tbal-4,wdep$tbal+4,by=2)
+      ),
+      "tbalc"=list(
+        "class"="float",
+        "values"=seq(wdep$tbal-4,wdep$tbal+4,by=2)
+      ),
+      "maxh"=list(
+        "class"="float",
+        "values"=c(10,15,20,50)
+      ),
+      "maxc"=list(
+        "class"="float",
+        "values"=c(10,15,20,50)
+      ),
+      "alpha"=list(
+        "class"="float",
+        "values"=c(0.9)
+      ),
+      "lambda"=list(
+        "class"="float",
+        "values"=c(get_lpf_smoothing_time_scale(data.frame("time"=df$time),
+          24*30*if(length(unique(df$monthInt))<12){length(unique(df$monthInt))}else{12}))
+      )
+    )
+general_transformationSentences <- list(
      # Fourier series components of the hour of the day by weekdays and weekends. 
      "weekhour" = c(
-       "fs_components(...,featuresName='weekhour',nHarmonics=param$nhar,inplace=F)"
-       #"isWeekend"
+       "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
+       "isWeekend"
      ),
+     
      # Fill some gaps in the outdoor temperature time series.
      "temperature" = "vectorial_transformation(
                         na.locf(
@@ -240,64 +278,145 @@ with(mlflow_start_run(experiment_id = experimentId),{
                           ),
                           na.rm=T),
                       outputFeatureName='temperature')",
+     
      # Low Pass Filtered (LPF) outdoor temperature
      "tlpf" = "lpf_ts(...,featuresNames='temperature',smoothingTimeScaleParameter=param$alpha,
                 outputFeaturesNames='temperatureLpf')",
+     
      # Estimate the heating degrees based on a heating balance temperature 
      # and the LPF temperature series
      "heatingLpf" = "degree_raw(...,featuresName='temperatureLpf',baseTemperature=param$tbalh,
-                      mode='heating',outputFeaturesName='heatingLpf',inplace=F)",
+                      mode='heating',outputFeaturesName='heatingLpf',maxValue=param$maxh,
+                      inplace=F)",
+     
      # Estimate the cooling degrees based on a cooling balance temperature 
      # and the LPF temperature series
      "coolingLpf" = "degree_raw(...,featuresName='temperatureLpf',baseTemperature=param$tbalc,
-                      mode='cooling',outputFeaturesName='coolingLpf',inplace=F)",
+                      mode='cooling',outputFeaturesName='coolingLpf',maxValue=param$maxc,
+                      inplace=F)",
+     
      # Squared versions of the heating and cooling degrees
      "heatingLpf2" = "vectorial_transformation(heatingLpf^2,outputFeatureName='heatingLpf2')",
      "coolingLpf2" = "vectorial_transformation(coolingLpf^2,outputFeatureName='coolingLpf2')",
+     
      # Check if exists heating or cooling degrees at every timestep 
      "heatingLpfBool" = "vectorial_transformation(ifelse(heatingLpf>0,1,0),
                           outputFeatureName='heatingLpfBool')",
      "coolingLpfBool" = "vectorial_transformation(ifelse(coolingLpf>0,1,0),
                           outputFeatureName='coolingLpfBool')",
+     
      # Regression components for the heating degrees depending on the hour of the day 
      #and weekday/weekend
      "th"=c("heatingLpf",
             "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
-            "isWeekend",
-            "theoreticalOccupancy"),
+            "weekday"
+            ),
+     
      # Regression components for the cooling degrees depending on the hour of the day 
      # and weekday/weekend
      "tc"=c("coolingLpf",
             "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
-            "isWeekend",
-            "theoreticalOccupancy"),
+            "weekday"
+            ),
+     
      # Regression components for the heating degrees depending on the hour of the day 
      #and weekday/weekend
      "th2"=c("heatingLpf2",
             "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
-            "isWeekend",
-            "theoreticalOccupancy"),
+            "weekday"
+            ),
+     
      # Regression components for the cooling degrees depending on the hour of the day 
      # and weekday/weekend
      "tc2"=c("coolingLpf2",
             "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
-            "isWeekend",
-            "theoreticalOccupancy"),
+            "weekday"
+            ),
+     
      # Regression components for the heating intercept depending on the hour 
      # of the day and weekday/weekend
      "thint"=c("heatingLpfBool",
             "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
-            "isWeekend",
-            "theoreticalOccupancy"
+            "weekday"
             ),
+     
      # Regression components for the cooling intercept depending on the hour 
      # of the day and weekday/weekend
      "tcint"=c("coolingLpfBool",
             "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
-            "isWeekend",
-            "theoreticalOccupancy"
+            "weekday"
            )
     )
+```
+
+
+# Adjust a time-varying regression model
+
+```{r}
+with(mlflow_start_run(experiment_id = experimentId),{
+  
+  if(wdep$heating && wdep$cooling){
+    Qe ~ weekhour + th + tc + thint + tcint
+    params <- general_params[c("nhar","tbalh","tbalc","maxh","maxc","alpha","lambda")]
+    transformationSentences <- general_transformationSentences[
+      c("weekhour","temperature","tlpf","heatingLpf","coolingLpf","heatingLpf2",
+        "coolingLpf2","heatingLpfBool","coolingLpfBool","th","tc","th2","tc2",
+        "tcint","thint")
+    ]
+  } else if (wdep$heating){
+    Qe ~ weekhour + th + thint
+    params <- general_params[c("nhar","tbalh","tbalc","maxh","maxc","alpha","lambda")]
+    transformationSentences <- general_transformationSentences[
+      c("weekhour","temperature","tlpf","heatingLpf","heatingLpf2","heatingLpfBool",
+        "th","th2","thint")
+    ]
+  } else if (wdep$cooling){
+    Qe ~ weekhour + tc + tcint
+    params <- general_params[c("nhar","tbalh","tbalc","maxh","maxc","alpha","lambda")]
+    transformationSentences <- general_transformationSentences[
+      c("weekhour","temperature","tlpf","coolingLpf","coolingLpf2","coolingLpfBool",
+        "tc","tc2","tcint")
+    ]
+  } else {
+    Qe ~ weekhour
+    params <- general_params[c("nhar","lambda")]
+    transformationSentences <- general_transformationSentences[
+      c("weekhour")
+    ]
+  }
+  mod <- train(
+    Qe ~ weekhour + th + tc + thint + tcint,
+    data=df[df$outliers==F,],
+    method = RLS(
+     data.frame(parameter = names(params),
+                class = mapply(params,FUN=function(i)i[["class"]]))
+    ),
+    tuneGrid = do.call(expand.grid,
+                       lapply(params,function(i)i[["values"]])),
+    # metric="R2",
+    trControl = #trainControl(method="none"),
+      if(nrow(df) >= hourly_timesteps(1.5*365*24,detect_time_step(df$time))){
+        trainControl(method = "timeslice",
+                     initialWindow = hourly_timesteps(365*24,detect_time_step(df$time)),
+                     horizon = hourly_timesteps(14*24,detect_time_step(df$time)),
+                     skip = hourly_timesteps(365/4*24,detect_time_step(df$time))-1,
+                     fixedWindow = T#,
+                     # summaryFunction = regression_metrics
+                     )
+      } else {
+        trainControl(method = "timeslice",
+                   initialWindow = ceiling(0.50*nrow(df)),
+                   horizon = ceiling(0.2*nrow(df)),
+                   skip = ceiling(0.2*nrow(df))+1,
+                   fixedWindow = F#,
+                   # summaryFunction = regression_metrics
+                   )
+      },
+    # maxPredictionValue = max(df[df$outliers==F,"Qe"],na.rm=T) * 1.05,
+    logOutput = T,
+    minMonthsTraining = 12,
+    continuousTime = T,
+    transformationSentences = transformationSentences
   )
   
   # Generate the predictor object
@@ -314,8 +433,13 @@ with(mlflow_start_run(experiment_id = experimentId),{
   })
   
   # Predict with the validation set
-  df_for_pred <- df[ 
-    df$time >= (min(df$time,na.rm=T) + days(mod$finalModel$meta$minMonthsTraining*30)) , ]
+  df_for_pred <- df[
+    if(nrow(df) >= hourly_timesteps(mod$finalModel$meta$minMonthsTraining*30*24,
+                                    detect_time_step(df$time))){
+      df$time >= (min(df$time,na.rm=T) + days(mod$finalModel$meta$minMonthsTraining*30))
+    } else {
+      df$time >= quantile(df$time,0.3,na.rm=T)
+    }, ]
   df_for_pred <- df_for_pred[order(df_for_pred$time),]
   df_for_pred$Qe_pred <- predictor(df_for_pred)
   
@@ -460,7 +584,7 @@ pred_distribution <- pred_distribution[complete.cases(pred_distribution),]
 
 ggplotly(ggplot(pred_distribution) + geom_line(aes(localtime,Qe)) +
   geom_line(aes(localtime,pred),col="red", alpha = 0.5) +
-  geom_ribbon(aes(localtime,ymin=`5.0%`,ymax=`95.0%`),color="blue", alpha=0.3))
+  geom_ribbon(aes(localtime,ymin=`10.0%`,ymax=`90.0%`),color="blue", alpha=0.3))
 ```
 
 ```{r}
@@ -472,31 +596,30 @@ pred_distribution_d <- aggregate(
 pred_distribution_d <- cbind(
   setNames(
     as.data.frame(mapply(function(v){
-      tmp <- setNames(pred_distribution_d[,c("date",v)],c("date","value"))
-      mod_loess <- mgcv::gam(as.formula(paste0("value ~ s(as.numeric(date))")), 
-                         data = tmp)
-      mgcv::predict.gam(mod_loess, data.frame("date"=as.numeric(pred_distribution_d$date)))
-      #rollmean(pred_distribution_d[,v],k = 7,fill = c(NA,NA,NA),align="center",partial=T)
+      # tmp <- setNames(pred_distribution_d[,c("date",v)],c("date","value"))
+      # mod_loess <- mgcv::gam(as.formula(paste0("value ~ s(as.numeric(date))")), 
+      #                    data = tmp)
+      # mgcv::predict.gam(mod_loess, data.frame("date"=as.numeric(pred_distribution_d$date)))
+      rollmean(pred_distribution_d[,v],k = 60,fill = c(NA,NA,NA),align="center",partial=T)
     }, vars_to_resample)),
   paste0(vars_to_resample,"_smoothed")
   ),
   pred_distribution_d)
-ggplotly(ggplot(pred_distribution_d) + #geom_line(aes(date,(`mean`-pred)/pred)) +
+ggplotly(ggplot(pred_distribution_d[complete.cases(pred_distribution_d),]) + #geom_line(aes(date,(`mean`-pred)/pred)) +
            geom_hline(aes(yintercept=0), linetype="dashed") +
-           geom_ribbon( aes(date, ymin=(`75.0%_smoothed`-`Qe_smoothed`)/`75.0%_smoothed`,
-                            ymax=(`25.0%_smoothed`-`Qe_smoothed`)/`25.0%_smoothed`), 
+           geom_ribbon( aes(date, ymin=(`75.0%_smoothed`-`pred_smoothed`)/`75.0%_smoothed`,
+                            ymax=(`25.0%_smoothed`-`pred_smoothed`)/`25.0%_smoothed`), 
                         fill="grey", alpha=0.5 ) +
-           geom_ribbon( aes(date, ymin=(`97.5%_smoothed`-`Qe_smoothed`)/`97.5%_smoothed`,
-                            ymax=(`2.5%_smoothed`-`Qe_smoothed`)/`2.5%_smoothed`), 
+           geom_ribbon( aes(date, ymin=(`97.5%_smoothed`-`pred_smoothed`)/`97.5%_smoothed`,
+                            ymax=(`2.5%_smoothed`-`pred_smoothed`)/`2.5%_smoothed`), 
                         fill="grey", alpha=0.2 ) +
-           geom_ribbon( aes(date, ymin=(`90.0%_smoothed`-`Qe_smoothed`)/`90.0%_smoothed`,
-                            ymax=(`10.0%_smoothed`-`Qe_smoothed`)/`10.0%_smoothed`), 
+           geom_ribbon( aes(date, ymin=(`90.0%_smoothed`-`pred_smoothed`)/`90.0%_smoothed`,
+                            ymax=(`10.0%_smoothed`-`pred_smoothed`)/`10.0%_smoothed`), 
                         fill="grey", alpha=0.3 ) +
-           geom_line(aes(date,(`mean_smoothed`-`Qe_smoothed`)/`mean_smoothed`), 
-                     col="blue", alpha=0.8, size = 1) +
-           geom_line(aes(date,(pred_smoothed-`Qe_smoothed`)/pred_smoothed),
-                     col="black", alpha=0.8, size = 1) + 
+           geom_line(aes(date,(`mean_smoothed`-`pred_smoothed`)/`mean_smoothed`),
+                     col="blue", alpha=0.8, size = 0.5) +
+           geom_line(aes(date,(`pred_smoothed`-`Qe_smoothed`)/`pred_smoothed`),
+                      col="black", alpha=0.8, size = 1) +
            theme_bw() + ylab("Energy savings") + scale_y_continuous(labels=scales::percent)
         )
-
 ```

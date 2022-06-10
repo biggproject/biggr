@@ -176,7 +176,7 @@ get_lpf_smoothing_time_scale <- function (data, timeConstantInHours) {
 #' plus the transformed objects -True- , or only the transformed series -False.
 #' @return data <timeSeries> containing the same initial information of data
 #' input argument, plus the calendar components as new columns.
-calendar_components <- function (data, localTimeZone = NULL, holidays = NULL, inplace=T){
+calendar_components <- function (data, localTimeZone = NULL, holidays = c(), inplace=T){
   getSeason <- function(dates){
     WS <- as.Date("2012-12-15", format = "%Y-%m-%d")
     SE <- as.Date("2012-3-15", format = "%Y-%m-%d")
@@ -194,7 +194,7 @@ calendar_components <- function (data, localTimeZone = NULL, holidays = NULL, in
     dayYear = as.numeric(format(date,"%j")),
     timestamp = as.numeric(localtime),
     isWeekend = weekday %in% c(6, 7),
-    isHolidays = ifelse(is.null(holidays), NA, ifelse(date %in% holidays, TRUE, FALSE)), 
+    isHolidays = as.factor(date %in% holidays), 
     year = year(localtime), 
     quarter = as.factor(quarter(localtime)), 
     semester = as.factor(semester(localtime)), 
@@ -287,12 +287,19 @@ fs_components <- function (data, featuresNames, nHarmonics, mask=NULL, inplace=T
 #' and the selected base temperature, mantaining the original frequency of
 #' temperature.
 degree_raw <- function (data, featuresName, baseTemperature, outputFeaturesName = NULL, 
-                        mode = "heating", inplace=T){
+                        mode = "heating", maxValue = NULL, inplace=T){
   result <- setNames(data.frame((if (mode == "heating") {
-    pmax(0, baseTemperature - data[,featuresName])
+    ifelse(unlist(baseTemperature - data[,featuresName])>0,
+           unlist(baseTemperature - data[,featuresName]),
+           0)
   } else {
-    pmax(0, data[,featuresName] - baseTemperature)
+    ifelse(unlist(data[,featuresName] - baseTemperature)>0,
+           unlist(data[,featuresName] - baseTemperature),
+           0)
   })),if(is.null(outputFeaturesName)){mode} else {outputFeaturesName})
+  if(!is.null(maxValue)){
+    result[,1] <- ifelse(result[,1] > maxValue, maxValue, result[,1])
+  }
   if(inplace==T){
     return(cbind(data,result))
   } else {
@@ -325,28 +332,233 @@ vectorial_transformation <- function(series, outputFeatureName){
 #' steps are allowed.
 #' @return degreeDays <timeSeries> in the outputTimeStep of the heating or
 #' cooling degree days.
-degree_days <- function(temperature, localTimeZone, baseTemperature,
-                        mode = "heating", outputTimeStep = "D") {
+
+degree_days <- function(data, temperatureFeature, localTimeZone, baseTemperature,
+                        mode = "heating", outputFrequency = "P1D", outputFeaturesName = "HDD",
+                        fixedOutputFeaturesName=F) {
+  temperature <- setNames(data[,c("time",temperatureFeature)],c("time","value"))
   tmp <- temperature %>%
     mutate(
-      localtime = with_tz(time, localTimeZone),
-      time = as_datetime(lubridate::date(localtime))
+      localtime = lubridate::with_tz(time, localTimeZone),
+      time = lubridate::as_datetime(lubridate::date(localtime))
     ) %>%
     group_by(time) %>%
     summarize(
       value = mean(value, na.rm = TRUE)
     )
-  dd <- degree_raw(tmp, baseTemperature, mode)
-  return(dd %>%
-           mutate(group = floor_date(time, roundsteps[outputTimeStep],
-                                     week_start = getOption("lubridate.week.start", 1)
-           )) %>%
-           group_by(group) %>%
-           summarize(
-             dd = sum(dd, na.rm = TRUE)
-           ) %>%
-           rename(time = group) %>%
-           mutate(time = with_tz(time, "UTC")))
+  dd_ <- do.call(cbind,lapply(FUN = function(x) {
+      degree_raw(tmp, "value", x, mode, 
+                 outputFeaturesName = if(fixedOutputFeaturesName){outputFeaturesName}else{paste0(outputFeaturesName, x)}, 
+                 inplace = F)
+    }, baseTemperature))
+  dd_$time <- tmp$time
+  return(
+    dd_ %>%
+       mutate(group = lubridate::floor_date(time, lubridate::period(outputFrequency),
+                                 week_start = getOption("lubridate.week.start", 1)
+       )) %>%
+       group_by(group) %>%
+       summarise_at(
+         .vars = vars(-time),
+         .funs = function(x){sum(x, na.rm = TRUE)}
+       ) %>%
+       rename_at("group", function(x) "time") %>%
+       mutate(time = lubridate::with_tz(time, "UTC"))
+    )
+}
+
+get_change_point_temperature <- function(consumptionData, weatherData, 
+                                         consumptionFeature, 
+                                         temperatureFeature,
+                                         localTimeZone, plot = F){
+  # consumptionFeature <- "Qe"
+  # temperatureFeature <- "temperature"
+  # weatherData <- data[,c("time",temperatureFeature)]
+  # consumptionData <- data[,c("time",consumptionFeature)]
+  weatherData <- weatherData[,c("time",temperatureFeature)]
+  colnames(weatherData) <- c("time","temperature")
+  weatherData$time <- as.Date(weatherData$time, localTimeZone)
+  # weatherDataD <- smartAgg(weatherData, by="time",
+  #                              args=list(
+  #                                function(x){mean(x,na.rm=T)},"temperature"
+  #                              ))
+  weatherDataD <- weatherData %>% 
+    group_by(time) %>% 
+    summarise(across(c(temperature), function(x){mean(x,na.rm=T)}),
+              .groups = 'drop')
+  
+  consumptionData <- consumptionData[,c("time",consumptionFeature)]
+  colnames(consumptionData) <- c("time","consumption")
+  consumptionData$time <- as.Date(consumptionData$time, localTimeZone)
+  # consumptionDataD <- smartAgg(consumptionData, by="time",
+  #                              args=list(
+  #                                function(x)sum(x,na.rm=T),"consumption"
+  #                              ))
+  consumptionDataD <- consumptionData %>% 
+    group_by(time) %>% 
+    summarise(across(c(consumption), function(x){sum(x,na.rm=T)}),
+              .groups = 'drop')
+  
+  estimate_signature <- function(par, weatherData, consumptionData, localTimeZone){
+    newdata <- merge(
+      degree_days(
+        data = weatherData, 
+        temperatureFeature = "temperature", 
+        outputFrequency = "D", 
+        localTimeZone = localTimeZone,
+        baseTemperature = par[1], 
+        mode = "heating",outputFeaturesName = "hdd",
+        fixedOutputFeaturesName=T),
+      degree_days(
+        data = weatherData, 
+        temperatureFeature = "temperature", 
+        outputFrequency = "D", 
+        localTimeZone = localTimeZone,
+        baseTemperature = par[1], 
+        mode = "cooling",outputFeaturesName = "cdd",
+        fixedOutputFeaturesName=T),
+      all=T,
+      by="time"
+      )
+    newdata <- merge(
+      newdata,
+      consumptionData %>% mutate(time=with_tz(time,"UTC")),
+      by="time",all=T
+    )
+    newdata$hdd_intercept <- ifelse(newdata$hdd>0, 1, 0)
+    newdata$cdd_intercept <- ifelse(newdata$cdd>0, 1, 0)
+    newdata$weekday <- as.factor(strftime(newdata$time,"%w"))
+    if(length(unique(newdata$weekday))>1){
+      mod <- lm(consumption ~ 0 + weekday + hdd + cdd , newdata)
+    } else {
+      mod <- lm(consumption ~ 1 + hdd_intercept + cdd_intercept + hdd + cdd , newdata)
+    }
+    mod
+    #a <- summary(mod)
+    
+    # plot(newdata$hdd,col="red", ylim=c(0,40))
+    # points(newdata$cdd,col="blue")
+  }
+  tbals <- seq(round(min(weatherData$temperature,na.rm=T)/0.5)*0.5,
+               round(max(weatherData$temperature,na.rm=T)/0.5)*0.5,
+               by=0.5)
+  mod_results <- lapply(FUN=function(tbal){
+    estimate_signature(tbal, weatherDataD, consumptionDataD, localTimeZone)
+  },tbals)
+  results <- data.frame(
+    "tbal" = tbals,
+    "cost" = mapply(function(mod){
+      coefs <- summary(mod)$coefficients
+      pvalue_hdd <- tryCatch(coefs["hdd",4]<=0.05,error=function(x)F)
+      slope_hdd <- tryCatch(coefs["hdd",1],error=function(x)0)
+      pvalue_cdd <- tryCatch(coefs["cdd",4]<=0.05,error=function(x)F)
+      slope_cdd <- tryCatch(coefs["cdd",1],error=function(x)0)
+      RMSE(mod$model$consumption,mod$fitted.values) * 
+        # # heating and cooling
+        # if(pvalue_hdd && pvalue_cdd){
+        #   if(slope_hdd<0 && slope_cdd<0){1.1} else {1}
+        # # only heating
+        # } else if (pvalue_hdd){
+        #   if(slope_hdd<0){1.1} else {1}
+        # # only cooling
+        # } else if (pvalue_cdd){
+        #   if(slope_cdd<0){1.1} else {1}
+        # # no heating, no cooling
+        # } else {1}
+        if(slope_hdd<0 || slope_cdd<0){
+          if(pvalue_cdd || pvalue_hdd){1.2}else{1.1}
+        } else {1}
+    },mod_results)
+  )
+  best <- which.min(results$cost)
+  if(plot){
+    print(ggplot() + 
+      geom_point(aes(x=weatherDataD$temperature, 
+                    y=consumptionDataD$consumption)) + 
+      geom_point(aes(x=weatherDataD$temperature[
+        is.finite(weatherDataD$temperature) & 
+          is.finite(consumptionDataD$consumption) ],
+                     y=mod_results[[best]]$fitted.values),
+                 col="red",size=2) +
+        geom_vline(aes(xintercept=results$tbal[best]),col="red") +
+      theme_bw() + xlab(""))
+  }
+  # mod_results <<- mod_results
+  # consumptionDataD <<- consumptionDataD
+  # best2 <<- best
+  # best <- best2
+  # results <<- results
+  return(
+    list(
+      "tbal" = results$tbal[best],
+      "heating" = if(is.finite(mod_results[[best]]$coefficients["hdd"])){
+        mod_results[[best]]$coefficients["hdd"]} else {0}> 
+        mean(consumptionDataD$consumption,na.rm=T)*0.02, # 2%daily_average/dd
+      "cooling" = if(is.finite(mod_results[[best]]$coefficients["cdd"])){
+        mod_results[[best]]$coefficients["cdd"]} else {0} > 
+        mean(consumptionDataD$consumption,na.rm=T)*0.02
+      )
+  )
+}
+
+detect_holidays_in_tertiary_buildings <- function(df, value_column, time_column, plot_density=T,tz="UTC"){
+  
+  df <- df[is.finite(df[,value_column]),]
+  df <- aggregate(setNames(data.frame(df[,value_column]),value_column),
+                  by=setNames(list(as.Date(df[,time_column], tz=tz)),time_column),
+                  FUN=function(x)sum(x,na.rm=T))
+  df$dayweek <- strftime(df[,time_column],"%u")
+  
+  # Estimate the cons_limit using the density function
+  summarise_per_day <- df %>% group_by(dayweek) %>%
+    summarise(across(value_column,list(~mean(.x,na.rm=T),
+                                       ~quantile(.x,0.75,na.rm=T))))
+  low_consumption_day <- min(summarise_per_day[,2])
+  d <- density(df[!(df$dayweek %in% c("6","7")),value_column],na.rm=T)
+  # calculate the local extremes
+  tp<-pastecs::turnpoints(ts(d$y))
+  # defines the local maximums and minimums
+  importance <- d$y[tp$tppos]
+  cons <- d$x[tp$tppos]
+  shifted_importance <- c(0,shift(importance,1)[is.finite(shift(importance,1))])
+  min_max <- ifelse(importance-shifted_importance>0,"max","min")
+  # cons_limit = min(cons[cons >= low_consumption_day & min_max == "min"])
+  # cons_i <- which(cons %in% cons_limit)
+  # cons_limit <- mean(cons[(cons_i-1):cons_i],na.rm=T)
+  
+  ## Estimate the cons_limit based on the day with minimum consumption of the week 
+  df_dayweek <-
+    mapply(function(i){
+      zoo::rollapply(ifelse(df$dayweek==i,df[,value_column],NA),
+                     width=30,partial=T,align="center",fill=c(NA,NA,NA),
+                     FUN=function(x){max(x,na.rm=T)})
+    },sort(unique(df$dayweek)))
+  cons_limit <- matrixStats::rowMins(df_dayweek)
+
+  days_detected <- as.Date(df[df[,value_column] <= cons_limit*1.1 & is.finite(df[,value_column]), time_column], tz=tz)
+  
+  # Estimate the cons_limit based on the minimum standard deviation
+  # df_dayweek <-
+  #   mapply(function(i){
+  #     zoo::rollapply(ifelse(df$dayweek==i,df[,value_column],NA),
+  #                    width=60,partial=T,align="center",fill=c(NA,NA,NA),
+  #                    FUN=function(x){sd(x,na.rm=T)})
+  #   },sort(unique(df$dayweek)))
+  # cons_limit <- matrixStats::rowMins(df_dayweek)
+  # 
+  # days_detected <- as.Date(df[df[,value_column] <= cons_limit & is.finite(df[,value_column]), time_column], tz=tz)
+
+  # plot the PDF and the local extremes
+  if(plot_density==T){
+    plot(d, main="",xlab="Consumption [kWh]")
+    points(d$x[tp$tppos],d$y[tp$tppos],col="red",cex=2)
+    abline(v = cons_limit,col=3)
+  }
+  if(length(days_detected)==0){
+    return(NULL)
+  } else {
+    return(unique(days_detected))
+  }
 }
 
 ### ---
@@ -559,7 +771,7 @@ make.similarity <- function(my.data, similarity) {
 #'   dailyConsumption: use the total daily consumption
 #'   daysOfTheWeek: use a discrete value to represent the days of the week
 #'   daysWeekend: use a boolean representing whether is weekend or not
-#'   holidays: use a boolean representing whether is holiday or not.
+#'   dailyHolidays: use a boolean representing whether is holiday or not.
 #' @param loadCurveTransformation <string> that defines the transformation
 #' procedure over the consumption load curves. Possible values are:
 #'   relative: All daily load curves are relative to their total daily
@@ -591,11 +803,12 @@ make.similarity <- function(my.data, similarity) {
 #'   nDayParts: object
 
 clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature, localTimeZone, kMax, inputVars, 
-                            loadCurveTransformation, nDayParts, ignoreDates = c()) {
+                            loadCurveTransformation, nDayParts, ignoreDates = c(), holidaysDates = c()) {
+  data <- data[complete.cases(data[,c(consumptionFeature, outdoorTemperatureFeature)]),]
   tmp <- data %>% select(time, all_of(consumptionFeature), all_of(outdoorTemperatureFeature)) %>% 
     filter(!(lubridate::date(time) %in% ignoreDates)) %>% rename(consumption = consumptionFeature, temperature = outdoorTemperatureFeature)
   tmp_norm <- normalise_dlc(tmp, localTimeZone, loadCurveTransformation, 
-                            inputVars, nDayParts, ignoreDates)
+                            inputVars, nDayParts, holidaysDates)
   S <- make.similarity(apply(tmp_norm$values,1:2,as.numeric), similarity)
   A <- make.affinity(S, 3)
   D <- diag(apply(A, 1, sum))

@@ -71,7 +71,7 @@ invert <- function(x) {
 #' minimum time step (frequency) that can be used for the input time series.
 #'
 #' @param data <timeSeries> Input time series whose time step has to be detected.
-#' @param maxMissingTimeSteps<int> Optional tolerance threshold specifying the
+#' @param maxMissingTimeSteps <int> Optional tolerance threshold specifying the
 #' maximum tolerable percentage of missing values on the total length of the time
 #' series.
 #' @return timeStep <string> A string in ISO 8601 format representing the time
@@ -652,25 +652,114 @@ clean_ts_integrate <- function(data, measurementReadingType = "onChange") {
 #' time series for the alignment. It must be a string in ISO 8601 format
 #' representing the time step (e.g. "15T","1H", "M", "D",...).
 #' @param aggregationFunction <string> The aggregation function to use when
-#  resampling the series (avg, sum, min, max)
+#  resampling the series (AVG, SUM, MIN, MAX)
 #'
 #' @return data <timeSeries> The time series resampled with the specified
 #' period and aggregation function.
-align_time_grid <- function(data, measurementReadingType, outputTimeStep, aggregationFunction) {
-  data <- clean_ts_integrate(data, measurementReadingType)
 
-  return(data %>%
-    mutate(time = floor_date(data$time, outputTimeStep,
-      week_start = getOption("lubridate.week.start", 1)
-    )) %>%
-    group_by(time) %>%
-    summarize(
-      sum = sum(value, na.rm = TRUE),
-      avg = mean(value, na.rm = TRUE),
-      min = min(value, na.rm = TRUE),
-      max = max(value, na.rm = TRUE)
-    ) %>%
-    mutate(value = !!as.name(aggregationFunction)) %>%
-    ungroup() %>%
-    select(time, value))
+# align_time_grid(data = pad_df,
+#   timeColumn = "time",
+#   valueColumn = "value",
+#   isCumulative = F,s
+#   isOnChange = F,
+#   inputFrequency = "PT1H",
+#   outputFrequency = "P1D",
+#   aggregationFunction = "AVG")
+
+align_time_grid <- function(data, 
+                            timeColumn="time", valueColumn="value",
+                            isRealColumn="isReal", outputFrequency, 
+                            aggregationFunctions=c("SUM","AVG","MIN","MAX"), 
+                            useEstimatedValues=F, tz="UTC") {
+  
+  data <- data %>% rename(
+    time = timeColumn,
+    value = valueColumn,
+    isReal = isRealColumn
+  )
+  
+  data$time <- lubridate::with_tz(data$time,tz)
+  
+  if(useEstimatedValues==F && "isReal" %in% colnames(data)){
+    data <- data %>% 
+      filter(isReal==T)
+  }
+  
+  freq_in_secs <- as.numeric(names(sort(table(difftime(
+    data$time,lag(data$time,1),units="secs")),decreasing = T)))[1]
+  if(
+    lubridate::period(
+      as.numeric(names(sort(table(difftime(data$time,lag(data$time,1),units = "secs")),
+                            decreasing = T)))[1],
+      units = "secs") >= lubridate::period(outputFrequency) ){
+    results <- data %>%
+      mutate(
+        SUM = value,
+        AVG = value,
+        MIN = value,
+        MAX = value,
+        GAPS = 0,
+        RATIO = 1
+      )
+  } else {
+    results <- data %>%
+      mutate(time = lubridate::floor_date(time, lubridate::period(outputFrequency),
+                                          week_start = getOption("lubridate.week.start", 1)
+      )) %>%
+      group_by(time) %>%
+      summarize(
+        SUM = sum(value, na.rm = TRUE),
+        AVG = mean(value, na.rm = TRUE),
+        MIN = min(value, na.rm = TRUE),
+        MAX = max(value, na.rm = TRUE),
+        GAPS = sum(is.na(value)) / length(value),
+        RATIO = if(outputFrequency %in% c("m","P1M")){
+          sum(!is.na(value))*freq_in_secs /
+            (lubridate::days_in_month(time[1])*86400)
+        } else {
+          sum(!is.na(value))*freq_in_secs /
+            as.numeric(lubridate::seconds(lubridate::period(outputFrequency)))
+        }
+      ) %>%
+      ungroup()
+  }
+  results <- results %>%
+    select(time, all_of(unlist(aggregationFunctions,use.names = F)[aggregationFunctions %in% c("AVG","SUM","MIN","MAX")]), 
+           GAPS, RATIO)
+  if (any(c("HDD","CDD") %in% unlist(aggregationFunctions,use.names = F))){
+    daily_data <- data %>%
+      mutate(time = lubridate::floor_date(time, lubridate::period("P1D"),
+                                          week_start = getOption("lubridate.week.start", 1)
+      )) %>%
+      group_by(time) %>%
+      summarize(
+        AVG = mean(value, na.rm = TRUE)
+      ) %>%
+      ungroup() %>%
+      select(time, AVG)
+    if ("HDD" %in% unlist(aggregationFunctions,use.names = F)){
+      results_hdd <- degree_days(
+        data = daily_data,
+        temperatureFeature = "AVG",
+        localTimeZone = tz,
+        baseTemperature = c(20,21,22),
+        mode = "heating",
+        outputFrequency = outputFrequency,
+        outputFeaturesName = "HDD")
+      results <- merge(results, results_hdd, by = "time")
+    }
+    if ("CDD" %in% unlist(aggregationFunctions,use.names = F)){
+      results_cdd <- degree_days(
+        data = daily_data,
+        temperatureFeature = "AVG",
+        localTimeZone = tz,
+        baseTemperature = c(20,21,22),
+        mode = "cooling",
+        outputFrequency = outputFrequency,
+        outputFeaturesName = "CDD")
+      results <- merge(results, results_cdd, by = "time")
+    }
+  }
+  
+  return(results)
 }
