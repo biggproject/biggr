@@ -600,7 +600,7 @@ normalise_range <- function(data, lower = 0, upper = 1, lowerThreshold = NULL, u
     }
     return(result)
   }
-  if(class(data)[1] %in% c("matrix","data.frame")){
+  if(class(data)[1] %in% c("matrix","data.frame","tbl_df")){
     return(data %>%
            mutate_all(normalise, lower, upper, lowerThreshold, upperThreshold))
   } else {
@@ -814,18 +814,20 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
   D <- diag(apply(A, 1, sum))
   U <- D - A
   evL <- eigen(U, symmetric = TRUE)
-  evSpectrum <- log(rev(evL$values)[1:kMax] + 1e-12)
+  evSpectrum <- log(rev(evL$values)[1:(kMax+1)] + 1e-12)
   evSpectrum <- evSpectrum - lag(evSpectrum, 1)
-  if ((which.max(evSpectrum) - 1) <= 3) {
-    evSpectrum[1:which.max(evSpectrum)] <- NA
-  }
+  evSpectrum[1] <- 0
+  # if ((which.max(evSpectrum) - 1) <= 3) {
+  #   evSpectrum[1:which.max(evSpectrum)] <- NA
+  # }
   k <- which.max(evSpectrum) - 1
   spectral_clust <- tryCatch({
     kernlab::specc(apply(tmp_norm$values,1:2,as.numeric), centers = k, kernel = "polydot", 
           kpar = list(degree = 2), nystrom.red = T, nystrom.sample = nrow(tmp_norm$values)[1]/6, 
           iterations = 400, mod.sample = 0.75, na.action = na.omit)
   }, error = function(e) {
-    1
+    kernlab::specc(apply(tmp_norm$values,1:2,as.numeric), centers = k,
+                   iterations = 400, mod.sample = 0.75, na.action = na.omit)
   })
   spectral_clust_valid <- (!(class(spectral_clust)[1] == "numeric"))
   s <- as.factor(spectral_clust)

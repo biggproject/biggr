@@ -502,6 +502,7 @@ RLS <- function(input_parameters){
       y <<- y
       transformationSentences <<- transformationSentences
       formulaTerms <<- formulaTerms
+      # param <- mod$bestTune
       print(paste(paste(colnames(param),param[1,],sep=": "),collapse=", "))
       
       features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
@@ -686,6 +687,7 @@ RLS <- function(input_parameters){
                        modelSelection="rmse") {
       modelFit <<- modelFit
       newdata <<- newdata
+      # newdata <- df_for_pred
       newdata <- as.data.frame(newdata)
       newdata <- newdata[order(newdata$localtime),]
       features <- modelFit$meta$features
@@ -824,6 +826,7 @@ RLS <- function(input_parameters){
               min_rmse = localtime[which.min(rmse)],
               random_select = sample(localtime,size = 1)
             )
+          
           if(modelSelection=="random"){
             mod_coef <- mod_coef %>% 
               left_join(mod_coef_summary,by = "window") %>%
@@ -842,20 +845,29 @@ RLS <- function(input_parameters){
                      data.frame(
                       newdata$localtime[allowed_times],
                       if (logOutput) {
-                        exp(newdata_matrix[allowed_times,colnames(modelFit$coefficients)] %*% 
-                          t(mod_coef_aux[,colnames(modelFit$coefficients)]))
+                        exp(
+                          # mapply(function(i){
+                          #   sum(
+                          #     newdata_matrix[i,colnames(modelFit$coefficients)] * 
+                          #       mod_coef_aux[1,colnames(modelFit$coefficients)],
+                          #   na.rm=T)},which(allowed_times))
+                          #   
+                          newdata_matrix[allowed_times,colnames(modelFit$coefficients)] %*%
+                          t(mod_coef_aux[1,colnames(modelFit$coefficients)])
+                        )
                       } else {
-                        newdata_matrix[allowed_times,colnames(modelFit$coefficients)] %*% 
-                          t(mod_coef_aux[,colnames(modelFit$coefficients)])
+                        rowSums(
+                          newdata_matrix[allowed_times,colnames(modelFit$coefficients)] %*%
+                            t(mod_coef_aux[1,colnames(modelFit$coefficients)]),
+                          na.rm=T)
                       }
                      ), c("localtime",
                         paste0("yhat_",strftime(mod_coef_aux[1,"localtime"],format="%Y%m%dT%H%M%S",tz = "UTC")))
                    )
-                   result[,2] <- if(!is.null(maxPredictionValue)){
-                     ifelse(result[,2] > maxPredictionValue, maxPredictionValue, 
-                            result[,2])
-                   } else {
-                     result[,2]
+                   if(!is.null(maxPredictionValue)){
+                    result[,2] <- ifelse(result[,2] > maxPredictionValue, 
+                                         maxPredictionValue, 
+                                         result[,2])
                    }
                    result
                  })
@@ -878,11 +890,10 @@ RLS <- function(input_parameters){
               "pred"= if (logOutput) { exp(newdata[,modelFit$meta$outputName]) } 
                       else { newdata[,modelFit$meta$outputName] }
             )
-          timePred[,"pred"] <- if(!is.null(maxPredictionValue)){
-            ifelse(timePred[,"pred"] > maxPredictionValue, maxPredictionValue, 
-                   timePred[,"pred"])
-          } else {
-            timePred[,"pred"]
+          if(!is.null(maxPredictionValue)){
+            timePred[,"pred"] <- ifelse(timePred[,"pred"] > maxPredictionValue, 
+                                        maxPredictionValue, 
+                                        timePred[,"pred"])
           }
           probs <- c(0.025,0.05,0.1,0.25,0.375,0.5,0.625,0.75,0.9,0.95,0.975)
           timeDistribPred <- cbind(
@@ -899,7 +910,8 @@ RLS <- function(input_parameters){
               c("mean"))
           )
           result <- merge(timeN, timePred,by="localtime", all=T)
-          merge(result, timeDistribPred,by="localtime", all=T)
+          result <- merge(result, timeDistribPred,by="localtime", all=T)
+          result
         }
         
       }
@@ -964,7 +976,7 @@ train.formula <- function (form, data, weights, subset, na.action = na.fail,
   cons <- attr(x, "contrast")
   int_flag <- grepl("(Intercept)", colnames(x))
 
-  if (any(int_flag)) 
+  if (any(int_flag))
     x <- x[, !int_flag, drop = FALSE]
   w <- as.vector(model.weights(m))
   y <- model.response(m)

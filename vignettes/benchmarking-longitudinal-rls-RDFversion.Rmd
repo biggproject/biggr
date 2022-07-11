@@ -169,6 +169,8 @@ ggplotly(
 
 In the following chunk, the total electricity consumption and the outdoor temperature signals are plotted over time.
 ```{r}
+#df$Qe <- ifelse(df$localtime>=as.POSIXct("2021-06-01 00:00:00",tz="Europe/Madrid"),df$Qe/0.8,df$Qe)
+#df$Qe <- ifelse(df$localtime>=as.POSIXct("2021-06-01 00:00:00",tz="Europe/Madrid"),df$Qe*0.8,df$Qe)
 ts_p <- ggplot(
     reshape2::melt( df %>% select(time, Qe, temperature) %>% pad(), 
                     "time")
@@ -225,11 +227,11 @@ clust <- clustering_dlc(
   consumptionFeature = "Qe", 
   outdoorTemperatureFeature = "temperature", 
   localTimeZone = "Europe/Madrid",
-  kMax = 4, 
+  kMax = 8, 
   inputVars = c("loadCurves","dailyConsumption","dailyHolidays"),
   loadCurveTransformation = "relative",
   holidaysDates = holidays_dates,
-  nDayParts = 12
+  nDayParts = 24
 )
 if("s" %in% colnames(df))
   df <- df %>% select(-s) 
@@ -257,6 +259,8 @@ p
 In order to improve the modelling performance, the days with outliers are not considered. The methodology used to detect them is a calendar-based quantile regression model.
 
 ```{r}
+if(all(c("value","window") %in% colnames(df)))
+  df <- df %>% select(-value, -window) 
 df <- df %>%
   select(!(contains("outliers") | contains("upperPredCalendarModel") | 
              contains("lowerPredCalendarModel"))) %>%
@@ -269,7 +273,7 @@ df <- df %>%
                                       lowerModelPercentile = 10,
                                       upperPercentualThreshold = 75,
                                       lowerPercentualThreshold = 25,
-                                      window = 24*31*60*60, 
+                                      window = 6*31*24*60*60, 
                                       outputPredictors = T,
                                       holidaysCalendar = holidays_dates,
                                       logValueColumn = T),
@@ -323,18 +327,20 @@ wdep$cooling <- wdep$cooling > 0
 Then, set initial values for the data transformation parameters.
 
 ```{r}
+#    nhar tbalh tbalc maxh maxc alpha   lambda
+# 54    6     9    13   50   50   0.9 0.999558
 general_params <- list(
       "nhar"=list(
         "class"="integer",
-        "values"=c(5,6)
+        "values"=6#c(5,6)
       ),
       "tbalh"=list(
         "class"="float",
-        "values"=seq(round(wdep$tbal,0)-3,round(wdep$tbal,0)+3,by=1)
+        "values"=seq(round(wdep$tbal,0)-4,round(wdep$tbal,0)+4,by=2)
       ),
       "tbalc"=list(
         "class"="float",
-        "values"=seq(round(wdep$tbal,0)-3,round(wdep$tbal,0)+3,by=1)
+        "values"=seq(round(wdep$tbal,0)-4,round(wdep$tbal,0)+4,by=2)
       ),
       "maxh"=list(
         "class"="float",
@@ -346,12 +352,13 @@ general_params <- list(
       ),
       "alpha"=list(
         "class"="float",
-        "values"=c(0.9)
+        "values"=c(0.95)
       ),
       "lambda"=list(
         "class"="float",
-        "values"=c(get_lpf_smoothing_time_scale(data.frame("time"=df$time),
-          24*30*if(length(unique(df$monthInt))<12){length(unique(df$monthInt))}else{12}))
+        "values"=c(get_lpf_smoothing_time_scale(data.frame("time"=df$time),8640)
+          #24*30*if(length(unique(df$monthInt))<12){length(unique(df$monthInt))}else{12})
+        )
       )
     )
 ```
@@ -371,7 +378,7 @@ general_transformationSentences <- list(
      # Fourier series components of the hour of the day by weekdays and weekends. 
      "weekhour" = c(
        "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
-       "s"
+       "isHolidays"
      ),
      
      # Fill some gaps in the outdoor temperature time series.
@@ -414,42 +421,42 @@ general_transformationSentences <- list(
      #and weekday/weekend
      "th"=c("heatingLpf",
             "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
-            "s"
+            "isHolidays"
             ),
      
      # Regression components for the cooling degrees depending on the hour of the day 
      # and weekday/weekend
      "tc"=c("coolingLpf",
             "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
-            "s"
+            "isHolidays"
             ),
      
      # Regression components for the heating degrees depending on the hour of the day 
      #and weekday/weekend
      "th2"=c("heatingLpf2",
             "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
-            "s"
+            "isHolidays"
             ),
      
      # Regression components for the cooling degrees depending on the hour of the day 
      # and weekday/weekend
      "tc2"=c("coolingLpf2",
             "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
-            "s"
+            "isHolidays"
             ),
      
      # Regression components for the heating intercept depending on the hour 
      # of the day and weekday/weekend
      "thint"=c("heatingLpfBool",
             "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
-            "s"
+            "isHolidays"
             ),
      
      # Regression components for the cooling intercept depending on the hour 
      # of the day and weekday/weekend
      "tcint"=c("coolingLpfBool",
             "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
-            "s"
+            "isHolidays"
            )
     )
 ```
@@ -457,12 +464,12 @@ general_transformationSentences <- list(
 Finally, a training control sentence is defined to specify the validation methology that needs to be used. In this case, a time-slice cross-validation is performed.
 
 ```{r}
-trControl <- #trainControl(method="none"),
+trControl <- #trainControl(method="none")
       if(nrow(df) >= hourly_timesteps(1.5*365*24,detect_time_step(df$time))){
         trainControl(method = "timeslice",
                      initialWindow = hourly_timesteps(365*24,detect_time_step(df$time)),
-                     horizon = hourly_timesteps(14*24,detect_time_step(df$time)),
-                     skip = hourly_timesteps(365/4*24,detect_time_step(df$time))-1,
+                     horizon = hourly_timesteps(3*31*24,detect_time_step(df$time)),
+                     skip = hourly_timesteps(365/2*24,detect_time_step(df$time))-1,
                      fixedWindow = T#,
                      # summaryFunction = regression_metrics
                      )
@@ -789,7 +796,7 @@ pred_distribution <-
                               hours(mod$finalModel$meta$minMonthsTraining*30*24))
                           ),detect_time_step(df_for_pred$time)))
                       },
-                    modelWindow="%Y-%m-%d", 
+                    modelWindow="%Y-%W", 
                     modelSelection="rmse" ) %>%
   left_join(df_for_pred[,c("localtime","Qe")],"localtime")
 
@@ -811,7 +818,7 @@ pred_distribution_d <- aggregate(
 pred_distribution_d <- cbind(
   setNames(
     as.data.frame(mapply(function(v){
-      rollmean(pred_distribution_d[,v],k = 14,fill = c(NA,NA,NA),align="center",partial=T)
+      rollmean(pred_distribution_d[,v],k = 31,fill = c(NA,NA,NA),align="center",partial=T)
     }, vars_to_resample)),
   paste0(vars_to_resample,"_smoothed")
   ),
