@@ -233,15 +233,15 @@ calendar_components <- function (data, localTimeZone = NULL, holidays = c(), inp
 #' transformed. Optionally, other variables that are not declared in
 #' featuresNames can be bypassed to the output.
 #' @param featuresNames <list string> selecting the series to transform.
+#' @param mask <boolean serie> containing the timestamps that should be
+#' accounted for the transformation. The timestamps set to false will
+#' consider 0's for all their related sine-cosine components. By default,
+#' all elements of the time series are considered.
 #' @param nHarmonics <integer> defines the number of harmonics considered
 #' in the Fourier Series. A high number allows to model more precisely
 #' the relation, but it considerably increase the cost of computation.
 #' The number of harmonics is related with the number of features in
 #' the output matrix
-#' @param mask <boolean serie> containing the timestamps that should be
-#' accounted for the transformation. The timestamps set to false will
-#' consider 0's for all their related sine-cosine components. By default,
-#' all elements of the time series are considered.
 #' @param inplace: <boolean> indicating if the output should be the original data argument, 
 #' plus the transformed objects -True- , or only the transformed series -False.
 #' @return data <timeSeries> containing the same initial information of data input argument, plus the sine-cosine components of the Fourier Series as new columns.
@@ -270,12 +270,14 @@ fs_components <- function (data, featuresNames, nHarmonics, mask=NULL, inplace=T
 #' Calculate the difference between outdoor temperature and a base temperature,
 #' without considering the frequency of the original data.
 #'
-#' @param data <timeSeries> containing the series to transform.
+#' @param temperature <timeSeries> of outdoor temperature of a location. 
+#' Optionally, other variables that are not declared in
+#' featuresNames can be bypassed to the output.
 #' @param featuresNames <string> giving the column name of the outdoor temperature feature.
 #' @param baseTemperature <float> describing the Balance Point Temperature (BPT)
 #' used in the calculation. Below BPT in heating mode, heat would be required by
 #' the building. The contrary in the case of cooling, over BPT in cooling mode.
-#' @param outputFeaturesNames <string> giving the column name used as output of the transformation.
+#' @param featuresNames <string> giving the column name used as output of the transformation.
 #' By default, "heating" or "cooling" depending the mode used in the transformation.
 #' @param mode: <string> describing the calculation mode, which could be "cooling"
 #' or "heating". By default, "heating" is configured.
@@ -312,12 +314,16 @@ vectorial_transformation <- function(series, outputFeatureName){
   return(setNames(data.frame(series),outputFeatureName))
 }
 
+add_to_dataframe <- function(data, newColumn){
+  return(cbind(data, newColumn))
+}
+
+
 #' Calculate the degree-days with a desired output frequency and considering
 #' cooling or heating mode.
 #'
-#' @param data <timeSeries> containing the series to transform.
+#' @param temperature <timeSeries> of outdoor temperature of a location.
 #' Maximum input frequency is daily ("D") or higher ("H","15T",...).
-#' @param featuresNames <string> giving the column name of the outdoor temperature feature.
 #' @param localTimeZone <string> specifying the local time zone related to
 #' the building in analysis. The format of this time zones are defined by
 #' the IANA Time Zone Database (https://www.iana.org/time-zones). This
@@ -327,16 +333,15 @@ vectorial_transformation <- function(series, outputFeatureName){
 #' Temperature (BPT) used in the calculation. Below BPT in heating mode,
 #' heat would be required by the building. The contrary in the case of
 #' cooling, over BPT in cooling mode
-#' @param outputFeaturesNames <string> giving the column name used as output of the transformation.
-#' By default, "heating" or "cooling" depending the mode used in the transformation.
 #' @param mode <string> describing the calculation mode, which could be
 #' "cooling" or "heating". By default, "heating" is configured.
 #' @param outputTimeStep <string> The frequency used to resample the daily
 #' degree days. It must be a string in ISO 8601 format representing the
-#' time step. Only yearly ("P1Y"), monthly ("P1M"), daily ("P1D") output time
+#' time step. Only yearly ("Y"), monthly ("M"), daily ("D") output time
 #' steps are allowed.
 #' @return degreeDays <timeSeries> in the outputTimeStep of the heating or
 #' cooling degree days.
+
 degree_days <- function(data, temperatureFeature, localTimeZone, baseTemperature,
                         mode = "heating", outputFrequency = "P1D", outputFeaturesName = "HDD",
                         fixedOutputFeaturesName=F) {
@@ -348,7 +353,7 @@ degree_days <- function(data, temperatureFeature, localTimeZone, baseTemperature
     ) %>%
     group_by(time) %>%
     summarize(
-      !!featuresName := mean(!!as.name(featuresName), na.rm = TRUE)
+      value = mean(value, na.rm = TRUE)
     )
   dd_ <- do.call(cbind,lapply(FUN = function(b) {
       degree_raw(tmp, featuresName = "value", baseTemperature = b, mode = mode, 
@@ -356,7 +361,6 @@ degree_days <- function(data, temperatureFeature, localTimeZone, baseTemperature
                  inplace = F)
     }, baseTemperature))
   dd_$time <- tmp$time
-  
   return(
     dd_ %>%
        mutate(group = lubridate::floor_date(time, lubridate::period(outputFrequency),
@@ -371,7 +375,6 @@ degree_days <- function(data, temperatureFeature, localTimeZone, baseTemperature
        mutate(time = lubridate::force_tz(time, tz))
     )
 }
-
 
 get_change_point_temperature <- function(consumptionData, weatherData, 
                                          consumptionFeature, 
@@ -597,11 +600,6 @@ normalise_range <- function(data, lower = 0, upper = 1, lowerThreshold = NULL,
 #' @param data <timeSeries> containing serie to normalise
 #' @param method <string> Normalization method. Supported methods
 #'   relative
-#' @param localTimeZone <string> specifying the local time zone related to
-#' the building in analysis. The format of this time zones are defined by
-#' the IANA Time Zone Database (https://www.iana.org/time-zones). This
-#' argument is optional, by default no transformation to local time zone is
-#' done.
 #' @return daily normalised timeserie
 normalise_daily <- function(data, method = "relative", localTimeZone) {
   if (!(method == "relative")) stop("Method not supported")
@@ -646,8 +644,7 @@ normalise_zscore <- function(data,scalingAttr=NULL) {
 #' @param localTimeZone <string> timezone
 #' @param transformation <string> absolute or relative
 #' @param inputVars <list of strings> Possible values: loadCurves, daysWeekend, daysHolidays,
-#' daysWeek, dailyTemperature, dailyConsumption, ratioDailyConsumptionTemperature, dailyHdd,
-#' dailyCdd
+#' daysWeek, dailyTemperature, dailyConsumption
 #' @param nDayParts <int> number of part days
 #' @param holidays <list date> holidays dates
 #' @param scalingAttr <data.frame> it includes the scaling attributes for each variable
@@ -929,7 +926,7 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
 #' of a building, the outdoor temperature, or whatever input is needed for clustering.
 #' @param consumptionFeature <string> containing the column name the consumption feature 
 #' in the data argument.
-#' @param outdoorTemperatureFeature <string> containing the column name of the outdoor temperature feature
+#' @param temperature <string> containing the column name of the outdoor temperature feature
 #' in the data argument.
 #' @param localTimeZone <string> local time zone
 #' @param clustering <object> clustering_dlc() output
@@ -1104,6 +1101,7 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
         "vars" = do.call(c,trFields)
       )
     }
+    
     featuresAll <- features[!(features %in% names(transformationItems))]
     for(trFeat in names(transformationItems)[names(transformationItems) %in% features]){
       featuresAll <- c(featuresAll, transformationItems[[trFeat]]$vars)
