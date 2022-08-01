@@ -1,0 +1,125 @@
+---
+title: "Clustering load curves"
+output:
+  rmdformats::html_docco:
+    thumbnails: true
+    lightbox: true
+    gallery: true
+pkgdown:
+  as_is: true  
+---
+
+Along this vignette, the clustering of load curves is presented. Data from a single
+building in biggr dataset is used as sample case. Daily load patterns are obtained from
+clustering data considering both absolute consumption and temperature
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# Load the needed libraries
+
+```{r setup,echo=FALSE}
+library(data.table)
+library(ggplot2)
+library(gridExtra)
+library(plotly)
+library(padr)
+library(htmlwidgets)
+library(carrier)
+library(biggr)
+```
+
+# Load an example dataset
+
+The biggr package has internally preloaded six datasets containing hourly electricity consumption and weather data from six different buildings.
+
+```{r}
+data(biggr)
+df <- electricity3 %>% calendar_components(localTimeZone = "Europe/Madrid")
+df <- cbind(df, do.call(cbind,oce::sunAngle(df$time,latitude=41.5,longitude=1))[,c("azimuth","altitude")])
+df <- df %>% filter(!duplicated(df$time))
+```
+
+```{r}
+# Time series plots
+ts_p <- ggplot(
+    reshape2::melt( df %>% select(time, Qe, temperature, windSpeed, GHI) %>% pad(), 
+                    "time")
+  ) + 
+  geom_line(
+    aes(time,value)
+  ) + 
+  facet_wrap(~variable, scales = "free_y", ncol=1) +
+  theme_bw()
+ts_p <- ggplotly(ts_p)
+ts_p
+```
+
+```{r}
+# Scatter plots of the electricity consumption and outdoor temperature
+grid.arrange(
+  ggplot(aggregate(df[,c("temperature","Qe")],by=list("date"=as.Date(df$localtime)),FUN=mean)) + 
+      geom_point(
+        aes(temperature, Qe),
+        size=0.05
+    )
+)
+```
+
+```{r}
+# All daily load curves at once
+ggplot(df) + 
+  geom_line(
+    aes(hour, Qe, group=date),
+    alpha=0.05
+  ) + xlab("hour of the day")
+```
+
+```{r}
+# All weekly load curves at once
+ggplot(df) + 
+  geom_line(
+    aes(weekhour, Qe, group=paste(strftime(localtime,"%Y"),strftime(localtime,"%U"))),
+    alpha=0.1
+  ) + xlab("hour of the week")
+```
+
+# Clustering the daily load curves
+
+```{r}
+clust <- clustering_dlc(
+  data = df,
+  consumptionFeature = "Qe", 
+  outdoorTemperatureFeature = "temperature", 
+  localTimeZone = "Europe/Madrid", 
+  kMax = 4, 
+  inputVars = c("loadCurves","dailyConsumption"),
+  loadCurveTransformation = "absolute",
+  nDayParts = 24
+)
+if("s" %in% colnames(df))
+  df <- df %>% select(-s) 
+df <- df %>% left_join(clust$dailyClassification)
+df <- df[!is.na(df$s),] # Once the classification procedure works, no need for this.
+```
+
+```{r}
+# All daily load curves depending the patterns detected
+p <- ggplotly(
+  ggplot(df) + 
+    geom_line(
+      aes(hour, Qe, group=date, col=s),
+      alpha=0.05
+    ) + 
+    xlab("hour of the day") + 
+    facet_wrap(~s) +
+    theme_bw()
+  )
+saveWidget(p, "clustering_dlc.html", selfcontained = T)
+p
+```
+

@@ -1,0 +1,13 @@
+/data/20_buildings_new_model/*
+*.DS_Store
+*.Rbuildignore
+*.Rproj.user
+*.Rhistory
+.RData
+*.Ruserdata
+inst/doc
+.Rproj.user
+*.pdf
+*.html
+data/10_building.json
+data/10_building.ttl
