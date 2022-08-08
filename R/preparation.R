@@ -1,17 +1,3 @@
-# timesteps <- list(
-#   "1" = "PT1S",
-#   "60" = "PT1M",
-#   "3600" = "PT1H",
-#   "86400" = "P1D",
-#   "604800" = "P1W",
-#   "2419200" = "P1M",
-#   "2505600" = "P1M",
-#   "2592000" = "P1M",
-#   "2678400" = "P1M",
-#   "31536000" = "P1Y",
-#   "31622400" = "P1Y"
-# )
-
 roundISOPeriods <- list(
   "P1W" = c("P7D"),
   "P2W" = c("P14D"),
@@ -25,77 +11,26 @@ roundISOPeriods <- list(
   "P1Y" = c("P364D","P365D","P366D","P367D","P368D")
 )
 
-# seqsteps <- list(
-#   "PT1S" = "sec",
-#   "PT1M" = "min",
-#   "PT1H" = "hour",
-#   "P1D" = "day",
-#   "P1W" = "week",
-#   "P1M" = "month",
-#   "P1Y" = "year"
-# )
-# 
-# roundsteps <- list(
-#   "PT1S" = "second",
-#   "PT1M" = "minute",
-#   "PT1H" = "hour",
-#   "P1D" = "day",
-#   "P1W" = "week",
-#   "P1M" = "month",
-#   "P1Y" = "year"
-# )
-
-# approx_timesteps <- function(x) {
-#   # NOTE: Tricky fix to manage non-exact scenarios. Find closest timestep
-#   # Review close interval per each of the timesteps
-#   approx <- list(
-#     "PT1S" = c(0, 0), # 0s
-#     "PT1M" = c(-2, 2), # 2s
-#     "PT1H" = c(-2 * 60, -2 * 60), # -+2min
-#     "P1D" = c(-1 * 60 * 60, 1 * 60 * 60), # -+1hour
-#     "P1W" = c(-1 * 60 * 60, 1 * 60 * 60), # -+1hour
-#     "P1M" = c(-1 * 24 * 60 * 60, 1 * 24 * 60 * 60), # -+1day
-#     "P1Y" = c(-1 * 24 * 60 * 60, 1 * 24 * 60 * 60) # -+1day
-#   )
-#   for (name in names(x))
-#   {
-#     step <- timesteps[[name]]
-#     min_secs <- approx[[step]][1]
-#     max_secs <- approx[[step]][2]
-#     secs <- as.integer(name) + seq(min_secs, max_secs, 1)
-#     steps <- rep(step, length(secs))
-#     names(steps) <- secs
-#     x <- append(x, as.list(steps))
-#   }
-#   return(x)
-# }
-
-# invert <- function(x) {
-#   v <- as.integer(names(x))
-#   names(v) <- as.character(x)
-#   return(v)
-# }
-
 #' The function infers, i.e. automatically deduce from the input data, the
 #' minimum time step (frequency) that can be used for the input time series.
 #'
 #' @param data <timeSeries> Input time series whose time step has to be detected.
-#' @param maxMissingTimeSteps <int> Optional tolerance threshold specifying the
-#' maximum tolerable percentage of missing values on the total length of the time
-#' series.
-#' @return timeStep <string> A string in ISO 8601 format representing the period or timestep
-#' (e.g. "PT15M","PT1H", "P3M", "P1D" ,...).
+#' @return timeStep <string> A string in ISO 8601 format representing the period
+#' or timestep (e.g. "PT15M","PT1H", "P3M", "P1D" ,...).
 
-detect_time_step <- function(data){#, maxMissingTimeSteps = 0, approxTimeSteps = FALSE) {
-  #if (approxTimeSteps == TRUE) timesteps <- approx_timesteps(timesteps)
+detect_time_step <- function(data){
   if (class(data)[1]=="POSIXct"){
     data <- data.frame("time"=data)
   }
   if(nrow(data)<=1) {return(NULL)}
+
+  # Calculate iso8601 period between samples
   raw_timesteps <- difftime(sort(data$time),lag(sort(data$time),1),units="secs")
   iso_timesteps <- lubridate::format_ISO8601(as.period(raw_timesteps[is.finite(raw_timesteps)]))
+  # Obtain most common iso8601 period via contingency table
   iso_period <- names(sort(table(iso_timesteps),T))[1]
-  
+ 
+  # Obtain rounded iso8601 period to bypass/support leap years, etc 
   roundISOPeriods_df <- do.call(rbind,lapply(1:length(roundISOPeriods),function(x){
     data.frame("rounded" = names(roundISOPeriods)[x],
                "original" = roundISOPeriods[[x]])}))
@@ -105,125 +40,23 @@ detect_time_step <- function(data){#, maxMissingTimeSteps = 0, approxTimeSteps =
   }
   
   return(iso_period)
-  # # Use contingency table to identify
-  # # most common frequency
-  # crosstab <- data %>%
-  #   mutate(
-  #     time_lag1 = lag(time, 1),
-  #     secs = as.integer(
-  #       difftime(time, time_lag1, units = "secs")
-  #     )
-  #   ) %>%
-  #   group_by(secs) %>%
-  #   summarize(freq = n()) %>%
-  #   arrange(
-  #     ifelse(maxMissingTimeSteps > 0, desc(freq), secs)
-  #   ) %>% filter(secs>=0)
-  # 
-  # secs <- as.character(crosstab$secs[1])
-  # # WARNING: Expecting significative amount of samples in
-  # # standard frequency (seconds interval) otherwise fails
-  # if (!secs %in% names(timesteps)) {
-  #   return(NULL)
-  # }
-  # timestep <- as.character(timesteps[secs])
-  # 
-  # # Identify missing entries and weight missing data
-  # if (maxMissingTimeSteps > 0) {
-  #   # Create synthetic timeserie with no missing point in order to
-  #   # compare it against the one provided.
-  #   timesteps_ <- unique(
-  #     as.character(
-  #       timesteps[as.character(sort(as.integer(names(timesteps))))]
-  #     )
-  #   )
-  #   timesteps_index <- min(which(timesteps_ == timestep))
-  #   timesteps_ <- tail(
-  #     timesteps_[seq(timesteps_index, timesteps_index + 3)]
-  #   )
-  #   failed <- TRUE
-  # 
-  #   # Iterate over all frequencies lower than the highest frequency
-  #   # one previously identified in order to check the one fulfilling
-  #   # cover requirements
-  #   for (timestep_ in timesteps_)
-  #   {
-  #     # WARNING: Using first timestamp as reference
-  #     # in order to identify periodicity
-  #     start <- floor_date(data$time[1], roundsteps[timestep_],
-  #       week_start = getOption("lubridate.week.start", 1)
-  #     )
-  #     end <- floor_date(data$time[length(data$time)], roundsteps[timestep_],
-  #       week_start = getOption("lubridate.week.start", 1)
-  #     )
-  #     if (timestep_ %in% c("P1M", "P1Y")) {
-  #       start <- data$time[1]
-  #       end <- data$time[length(data$time)]
-  #     }
-  #     timeseq <- seq(start, end, by = as.character(seqsteps[timestep_]))
-  #     # TEMPFIX: seq.Date not properly adding months
-  #     if ((timestep_ == "P1M") & (day(start) == 31)) {
-  #       mask <- day(timeseq) == 1
-  #       timeseq[mask] <- timeseq[mask] - 60 * 60 * 24
-  #     }
-  # 
-  #     # Obtain number of missing comparing against synthetic
-  #     # complete serie
-  #     newdata <- data.frame(time = timeseq)
-  #     n_total <- dim(newdata)[1]
-  #     n_missing <- as.integer(
-  #       newdata %>%
-  #         left_join(data, by = "time") %>%
-  #         select(value) %>%
-  #         summarise(sum(is.na(.)))
-  #     )
-  #     ratio_missing <- n_missing / n_total
-  #     if (ratio_missing < maxMissingTimeSteps) {
-  #       timestep <- timestep_
-  #       failed <- FALSE
-  #       break
-  #     }
-  #   }
-  #   if (failed == TRUE) {
-  #     return(NULL)
-  #   }
-  # }
-  # 
-  # # Specific year handler in order to discriminate between
-  # # start of the year or end of the year
-  # if (timestep == "P1M") {
-  #   tmp <- data %>%
-  #     mutate(
-  #       totaldays = as.integer(days_in_month(time)),
-  #       days = mday(time),
-  #       daystoend = totaldays - days,
-  #       daysfromstart = day(time)
-  #     )
-  #   timestep <- ifelse(
-  #     all(tmp$daystoend == 0), "P1M",
-  #     ifelse(
-  #       all(tmp$daysfromstart == 1), "MS", NULL
-  #     )
-  #   )
-  # } else if (timestep == "Y") {
-  #   # Specific year handler in order to discriminate between
-  #   # start of the year or end of the year
-  #   sof_mask <- (
-  #     month(data$time) == 1 &
-  #       day(data$time) == 1 &
-  #       hour(data$time) == 0
-  #   )
-  #   eof_mask <- (
-  #     month(data$time) == 12 &
-  #       day(data$time) == 31 &
-  #       hour(data$time) == 23
-  #   )
-  #   timestep <- ifelse(all(eof_mask), "Y",
-  #     ifelse(all(sof_mask), "YS", NULL)
-  #   )
-  # }
-  # return(timestep)
 }
+
+#' Time casting from hours to ISO 8601 timesteps
+#'
+#' Supported ISO 8601 timesteps:
+#'   - PT1S
+#'   - PT1M
+#'   - PT1H
+#'   - P1D
+#'   - P1W
+#'   - P1M
+#'   - P1Y
+#'
+#' @param nHours <integer> Number of hours to obtain 
+#' @param timeStep <string> A string in ISO 8601 format representing the period
+#' or timestep (e.g. "PT15M","PT1H", "P3M", "P1D" ,...).
+#' @return Amount of ISO 8601 timesteps corresponding to nHours
 
 hourly_timesteps <- function(nHours, original_timestep) {
   timesteps_to_hour <- list(
@@ -237,6 +70,19 @@ hourly_timesteps <- function(nHours, original_timestep) {
     )
   return(round(timesteps_to_hour[[original_timestep]]*nHours))
 }
+
+
+#' Resample time serie to new ISO 8601 timestep
+#'
+#' Time serie is upsampled creating synthetic forward fill time serie
+#' in case of higher frequency timestep required
+#' Time serie is downsampled maintaing curent values but
+#' repeated indexes in case of lower frequency timestep required
+#'
+#' @param data <timeSeries> Input time series to be resampled
+#' @param timeStep <string> A string in ISO 8601 format representing the period
+#' or timestep (e.g. "PT15M","PT1H", "P3M", "P1D" ,...).
+#' @return Resampled time serie
 
 resample <- function(data, timestep) {
   # Resample (upsample) by creating synthetic comple serie
@@ -286,6 +132,7 @@ resample <- function(data, timestep) {
 #' @return outliers <boolean> timeSeries object using the original time period
 #' and frequency, only assigning True values when an element should be
 #' considered as an outlier.
+
 detect_ts_min_max_outliers <- function(data, min, max, minSeries = NULL, maxSeries = NULL) {
   min_mask <- (data$value < min)
   max_mask <- (data$value > max)
@@ -311,6 +158,7 @@ detect_ts_min_max_outliers <- function(data, min, max, minSeries = NULL, maxSeri
 
 #' Detect elements of the time series out of a Z-score threshold,
 #' applied on the whole timeseries or a rolling window of predefined width.
+
 #' @param data <timeSeries> An argument containing the time series from which
 #' the outliers need to be detected.
 #' @param zScoreThreshold <float> An argument defining the threshold of the
@@ -325,6 +173,7 @@ detect_ts_min_max_outliers <- function(data, min, max, minSeries = NULL, maxSeri
 #' aggregation function of the Zscore is the mean (true), or median(false).
 #' The first one makes the Z-score sensitive to extreme values, and the
 #' second no. Default is true.
+#' @param na.rm <boolean> Remove NAN values in mean, medin and sd functions
 #' @return outliers boolean timeSeries object using the original time period
 #' and frequency, only assigning true values when an element should be
 #' considered as an outlier.
@@ -344,6 +193,29 @@ detect_ts_zscore_outliers <- function(data, zScoreThreshold, window = NULL, zSco
   return(abs(zScore) >= zScoreThreshold)
 }
 
+#' Obtain the components of the Fourier Series, in sine-cosine form
+#'
+#' It is useful for linearising the relationship of a seasonal input
+#' time series (e.g. solar azimuth, solar elevation, calendar features, ...)
+#' to some output (energy consumption, indoor temperatures, ...).
+#' It basically decomposes a cyclic time series into a set of sine-cosine
+#' components that are used as inputs for the modelling of some output,
+#' each of the components linearly depends to the output.
+#' @param X <timeSeries> timeSeries containing the series to transform.
+#' This series must have a cyclic behaviour (e.g. hour of the day, day
+#' of the week, solar azimuth, day of the year, ...) in order to be
+#' correctly transformed. Optionally, other variables that are not
+#' declared in featuresNames can be bypassed to the output..
+#' @param featureNames <list> list of strings selecting the series
+#' to transform
+#' @param nHarmonics <integer> number of harmonics considered in
+#' the Fourier Series. A high number allows to model more precisely
+#' the relation, but it considerably increase the cost of computation.
+#' The number of harmonics is related with the number of features in
+#' the output matrix (2 * nHarmonics) + 1
+#' @return <timeSeries> same initial information of data input argument,
+#' plus the sine-cosine components of the Fourier Series as new columns
+
 fs <- function(X, featureName, nHarmonics) {
   cbind(do.call(cbind,lapply(1:nHarmonics, function(i) {
     value <- list(sin(i * X * 2 * pi), cos(i * X * 2 * 
@@ -354,6 +226,38 @@ fs <- function(X, featureName, nHarmonics) {
   })), setNames(data.frame(rep(1,length(X))),paste0(featureName,"_fs_int")))
 }
 
+#' Detect elements of the time series out of a confidence threshold based
+#' on linear model of the calendar variables (month, weekday, hour).
+#' Detection done in an specific window of data
+#'
+#' @param data timeSeries An argument containing the time series from which
+#' the outliers need to be detected.
+#' @param calendarFeatures: list of strings An optional argument set the
+#' calendar features of the model. Default values are: ["HOL*intercept","H"]
+#' @param mode: string An optional argument setting which outliers need to be
+#' filtered, the ones upper, or the ones lower to the prediction.
+#' Default is "upperAndLower".
+#' @param upperModelPercentile: float An optional argument defining the
+#' percentile used in the quantile regression model for the upper prediction.
+#' Default is 90.
+#' @param lowerModelPercentile: float An optional argument defining the
+#' percentile used in the quantile regression model for the lower prediction.
+#' Default is 10.
+#' @param upperPercentualThreshold: float It sets the dynamic upper threshold
+#' to detect outliers. It is an optional argument to define the percentage
+#' of difference added to the upper model predition itself. Default is 30.
+#' @param lowerPercentualThreshold: float It sets the dynamic lower threshold
+#' to detect outliers. An optional argument to define the percentage of
+#' difference substracted to the predition of the model. () Default is 30.
+#' @param holidaysCalendar list of dates An optional list giving the dates
+#' where local or national holidays related to the location of the data
+#' argument. Default is empty list.
+#' @param daysThatAreOutliers list of outlier dates
+#' @param outputPredictors: boolean. Include calendar regression model prediction
+#' results as output
+#' @param logValueColumn: boolean. Transform value column (log-transformation)
+#' @return timeSeries with time index outliers mask and optional calendar
+#' regression model prediction
 detect_ts_calendar_model_outliers_window <- function(data,
                                                      calendarFeatures = c("HOL", "H"),
                                                      mode = "upperAndLower",
@@ -378,6 +282,9 @@ detect_ts_calendar_model_outliers_window <- function(data,
     )
   if (logValueColumn) newdata$value <- log(newdata$value+1)
   cols_to_fs <- c("H", "U", "W", "m")
+
+  # Identify which calendar feature are included in the quantile regression model
+  # used as baseline
   calendarFeatures <- ifelse(calendarFeatures %in% cols_to_fs, 
                              paste0("as.matrix(fs(", calendarFeatures, ",featureName=\"", 
                                     calendarFeatures,"\",nHarmonics=3))"), calendarFeatures)
@@ -385,6 +292,8 @@ detect_ts_calendar_model_outliers_window <- function(data,
     sep = "~"
   ))
   newdata$value <- ifelse(is.finite(newdata$value),newdata$value,NA)
+
+  # Use quantile regression to obtain expected values under specific quantiles
   model <- tryCatch(
     rq(
       formula,
@@ -413,6 +322,8 @@ detect_ts_calendar_model_outliers_window <- function(data,
   lowerPrediction <- (1 - lowerPercentualThreshold / 100.0) * prediction$lower
   upperPrediction <- (1 + upperPercentualThreshold / 100.0) * prediction$upper
 
+  # Use percentual threshold in order to identify outliers over the quantile
+  # baseline already obtained
   if (mode == "lower") {
     mask <- data$value < lowerPrediction
   } else if (mode == "upper") {
@@ -429,8 +340,15 @@ detect_ts_calendar_model_outliers_window <- function(data,
   }
 }
 
+#' Detect profiled days in data
+#'
+#' @param data timeSeries Data time serie with potential profiled content 
+#' @return list <date> List of dates with profiled data 
+
 detect_profiled_data <- function(data){
   if(period("PT1H")<=detect_time_step(data)){
+    # Create wide data frame with aggregated hourly demand per
+    # each of the days
     data_wide <- data %>% 
       mutate(
         "hourly_lt"=as.POSIXct(format(localtime,"%Y-%m-%d %H"),
@@ -440,6 +358,8 @@ detect_profiled_data <- function(data){
       group_by(hourly_lt) %>%
       summarise(Qe=sum(Qe),date=first(date),hour=first(hour)) %>%
       pivot_wider(id_cols=date,names_from=hour,values_from = Qe,names_sort = T)
+    # Find duplicated days having same daily pattern. Same
+    # consumption in each hour of the day
     check_duplicated <- duplicated(apply(data_wide %>% select(-date),1,paste,collapse=""))
     date_duplicated <- data_wide$date[check_duplicated]
     if(length(date_duplicated)>0){
@@ -462,6 +382,8 @@ detect_profiled_data <- function(data){
 #'
 #' @param data timeSeries An argument containing the time series from which
 #' the outliers need to be detected.
+#' @param localTimeColumn: string Local time column name
+#' @param valueColumn: string Value column name
 #' @param calendarFeatures: list of strings An optional argument set the
 #' calendar features of the model. Default values are: ["HOL*intercept","H"]
 #' @param mode: string An optional argument setting which outliers need to be
@@ -482,14 +404,17 @@ detect_profiled_data <- function(data){
 #' @param holidaysCalendar list of dates An optional list giving the dates
 #' where local or national holidays related to the location of the data
 #' argument. Default is empty list.
+#' @param daysThatAreOutliers list of outlier dates
 #' @param window string. A string in ISO 8601 format representing the
 #' window (e.g. "2m","4m","14D",...). This is an optional argument setting
 #' the width of the window where the model is trained and evaluated
-#' @return outliers boolean timeSeries object using the original time period
-#' and frequency, only assigning true values when an element should be
-#' considered as an outlier.
-#' @return predicted timeSeries of the predicted values of the original
-#' timeSeries based on the calendar regression model.
+#' @param outputPredictor: boolean. Include calendar regression model prediction
+#' results as output
+#' @param logValueColumn: boolean. Transform value column (log-transformation)
+#' @param autoDetectProfiled: boolean. Detect and ignore profiled days from
+#' timeserie
+#' @return timeSeries with time index outliers mask and optional calendar
+#' regression model prediction
 detect_ts_calendar_model_outliers <- function(data,
                                               localTimeColumn="localtime",
                                               valueColumn=outputName,
@@ -506,9 +431,11 @@ detect_ts_calendar_model_outliers <- function(data,
                                               logValueColumn = F,
                                               autoDetectProfiled = T) {
   if(autoDetectProfiled==T)
+    # Ignore days if are profiled
     daysThatAreOutliers <- c(daysThatAreOutliers, detect_profiled_data(data))
   if(class(window)=="numeric"){
     start <- as.integer(seconds(data$time[1]))
+    # Windowize data in order to obtain outliers in data samples
     windowsize <- as.integer(duration(window, units = "seconds"))
     data <- data %>%
       mutate(
@@ -573,9 +500,10 @@ detect_ts_calendar_model_outliers <- function(data,
 #' @param includedMin <boolean> An optional argument setting if the
 #'  minimum value should be included as valid value (true), or not (false).
 #'  Default is true.
-#' @param <includedMax> boolean An optional argument setting if the maximum
+#' @param includedMax <boolean> An optional argument setting if the maximum
 #'  value should be included as valid value (true), or not (false).
 #'  Default is true.
+#' @return Mask of timeserie entries matching criteria
 
 detect_static_min_max_outliers <- function(data, min, max, includeMin = TRUE, includeMax = TRUE) {
   min_mask <- (data < min)
@@ -675,6 +603,10 @@ fill_ts_na <- function(data, outliersMinMax, outliersZScore, outliersCalendarMod
     select(time, value))
 }
 
+#' Round up value or array
+#'
+#' @param x <value|array> Value to be rounded
+#' @return Rounded value
 round_up <- function(x) 10^ceiling(log10(x))
 
 #' The function converts a cumulative (counter) or onChange (delta) measurement
@@ -685,8 +617,9 @@ round_up <- function(x) 10^ceiling(log10(x))
 #' metric, in which the value can increase or decrease and measures a specific
 #' instant in time.
 #' @param measurementReadingType <enumeration> An argument used to define the
-#' measurement reading type
-#'
+#' measurement reading type. Supported readiny types are:
+#'     - onChange. Delta reading type
+#'     - cumulative. Counter reading type
 #' @return data <timeSeries> The cumulative or onChange time series with
 #' the measurements converted to the instantaneous type.
 
@@ -714,12 +647,23 @@ clean_ts_integrate <- function(data, measurementReadingType = "onChange") {
 #' output time step, i.e. with a specific frequency. If the
 #' measurementReadingType of the series is not instantaneous, the data must
 #' be converted first using the function clean_ts_integrate.
-#' @param outputTimeStep <string> The frequency used to resample the input
+#' @param timeColumn <string> Time column in data time serie
+#' @param valueColumn <string> Value column in data time serie
+#' @param isRealColumn <string> isReal boolean column in data time serie
+#' describing estimated value 
+#' @param outputFrequency <string> The frequency used to resample the input
 #' time series for the alignment. It must be a string in ISO 8601 format
 #' representing the time step (e.g. "PT15M","PT1H", "P1M", "P1D",...).
-#' @param aggregationFunction <string> The aggregation function to use when
-#  resampling the series (AVG, SUM, MIN, MAX)
-#'
+#' @param aggregationFunctions <list The aggregation functions to use when
+#'  resampling the series. Supported aggregation functions
+#'     - AVG
+#'     - SUM
+#'     - MIN
+#'     - MAX
+#'     - HDD. Heating degree days. Base temperature 20, 21, 22
+#'     - CDD. Cooling degree days. Base temperature 20, 21, 22
+#' @param useEstimatedValued <boolean> Do not ignore estimated values in input
+#' time serie 
 #' @return data <timeSeries> The time series resampled with the specified
 #' period and aggregation function.
 
@@ -736,7 +680,8 @@ align_time_grid <- function(data,
   )
   
   data$time <- lubridate::with_tz(data$time,tz)
-  
+
+  # Remove estimated values from time serie  
   if(useEstimatedValues==F && ("isReal" %in% colnames(data))){
     dataWithoutEstimates <- data %>% 
       filter(isReal==T)
@@ -749,7 +694,12 @@ align_time_grid <- function(data,
   }
   
   freq_in_secs <- as.numeric(lubridate::period(detect_time_step(data),units = "seconds"))
+
+  # Check whether input time serie timestep is higher than requestd
+  # frequency
   if(lubridate::period(detect_time_step(data)) >= lubridate::period(outputFrequency) ){
+    # Input time serie timestep is higher than requested frequency
+    # so no aggregation is applied
     results <- data %>%
       mutate(
         SUM = value,
@@ -760,6 +710,9 @@ align_time_grid <- function(data,
         RATIO = 1
       )
   } else {
+    # Input time serie timestep is lower than requested frequency
+    # so multiple aggregation method are applied in order to
+    # resample data
     results <- data %>%
       mutate(time = lubridate::floor_date(time, lubridate::period(outputFrequency),
                                           week_start = getOption("lubridate.week.start", 1)
@@ -822,6 +775,23 @@ align_time_grid <- function(data,
   return(results)
 }
 
+#' The function detects periods of time with anomalous low consumption
+#' Evaluates multiple time periods in order to find the best one
+#' fitting a model which considers the relationship between
+#' cooling/heating and consumption
+#'
+#' @param data <timeSeries> Time serie with potential anomalies in
+#' values
+#' @param consumptionValue <string> Consumption column in data time serie
+#' @param timeColumn <string> Time column in data time serie
+#' @param temperatureColumn <string> Temperature column in data time serie
+#' @param tz <string> Timezone
+#' @param minIniDate <date> Minimum date to start looking for anomalies
+#' @param maxIniDate <date> Maximum date to start looking for anomalies
+#' @param minEndDate <date> Minimum date to stop looking for anomalies
+#' @param maxEndDate <date> Maximum date to stop looking for anomalies
+#' @return Period of time <start,end> with anomalous low consumption. Period
+#' of time is within the InitDate and EndDate limits
 
 detect_disruptive_period <- function(data, consumptionColumn, timeColumn, 
                                      temperatureColumn, tz, 
@@ -900,6 +870,9 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
     minDate=seq.Date(minIniDate, maxIniDate, by = "14 days"),
     maxDate=seq.Date(minEndDate, maxEndDate, by="14 days")
   )
+  # Evaluate multiple time periods in order to find the best one
+  # fitting a model which considers the relationship between
+  # cooling/heating and consumption
   results <- mapply(1:nrow(cases_dates),
     FUN = function(k){
       disruptive_period_model(dataM = data_monthly,minDate = cases_dates$minDate[k], 
@@ -908,6 +881,20 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
   )
   return(cases_dates[which.min(results),])
 }
+
+#' The function detects holidays period in tertiary building time serie.
+#' Analysis of turnpoints in density distribution in order to identify
+#' "over represented" low consumption dates. Additional postprocessing is done
+#' in order to take care of additional constraints related to holidays period
+#'
+#' @param data <timeSeries> Time serie with potential anomalies in
+#' values
+#' @param valueColumn <string> Value column
+#' @param timeColumn <string> Time column
+#' @param plotDensiry <boolean> Plot density function used to obtain
+#'  holidays consumption threshold
+#' @param ignoreDates <list> Ignore list of dates in time serie
+#' @return List of dates with classified as holidays
 
 detect_holidays_in_tertiary_buildings <- function(data, valueColumn, timeColumn, plotDensity=T, 
                                                   ignoreDates=c(), tz="UTC"){

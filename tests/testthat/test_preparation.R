@@ -14,22 +14,20 @@ readdata <- function(filename) {
   return(data)
 }
 
-b2backtest <- function(filename, expected, maxMissingTimeSteps = 0, approxTimeSteps = FALSE) {
+b2backtest <- function(filename, expected) {
   testdata <- readdata(filename)
-  obtained <- detect_time_step(testdata, maxMissingTimeSteps, approxTimeSteps)
+  obtained <- detect_time_step(testdata)
   expect(
     obtained == expected,
     "Expected and obtained are different"
   )
 }
 
-b2backtest_missing <- function(filename, expected, maxMissingTimeSteps, missing) {
+b2backtest_missing <- function(filename, expected, missing) {
   testdata <- readdata(filename)
-  if (maxMissingTimeSteps > 0) {
-    testdata <- testdata %>%
-      filter(!row_number() %in% missing)
-  }
-  obtained <- detect_time_step(testdata, maxMissingTimeSteps)
+  testdata <- testdata %>%
+    filter(!row_number() %in% missing)
+  obtained <- detect_time_step(testdata)
   expect(
     obtained == expected,
     "Expected and obtained are different"
@@ -38,133 +36,85 @@ b2backtest_missing <- function(filename, expected, maxMissingTimeSteps, missing)
 
 test_that("Detect secondly time step. No missing second", {
   filename <- "test_data/test_ts_secondly.csv"
-  expected <- "S"
+  expected <- "PT1S"
   b2backtest(filename, expected)
 })
 
 test_that("Detect minutely time step. No missing minute", {
   filename <- "test_data/test_ts_minutely.csv"
-  expected <- "T"
+  expected <- "PT1M"
   b2backtest(filename, expected)
 })
 
 test_that("Detect hourly time step. No missing hour", {
   filename <- "test_data/test_ts_hourly.csv"
-  expected <- "H"
+  expected <- "PT1H"
   b2backtest(filename, expected)
 })
 
 test_that("Detect daily time step. No missing day", {
   filename <- "test_data/test_ts_daily.csv"
-  expected <- "D"
+  expected <- "P1D"
   b2backtest(filename, expected)
 })
 
 test_that("Detect weekly time step. No missing week", {
   filename <- "test_data/test_ts_weekly.csv"
-  expected <- "W"
+  expected <- "P1W"
   b2backtest(filename, expected)
 })
 
 test_that("Detect month start step. No missing month start", {
   filename <- "test_data/test_ts_month_start.csv"
-  expected <- "MS"
+  expected <- "P1M"
   b2backtest(filename, expected)
 })
 
 test_that("Detect month end step. No missing month end", {
   filename <- "test_data/test_ts_month_end.csv"
-  expected <- "M"
+  expected <- "P1M"
   b2backtest(filename, expected)
 })
 
 test_that("Detect year start step. No missing year start", {
   filename <- "test_data/test_ts_year_start.csv"
-  expected <- "YS"
+  expected <- "P1Y"
   b2backtest(filename, expected)
 })
 
 test_that("Detect year end step. No missing year end", {
   filename <- "test_data/test_ts_year_end.csv"
-  expected <- "Y"
+  expected <- "P1Y"
   b2backtest(filename, expected)
 })
 
-test_that("Detect secondly time step. No missing second. maxMissingTimeSteps set", {
-  filename <- "test_data/test_ts_secondly.csv"
-  expected <- "S"
-  b2backtest(filename, expected, 0.05)
-})
-
-test_that("Detect minutely time step. No missing minute. maxMissingTimeSteps set", {
-  filename <- "test_data/test_ts_minutely.csv"
-  expected <- "T"
-  b2backtest(filename, expected, 0.05)
-})
-
-test_that("Detect hourly time step. No missing hour. maxMissingTimeSteps set", {
+test_that("Detect hourly time step. Missing hours", {
   filename <- "test_data/test_ts_hourly.csv"
-  expected <- "H"
-  b2backtest(filename, expected, 0.05)
+  expected <- "PT1H"
+  b2backtest_missing(filename, expected, c(2, 3, 4, 5))
 })
 
-test_that("Detect daily time step. No missing day. maxMissingTimeSteps set", {
-  filename <- "test_data/test_ts_daily.csv"
-  expected <- "D"
-  b2backtest(filename, expected, 0.05)
-})
-
-test_that("Detect weekly time step. No missing week. maxMissingTimeSteps set", {
-  filename <- "test_data/test_ts_weekly.csv"
-  expected <- "W"
-  b2backtest(filename, expected, 0.05)
-})
-
-test_that("Detect month start step. No missing month start. maxMissingTimeSteps set", {
-  filename <- "test_data/test_ts_month_start.csv"
-  expected <- "MS"
-  b2backtest(filename, expected, 0.05)
-})
-
-test_that("Detect month end step. No missing month end. maxMissingTimeSteps set", {
-  filename <- "test_data/test_ts_month_end.csv"
-  expected <- "M"
-  b2backtest(filename, expected, 0.05)
-})
-
-test_that("Detect year end step. No missing year end. maxMissingTimeSteps set", {
-  filename <- "test_data/test_ts_year_end.csv"
-  expected <- "Y"
-  b2backtest(filename, expected, 0.05)
-})
-
-test_that("Detect hourly time step. Missing hours. maxMissingTimeSteps not set", {
+test_that("Detect hourly time step. Missing hours", {
   filename <- "test_data/test_ts_hourly.csv"
-  expected <- "H"
-  b2backtest_missing(filename, expected, 0, c(2, 3, 4, 5))
-})
-
-test_that("Detect hourly time step. Missing hours. maxMissingTimeSteps set", {
-  filename <- "test_data/test_ts_hourly.csv"
-  expected <- "H"
+  expected <- "PT1H"
   data <- readdata(filename)
   mask <- hour(data$time) != 0
   missing <- head(which(mask == TRUE), 10)
-  b2backtest_missing(filename, expected, 0.5, missing)
+  b2backtest_missing(filename, expected, missing)
 })
 
-test_that("Detect hourly time step. Missing hours. maxMissingTimeSteps set", {
+test_that("Detect hourly time step. Missing hours", {
   filename <- "test_data/test_ts_hourly.csv"
   data <- readdata(filename)
   mask <- ((hour(data$time) != 0) & (day(data$time) %in% c(3, 4)))
   missing <- which(mask == TRUE)
-  expected <- "D"
-  b2backtest_missing(filename, expected, 0.4, missing)
+  expected <- "PT1H"
+  b2backtest_missing(filename, expected, missing)
 })
 
 test_that("Detect hourly time step. No missing hour. Approx. timesteps", {
   filename <- "test_data/test_ts_hourly.csv"
-  expected <- "H"
+  expected <- "PT1H"
   b2backtest(filename, expected)
 })
 
@@ -321,12 +271,14 @@ test_that("Detect outlier elements based on calendar model. No window", {
   # WARNING: Naive test to check it launches
   # No quality analysis done
   filename <- "test_data/test_ts_hourly.csv"
-  data <- readdata(filename)
+  data <- readdata(filename) %>% 
+      mutate(localtime = lubridate::with_tz(time, "Europe/Madrid"))
   obtained <- detect_ts_calendar_model_outliers(
     data,
-    localTimeColumn = "time",
+    localTimeColumn = "localtime",
     valueColumn = "value",
-    holidaysCalendar = as_date("2020-03-02")
+    holidaysCalendar = as_date("2020-03-02"),
+    autoDetectProfiled = FALSE
   )
   expected <- rep(FALSE, 97)
   expect(
@@ -340,13 +292,15 @@ test_that("Detect outlier elements based on calendar model. With window", {
   # No quality analysis done
   # set.seed(123); testdata <- create_serie(144, sample(seq(1000), 144))
   filename <- "test_data/test_ts_hourly.csv"
-  data <- readdata(filename)
+  data <- readdata(filename) %>%
+      mutate(localtime = lubridate::with_tz(time, "Europe/Madrid"))
   obtained <- detect_ts_calendar_model_outliers(
     data,
-    localTimeColumn = "time",
+    localTimeColumn = "localtime",
     valueColumn = "value",
     calendarFeatures = c("H"),
-    holidaysCalendar = as_date("2020-03-02")
+    holidaysCalendar = as_date("2020-03-02"),
+    autoDetectProfiled = FALSE
   )
   expected <- rep(FALSE, 97)
   expect(
@@ -579,10 +533,13 @@ test_that("Clean ts integrate using cumulative multiple", {
 
 test_that("Align time grid 1D sum", {
   testdata <- create_serie(48, c(rep(1, 24), rep(2, 24)))
-  expected <- create_serie(2, c(24, 48), timestep = "days")
+  testdata$isReal <- TRUE
+  expected <- create_serie(2, c(24, 48), timestep = "days") %>%
+    rename(SUM = value)
+  expected$GAPS <- c(0, 0)
+  expected$RATIO <- c(1, 1)
   obtained <- align_time_grid(testdata,
-    measurementReadingType = "",
-    outputTimeStep = "1D", aggregationFunction = "sum"
+    outputFrequency = "P1D", aggregationFunction = "SUM"
   )
   expect(
     all(obtained == expected),
@@ -592,10 +549,13 @@ test_that("Align time grid 1D sum", {
 
 test_that("Align time grid 1D avg", {
   testdata <- create_serie(48, c(rep(5, 12), rep(10, 12), rep(2, 24)))
-  expected <- create_serie(2, c(7.5, 2), timestep = "days")
+  testdata$isReal <- TRUE
+  expected <- create_serie(2, c(7.5, 2), timestep = "days") %>%
+      rename(AVG = value)
+  expected$GAPS <- c(0, 0)
+  expected$RATIO <- c(1, 1)
   obtained <- align_time_grid(testdata,
-    measurementReadingType = "",
-    outputTimeStep = "1D", aggregationFunction = "avg"
+    outputFrequency = "P1D", aggregationFunction = "AVG"
   )
   expect(
     all(obtained == expected),
@@ -605,10 +565,13 @@ test_that("Align time grid 1D avg", {
 
 test_that("Align time grid 1D min", {
   testdata <- create_serie(48, c(rep(5, 12), rep(10, 12), rep(2, 24)))
-  expected <- create_serie(2, c(5, 2), timestep = "days")
+  testdata$isReal <- TRUE
+  expected <- create_serie(2, c(5, 2), timestep = "days") %>%
+    rename(SUM = value)
+  expected$GAPS <- c(0, 0)
+  expected$RATIO <- c(1, 1)
   obtained <- align_time_grid(testdata,
-    measurementReadingType = "",
-    outputTimeStep = "1D", aggregationFunction = "min"
+    outputFrequency = "P1D", aggregationFunction = "MIN"
   )
   expect(
     all(obtained == expected),
@@ -618,46 +581,45 @@ test_that("Align time grid 1D min", {
 
 test_that("Align time grid 1D max", {
   testdata <- create_serie(48, c(rep(5, 12), rep(10, 12), rep(2, 24)))
-  expected <- create_serie(2, c(10, 2), timestep = "days")
+  testdata$isReal <- TRUE
+  expected <- create_serie(2, c(10, 2), timestep = "days") %>%
+    rename(MAX = value)
+  expected$GAPS <- c(0, 0)
+  expected$RATIO <- c(1, 1)
   obtained <- align_time_grid(testdata,
-    measurementReadingType = "",
-    outputTimeStep = "1D", aggregationFunction = "max"
+    outputFrequency = "P1D", aggregationFunction = "MAX"
   )
   expect(
     all(obtained == expected),
     "Expected and obtained are different"
   )
 })
+
 test_that("Align time grid 15T sum. Minutes", {
   testdata <- create_serie(120, c(rep(1, 60), rep(2, 60)), timestep = "mins")
-  expected <- create_serie(2, c(60, 120), timestep = "hours")
+  testdata$isReal <- TRUE
+  expected <- create_serie(2, c(60, 120), timestep = "hours") %>%
+    rename(SUM = value)
+  expected$GAPS <- c(0, 0)
+  expected$RATIO <- c(1, 1)
   obtained <- align_time_grid(testdata,
-    measurementReadingType = "",
-    outputTimeStep = "H", aggregationFunction = "sum"
+    outputFrequency = "P1H", aggregationFunction = "SUM"
   )
   expect(
     all(obtained == expected),
     "Expected and obtained are different"
   )
 })
+
 test_that("Align time grid 1D sum. Days", {
   testdata <- create_serie(60, rep(1, 60), timestep = "days")
-  expected <- create_serie(2, c(31, 29), timestep = "months")
+  testdata$isReal <- TRUE
+  expected <- create_serie(2, c(31, 29), timestep = "months") %>%
+    rename(SUM = value)
+  expected$GAPS <- c(0, 0)
+  expected$RATIO <- c(1, 1)
   obtained <- align_time_grid(testdata,
-    measurementReadingType = "",
-    outputTimeStep = "m", aggregationFunction = "sum"
-  )
-  expect(
-    all(obtained == expected),
-    "Expected and obtained are different"
-  )
-})
-test_that("Align time grid 1D sum. Months", {
-  testdata <- create_serie(24, rep(1, 24), timestep = "months")
-  expected <- create_serie(2, c(12, 12), timestep = "years")
-  obtained <- align_time_grid(testdata,
-    measurementReadingType = "",
-    outputTimeStep = "y", aggregationFunction = "sum"
+    outputFrequency = "P1M", aggregationFunction = "SUM"
   )
   expect(
     all(obtained == expected),
