@@ -1,27 +1,18 @@
----
-title: "Data preparation"
-output: rmarkdown::html_vignette
-vignette: >
-  %\VignetteIndexEntry{Data preparation}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
----
-
-```{r, include = FALSE}
+## ---- include = FALSE---------------------------------------------------------
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
-```
 
-```{r setup}
+
+## ----setup--------------------------------------------------------------------
 library(biggr)
 library(ggplot2)
 library(lubridate)
 data(biggr)
-```
 
-```{r, echo=FALSE}
+
+## ---- echo=FALSE--------------------------------------------------------------
 readdata <- function(filename) {
   columns <- c("time", "value")
   data <- read_delim(filename, ";",
@@ -34,42 +25,36 @@ readdata <- function(filename) {
   data$time <- ymd_hms(data$time)
   return(data)
 }
-```
 
-# Timestep managing
 
-## Detect time serie timestemp
-
-Infer minimum time step from the time serie
-
-```{r}
+## -----------------------------------------------------------------------------
 # Secondly time step
 testdata <- readdata("../tests/testthat/test_data/test_ts_secondly.csv")
 head(testdata)
 detect_time_step(testdata)
-```
 
-```{r}
+
+## -----------------------------------------------------------------------------
 # Minutely time step
 testdata <- readdata("../tests/testthat/test_data/test_ts_minutely.csv")
 head(testdata)
 detect_time_step(testdata)
-```
 
-```{r}
+
+## -----------------------------------------------------------------------------
 # Hourly time step
 testdata <- readdata("../tests/testthat/test_data/test_ts_hourly.csv")
 head(testdata)
 detect_time_step(testdata)
-```
 
-```{r}
+
+## -----------------------------------------------------------------------------
 # Daily time step
 testdata <- readdata("../tests/testthat/test_data/test_ts_daily.csv")
 head(testdata)
 detect_time_step(testdata)
-```
-```{r, echo=FALSE}
+
+## ---- echo=FALSE--------------------------------------------------------------
 create_serie <- function(n, values, timestep = "hours", start = ymd_hms("2020-01-01 00:00:00")) {
   funcs <- list(
     "mins" = minutes,
@@ -86,19 +71,9 @@ create_serie <- function(n, values, timestep = "hours", start = ymd_hms("2020-01
     )
   )
 }
-```
 
-# Outliers detection
 
-Multiple outliers detection methods are supported
-
-- min max
-- zscore
-- calendar
-
-## min max
-
-```{r, fig.width=7,fig.height=4}
+## ---- fig.width=7,fig.height=4------------------------------------------------
 serie <- electricity5 %>%
   mutate(time=ymd_hms(time)) %>%
   rename(c("value"="Qe")) %>%
@@ -107,11 +82,9 @@ serie <- electricity5 %>%
 serie$outlier <- detect_ts_min_max_outliers(serie, min = 0, max = 180)
 
 serie %>% ggplot(aes(x=time, y=value, colour=outlier)) + geom_point()
-```
 
-## zscore
 
-```{r, fig.width=7,fig.height=4}
+## ---- fig.width=7,fig.height=4------------------------------------------------
 serie <- electricity5 %>%
   mutate(time=ymd_hms(time)) %>%
   rename(c("value"="Qe")) %>%
@@ -120,11 +93,9 @@ serie <- electricity5 %>%
 serie$outlier <- detect_ts_zscore_outliers(serie, zScoreThreshold=2)
 
 serie %>% ggplot(aes(x=time, y=value, colour=outlier)) + geom_point()
-```
 
-## calendar
 
-```{r, fig.width=7,fig.height=4}
+## ---- fig.width=7,fig.height=4------------------------------------------------
 serie <- electricity5 %>%
   mutate(time=ymd_hms(time)) %>%
   rename(c("value"="Qe")) %>%
@@ -137,18 +108,9 @@ serie$outlier <- detect_ts_calendar_model_outliers(
   )
 
 serie %>% ggplot(aes(x=time, y=value, colour=outlier)) + geom_point()
-```
-
-# Imputation
-
-Multiple imputation methods are supported
-
-- linear interpolation
-- forward
-- backward
 
 
-```{r}
+## -----------------------------------------------------------------------------
 test_fill_ts_na <- function(methodFillNA)
 {
   serie <- electricity5 %>%
@@ -168,40 +130,30 @@ test_fill_ts_na <- function(methodFillNA)
     imputation=ifelse(row_number() %in% missing, TRUE, FALSE))
   )
 }
-```
 
-## Linear interpolation
 
-```{r, fig.width=7,fig.height=4}
+## ---- fig.width=7,fig.height=4------------------------------------------------
 newserie <- test_fill_ts_na("linearInterpolation")
 
 serie %>% ggplot(aes(x=time, y=value)) + geom_point() + ggtitle("ante")
 newserie %>% ggplot(aes(x=time, y=value, colour=imputation)) + geom_point() + ggtitle("post")
-```
 
-## Forward
 
-```{r, fig.width=7,fig.height=4}
+## ---- fig.width=7,fig.height=4------------------------------------------------
 newserie <- test_fill_ts_na("forward")
 
 serie %>% ggplot(aes(x=time, y=value)) + geom_point() + ggtitle("ante")
 newserie %>% ggplot(aes(x=time, y=value, colour=imputation)) + geom_point() + ggtitle("post")
-```
 
-## Backward
 
-```{r, fig.width=7,fig.height=4}
+## ---- fig.width=7,fig.height=4------------------------------------------------
 newserie <- test_fill_ts_na("backward")
 
 serie %>% ggplot(aes(x=time, y=value)) + geom_point() + ggtitle("ante")
 newserie %>% ggplot(aes(x=time, y=value, colour=imputation)) + geom_point() + ggtitle("post")
-```
 
-# Time alignment
 
-Time serie alignment by multiple aggregation function methods.
-
-```{r, fig.width=7,fig.height=4}
+## ---- fig.width=7,fig.height=4------------------------------------------------
 serie <- electricity5 %>%
   mutate(time=ymd_hms(time),) %>%
   rename(c("value"="Qe")) %>%
@@ -217,4 +169,4 @@ newserie <- align_time_grid(
 
 serie %>% ggplot(aes(x=time, y=value)) + geom_point() + ggtitle("ante")
 newserie %>% ggplot(aes(x=time, y=value,)) + geom_point() + ggtitle("post")
-```
+

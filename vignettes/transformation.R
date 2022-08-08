@@ -1,37 +1,18 @@
----
-title: "Data transformation"
-output: rmarkdown::html_vignette
-vignette: >
-  %\VignetteIndexEntry{Data transformation}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
----
-
-```{r, include = FALSE}
+## ---- include = FALSE---------------------------------------------------------
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
-```
 
-```{r setup}
+
+## ----setup--------------------------------------------------------------------
 library(biggr)
 library(ggplot2)
 library(lubridate)
 data(biggr)
-```
-
-# Transformation
-
-Multiple helper functions are provided
 
 
-## Decompose calendar
-
-Decompose the time in date, day of the year, day of the week, day of the
-weekend, working day, non-working day, season, month, hour, minute, ...
-
-```{r, echo=FALSE}
+## ---- echo=FALSE--------------------------------------------------------------
 create_serie <- function(n, values, timestep = "hours", start = ymd_hms("2020-01-01 00:00:00"), featuresName = c("value")) {
   funcs <- list(
     "mins" = minutes,
@@ -50,20 +31,16 @@ create_serie <- function(n, values, timestep = "hours", start = ymd_hms("2020-01
   colnames(tmp) <- c("time", featuresName)
   return(tmp)
 }
-```
 
-```{r}
+
+## -----------------------------------------------------------------------------
 # Get time serie calendar properties
 start <- ymd_hms("2020-07-01 00:00:00")
 testdata <- create_serie(5, rep(1, 5), timestep = "hours", start = start)
 calendar_components(testdata, "Europe/Madrid")
-```
 
-## Calculate deegree raw and degree days
 
-Calculate the difference between outdoor temperature and a base temperature
-
-```{r}
+## -----------------------------------------------------------------------------
 start <- ymd_hms("2020-12-27 00:00:00")
 featuresName <- c("temperature")
 testdata <- create_serie(7, c(26, 27, 28, 29, 30, 31, 32), timestep = "days",
@@ -75,34 +52,22 @@ newtestdata <- degree_raw(testdata, featuresName, baseTemperature,
 
 print(testdata)
 print(newtestdata)
-```
 
-```{r}
+
+# -----------------------------------------------------------------------------
 start <- ymd_hms("2020-12-27 00:00:00")
 featuresName <- c("temperature")
-testdata <- create_serie(7, c(26, 27, 28, 29, 30, 31, 32), timestep = "days",
-  featuresName = featuresName)
+testdata <- create_serie(7, c(26, 27, 28, 29, 30, 31, 32), timestep = "days", featuresName = featuresName)
 outputFeaturesName <- c("cooling")
 baseTemperature <- 25
-newtestdata <- degree_raw(testdata, featuresName, baseTemperature,
-    outputFeaturesName, mode = "cooling")
+newtestdata <- degree_days(testdata, featuresName, "Europe/Madrid",
+    baseTemperature, outputFeaturesName, mode = "cooling", outputFrequency = "P1D")
 
 print(testdata)
 print(newtestdata)
-```
 
-## Normalization
 
-Multiple normalization methods are provided
-
-- Range int
-- Daily
-- ZScore
-- Profile
-
-### Range int normalization
-
-```{r}
+## -----------------------------------------------------------------------------
 testdata <- data.frame(
   value1 = c(0, 0, 25, 25, 100, 100),
   value2 = c(0, 0, 50, 50, 100, 100)
@@ -111,11 +76,9 @@ newtestdata <- normalise_range(testdata, lower = 0, upper = 1)
 
 print(testdata)
 print(newtestdata)
-```
 
-### Daily normalization
 
-```{r, fig.width=7,fig.height=4}
+## ---- fig.width=7,fig.height=4------------------------------------------------
 serie <- electricity5 %>%
   mutate(
     time=ymd_hms(time)
@@ -127,11 +90,9 @@ newserie <- normalise_daily(serie, localTimeZone = "Europe/Madrid")
 
 serie %>% ggplot(aes(x=time, y=value)) + geom_point() + ggtitle("ante")
 newserie %>% ggplot(aes(x=time, y=value)) + geom_point() + ggtitle("post")
-```
 
-### Zscore normalization
 
-```{r, fig.width=7,fig.height=4}
+## ---- fig.width=7,fig.height=4------------------------------------------------
 serie <- electricity5 %>%
   mutate(
     time=ymd_hms(time)
@@ -143,4 +104,3 @@ newserie <- normalise_zscore(serie$value)
 
 serie %>% ggplot(aes(x=time, y=value)) + geom_point() + ggtitle("ante")
 newserie %>% ggplot(aes(x=time, y=value)) + geom_point() + ggtitle("post")
-```
