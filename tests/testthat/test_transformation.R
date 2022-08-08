@@ -399,11 +399,12 @@ test_that("Degree raw. Heating. infreq=D, outfreq=D", {
   start <- ymd_hms("2020-12-27 00:00:00")
   featuresName <- c("temperature")
   testdata <- create_serie(7, c(18, 19, 20, 21, 22, 23, 24), timestep = "days", featuresName = featuresName)
-  outputFeaturesName <- c("heating")
+  outputFeaturesName <- c("heating21")
   baseTemperature <- 21
   expected <- create_serie(7, c(3, 2, 1, 0, 0, 0, 0), timestep = "days", featuresName = outputFeaturesName)
+  expected$time <- lubridate::force_tz(expected$time, "Europe/Madrid")
   obtained <- (
-    degree_days(testdata, featuresName, "Europe/Madrid", baseTemperature, outputFeaturesName, mode = "heating", outputTimeStep = "D")
+    degree_days(testdata, featuresName, "Europe/Madrid", baseTemperature, outputFeaturesName, mode = "heating", outputFrequency = "P1D")
   )
   expect(
     all(obtained == expected),
@@ -415,11 +416,12 @@ test_that("Degree raw. Heating under. infreq=D, outfreq=D", {
   start <- ymd_hms("2020-12-27 00:00:00")
   featuresName <- c("temperature")
   testdata <- create_serie(7, c(10, 11, 12, 13, 14, 15, 16), timestep = "days", featuresName = featuresName)
-  outputFeaturesName <- c("heating")
+  outputFeaturesName <- c("heating20")
   baseTemperature <- 20
   expected <- create_serie(7, c(10, 9, 8, 7, 6, 5, 4), timestep = "days", featuresName = outputFeaturesName)
+  expected$time <- lubridate::force_tz(expected$time, "Europe/Madrid")
   obtained <- (
-    degree_days(testdata, featuresName, "Europe/Madrid", baseTemperature, outputFeaturesName, mode = "heating", outputTimeStep = "D")
+    degree_days(testdata, featuresName, "Europe/Madrid", baseTemperature, outputFeaturesName, mode = "heating", outputFrequency = "P1D")
   )
   expect(
     all(obtained == expected),
@@ -431,11 +433,12 @@ test_that("Degree raw. Heating over. infreq=D, outfreq=D", {
   start <- ymd_hms("2020-12-27 00:00:00")
   featuresName <- c("temperature")
   testdata <- create_serie(7, c(21, 22, 23, 24, 25, 26, 27), timestep = "days", featuresName = featuresName)
-  outputFeaturesName <- c("heating")
+  outputFeaturesName <- c("heating20")
   baseTemperature <- 20
   expected <- create_serie(7, rep(0, 7), timestep = "days", featuresName = outputFeaturesName)
+  expected$time <- lubridate::force_tz(expected$time, "Europe/Madrid")
   obtained <- (
-    degree_days(testdata, featuresName, "Europe/Madrid", baseTemperature, outputFeaturesName, mode = "heating", outputTimeStep = "D")
+    degree_days(testdata, featuresName, "Europe/Madrid", baseTemperature, outputFeaturesName, mode = "heating", outputFrequency = "P1D")
   )
   expect(
     all(obtained == expected),
@@ -447,11 +450,12 @@ test_that("Degree raw. Cooling. infreq=D, outfreq=D", {
   start <- ymd_hms("2020-12-27 00:00:00")
   featuresName <- c("temperature")
   testdata <- create_serie(7, c(22, 23, 24, 25, 26, 27, 28), timestep = "days", featuresName = featuresName)
-  outputFeaturesName <- c("cooling")
+  outputFeaturesName <- c("cooling25")
   baseTemperature <- 25
   expected <- create_serie(7, c(0, 0, 0, 0, 1, 2, 3), timestep = "days", featuresName = outputFeaturesName)
+  expected$time <- lubridate::force_tz(expected$time, "Europe/Madrid")
   obtained <- (
-    degree_days(testdata, featuresName, "Europe/Madrid", baseTemperature, outputFeaturesName, mode = "cooling", outputTimeStep = "D")
+    degree_days(testdata, featuresName, "Europe/Madrid", baseTemperature, outputFeaturesName, mode = "cooling", outputFrequency = "P1D")
   )
   expect(
     all(obtained == expected),
@@ -463,11 +467,12 @@ test_that("Degree raw. Cooling under. infreq=D, outfreq=D", {
   start <- ymd_hms("2020-12-27 00:00:00")
   featuresName <- c("temperature")
   testdata <- create_serie(7, c(10, 11, 12, 13, 14, 15, 16), timestep = "days", featuresName = featuresName)
-  outputFeaturesName <- c("cooling")
+  outputFeaturesName <- c("cooling25")
   baseTemperature <- 25
   expected <- create_serie(7, rep(0, 7), timestep = "days", featuresName = outputFeaturesName)
+  expected$time <- lubridate::force_tz(expected$time, "Europe/Madrid")
   obtained <- (
-    degree_days(testdata, featuresName, "Europe/Madrid", baseTemperature, outputFeaturesName, mode = "cooling", outputTimeStep = "D")
+    degree_days(testdata, featuresName, "Europe/Madrid", baseTemperature, outputFeaturesName, mode = "cooling", outputFrequency = "P1D")
   )
   expect(
     all(obtained == expected),
@@ -479,11 +484,12 @@ test_that("Degree raw. Cooling over. infreq=D, outfreq=D", {
   start <- ymd_hms("2020-12-27 00:00:00")
   featuresName <- c("temperature")
   testdata <- create_serie(7, c(26, 27, 28, 29, 30, 31, 32), timestep = "days", featuresName = featuresName)
-  outputFeaturesName <- c("cooling")
+  outputFeaturesName <- c("cooling25")
   baseTemperature <- 25
   expected <- create_serie(7, c(1, 2, 3, 4, 5, 6, 7), timestep = "days", featuresName = outputFeaturesName)
+  expected$time <- lubridate::force_tz(expected$time, "Europe/Madrid")
   obtained <- (
-    degree_days(testdata, featuresName, "Europe/Madrid", baseTemperature, outputFeaturesName, mode = "cooling", outputTimeStep = "D")
+    degree_days(testdata, featuresName, "Europe/Madrid", baseTemperature, outputFeaturesName, mode = "cooling", outputFrequency = "P1D")
   )
   expect(
     all(obtained == expected),
@@ -497,11 +503,12 @@ test_that("Degree raw. Cooling over. infreq=H, outfreq=D", {
   featuresName <- c("temperature")
   testdata <- create_serie(48, serie, timestep = "hours", featuresName = featuresName)
   testdata$time <- with_tz(force_tz(testdata$time, "Europe/Madrid"), "UTC")
-  outputFeaturesName <- c("cooling")
+  outputFeaturesName <- c("cooling25")
   baseTemperature <- 25
   expected <- create_serie(2, c(1, 2), timestep = "days", featuresName = outputFeaturesName)
+  expected$time <- lubridate::force_tz(expected$time, "Europe/Madrid")
   obtained <- (
-    degree_days(testdata, featuresName, "Europe/Madrid", baseTemperature, outputFeaturesName, mode = "cooling", outputTimeStep = "D")
+    degree_days(testdata, featuresName, "Europe/Madrid", baseTemperature, outputFeaturesName, mode = "cooling", outputFrequency = "P1D")
   )
   expect(
     all(obtained == expected),
@@ -516,11 +523,12 @@ test_that("Degree raw. Cooling over. infreq=D, outfreq=M", {
     timestep = "days", featuresName = featuresName
   )
   testdata$time <- with_tz(force_tz(as_datetime(testdata$time), "Europe/Madrid"), "UTC")
-  outputFeaturesName <- c("heating")
+  outputFeaturesName <- c("heating25")
   baseTemperature <- 25
   expected <- create_serie(1, 0 + 10 * 1 + 3 * 11, timestep = "days", featuresName = outputFeaturesName)
+  expected$time <- lubridate::force_tz(expected$time, "Europe/Madrid")
   obtained <- (
-    degree_days(testdata, featuresName, "Europe/Madrid", baseTemperature, outputFeaturesName, mode = "cooling", outputTimeStep = "M")
+    degree_days(testdata, featuresName, "Europe/Madrid", baseTemperature, outputFeaturesName, mode = "cooling", outputFrequency = "P1M")
   )
   expect(
     all(obtained == expected),
@@ -534,12 +542,18 @@ test_that("Normalize range int", {
     value2 = c(0, 0, 50, 50, 100, 100)
   )
   obtained <- normalise_range(testdata, lower = 0, upper = 1)
-  expected <- data.frame(
+  expected_values <- data.frame(
     value1 = c(0, 0, 0.25, 0.25, 1.0, 1.0),
     value2 = c(0, 0, 0.50, 0.50, 1.0, 1.0)
   )
+  expected_scaling <- data.frame(
+    value1 = c(0, 100),
+    value2 = c(0, 100)
+  )
+  row.names(expected_scaling) <- c("min", "max")
   expect(
-    all(obtained == expected),
+    (all(obtained$values == expected_values) &
+    all(obtained$scalingAttr == expected_scaling)),
     "Expected and obtained are different"
   )
 })
@@ -549,13 +563,29 @@ test_that("Normalize range int with thresholds", {
     value1 = c(0, 0, 25, 25, 100, 100),
     value2 = c(0, 0, 50, 50, 100, 100)
   )
-  obtained <- normalise_range(testdata, lower = 0, upper = 1, 0.30, 0.75)
-  expected <- data.frame(
-    value1 = c(0.30, 0.30, 0.30, 0.30, 0.75, 0.75),
-    value2 = c(0.30, 0.30, 0.50, 0.50, 0.75, 0.75)
+  obtained <- normalise_range(
+      testdata,
+      lower = 0,
+      upper = 1,
+      lowerThreshold = c(0, 0),
+      upperThreshold = c(100, 100)
+  )
+  expected_values <- data.frame(
+    value1 = c(0, 0, 0.25, 0.25, 1.0, 1.0),
+    value2 = c(0, 0, 0.5, 0.5, 1.0, 1.0)
   )
   expect(
-    all(obtained == expected),
+    all(obtained$values == expected_values),
+    "Expected and obtained are different"
+  )
+
+  expected_scaling <- data.frame(
+
+    value1 = c(0, 100),
+    value2 = c(0, 100)
+  )
+  expect(
+    all(obtained$scalingAttr == expected_scaling),
     "Expected and obtained are different"
   )
 })
@@ -580,19 +610,20 @@ test_that("normalize daily", {
 test_that("normalize zscore", {
   serie <- c(rep(10, 12), rep(20, 12), rep(5, 12), rep(10, 12))
   testdata <- create_serie(48, serie, timestep = "hours")
-  obtained <- normalise_zscore(testdata)
+  obtained <- normalise_zscore(testdata$value)
   serie <- c(
-    rep(0.0, 12), rep(1.816107, 12),
-    rep(-0.9080536, 12), rep(0.0, 12)
+    rep(-0.2270134, 12), rep(1.5890939, 12),
+    rep(-1.1350670, 12), rep(-0.2270134, 12)
   )
-  expected <- create_serie(48, serie, timestep = "hours")
   expect(
-    all.equal(as.data.frame(obtained), expected, tolerance = 0.0001),
+    (all.equal(obtained$values, serie, tolerance = 0.0001)) &
+    (all.equal(obtained$scalingAttr["mean", 1], 11.250000, tolerance = 0.0001)) &
+    (all.equal(obtained$scalingAttr["sd", 1], 5.506283, tolerance = 0.0001)),
     "Expected and obtained are different"
   )
 })
 
-# test_that("normalize load relative", {
+#test_that("normalize load relative", {
 #  serie <- c(rep(10, 12), rep(20, 12), rep(10, 12), rep(5, 12))
 #  testdata <- create_serie(48, serie, timestep = "hours")
 #  testdata$time <- with_tz(force_tz(testdata$time, "Europe/Madrid"), "UTC")
@@ -609,9 +640,9 @@ test_that("normalize zscore", {
 #    all.equal(expected, obtained),
 #    "Expected and obtained are different"
 #  )
-# })
+#})
 #
-# test_that("normalize load absolute", {
+#test_that("normalize load absolute", {
 #  serie <- c(rep(10, 12), rep(20, 12), rep(10, 12), rep(5, 12))
 #  testdata <- create_serie(48, serie, timestep = "hours")
 #  testdata$time <- with_tz(force_tz(testdata$time, "Europe/Madrid"), "UTC")
@@ -628,8 +659,9 @@ test_that("normalize zscore", {
 #    all.equal(expected, obtained),
 #    "Expected and obtained are different"
 #  )
-# })
-# test_that("normalize load relative inputvars", {
+#})
+#
+#test_that("normalize load relative inputvars", {
 #  serie <- c(rep(10, 12), rep(20, 12), rep(10, 12), rep(5, 12))
 #  testdata <- create_serie(48, serie, timestep = "hours")
 #  testdata$time <- with_tz(force_tz(testdata$time, "Europe/Madrid"), "UTC")
@@ -657,4 +689,4 @@ test_that("normalize zscore", {
 #    all.equal(expected, obtained),
 #    "Expected and obtained are different"
 #  )
-# })
+#})
