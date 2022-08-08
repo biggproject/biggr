@@ -91,6 +91,7 @@ detect_time_step <- function(data){#, maxMissingTimeSteps = 0, approxTimeSteps =
   if (class(data)[1]=="POSIXct"){
     data <- data.frame("time"=data)
   }
+  if(nrow(data)<=1) {return(NULL)}
   raw_timesteps <- difftime(sort(data$time),lag(sort(data$time),1),units="secs")
   iso_timesteps <- lubridate::format_ISO8601(as.period(raw_timesteps[is.finite(raw_timesteps)]))
   iso_period <- names(sort(table(iso_timesteps),T))[1]
@@ -234,7 +235,7 @@ hourly_timesteps <- function(nHours, original_timestep) {
     "P1M" = 1/(30*24),
     "P1Y" = 1/(365*24)
     )
-  return(ceiling(timesteps_to_hour[[original_timestep]]*nHours))
+  return(round(timesteps_to_hour[[original_timestep]]*nHours))
 }
 
 resample <- function(data, timestep) {
@@ -937,15 +938,15 @@ detect_holidays_in_tertiary_buildings <- function(data, valueColumn, timeColumn,
   ## Estimate the cons_limit based on the day with minimum consumption of the week 
   data_dayweek <-
     mapply(function(i){
-      zoo::rollapply(ifelse(data$dayweek==i,data[,valueColumn],NA),
+      na.locf(zoo::rollapply(ifelse(data$dayweek==i,data[,valueColumn],NA),
                      width=30*3,partial=T,align="center",fill=c(NA,NA,NA),
-                     FUN=function(x){max(x,na.rm=T)})
+                     FUN=function(x){max(x,na.rm=T)}))
     },sort(unique(data$dayweek)))
-  # cons_limit <- matrixStats::rowQuantiles(data_dayweek,probs = 0.01)
-  cons_limit <- matrixStats::rowMins(data_dayweek)
+  cons_limit <- matrixStats::rowQuantiles(data_dayweek,probs = 0.01)
+  #cons_limit <- matrixStats::rowMins(data_dayweek)
   
   days_detected <- as.Date(data[
-    !(as.Date(data[,timeColumn],tz=tz) %in% covid_lockdown_weekdays) &
+    !(as.Date(data[,timeColumn],tz=tz) %in% ignoreDates) &
       data[,valueColumn] <= cons_limit & is.finite(data[,valueColumn]), timeColumn], tz=tz)
   
   # Estimate the cons_limit based on the minimum standard deviation

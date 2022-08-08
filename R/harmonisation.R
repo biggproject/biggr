@@ -39,6 +39,22 @@ get_tz_building <- function(buildingsRdf, buildingId){
   return( if(length(metadata_df)>0) {as.character(metadata_df$tz)} else {NULL} )
 }
 
+get_area_building <- function(buildingsRdf, buildingId){
+  metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0('
+        PREFIX bigg: <http://bigg-project.eu/ontology#>
+        SELECT ?area
+        WHERE {
+          ?b a bigg:Building .
+          ?b bigg:buildingIDFromOrganization "',buildingId,'" .
+          ?b bigg:hasSpace ?s .
+          ?s bigg:hasArea ?a .
+          ?a bigg:hasAreaType ?types .
+          FILTER regex(str(?types),"GrossFloorArea$") .
+          ?a bigg:areaValue ?area .
+        }')))
+  return( if(length(metadata_df)>0) {as.numeric(metadata_df$area)} else {NULL} )
+}
+
 get_sensor_metadata <- function(buildingsRdf, sensorId){
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0('
         PREFIX bigg: <http://bigg-project.eu/ontology#>
@@ -124,6 +140,12 @@ iso8601_period_to_text <- function(x,only_first=F){
   return(do.call(function(...) paste(..., sep=", "), text_items))
 }
 
+iso8601_period_to_timedelta <- function(x){
+  x <- lubridate::period(x)
+  return(years(x@year) + months(x@month) + days(x@day) +
+           hours(x@hour) + minutes(x@minute) + seconds(lubridate::second(x)))
+}
+
 read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId,
                                       outputFrequency, aggFunctions,
                                       useEstimatedValues){
@@ -135,6 +157,14 @@ read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId,
   # estimation method defined in the sensor metadata
   if(metadata$considerEstimatedValues==T && useEstimatedValues==F)
     useEstimatedValues <- T
+  
+  # If timeseriesObject is NULL, read certain sensor
+  if(is.character(timeseriesObject)){
+    jsonFiles <- list.files(timeseriesObject,"json",full.names=T)
+    timeseriesObject <- unlist(lapply(
+      jsonFiles[grepl(sensorId,jsonFiles)],
+      function(x){jsonlite::fromJSON(x)}),recursive=F)
+  }
   
   timeseriesSensor <- timeseriesObject[sensorId][[1]]
   timeseriesSensor$start <- parse_iso_8601(timeseriesSensor$start)
@@ -336,7 +366,7 @@ parse_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
   return(result)
 }
 
-get_device_aggregators_by_building <- function(buildingsRdf, timeseriesObject, 
+get_device_aggregators_by_building <- function(buildingsRdf, timeseriesObject=NULL, 
                                                allowedBuildingId=NULL, 
                                                allowedDeviceAggregators=NULL, 
                                                useEstimatedValues=F,

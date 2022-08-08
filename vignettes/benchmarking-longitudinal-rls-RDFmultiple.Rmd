@@ -26,6 +26,7 @@ The 'biggr' package and other R packages are loaded to be used along this script
 library(biggr)
 library(data.table)
 library(ggplot2)
+library(lubridate)
 library(gridExtra)
 library(plotly)
 library(padr)
@@ -143,6 +144,7 @@ buildings_df <- get_device_aggregators_by_building(
   allowedBuildingId=buildingId, 
   allowedDeviceAggregators=c("totalElectricityConsumption","outdoorTemperature"), 
   useEstimatedValues=F, ratioCorrection=T)
+tz <- get_tz_building(buildingsRdf, buildingId)
 ```
 
 ## Get the data for a specific building
@@ -157,30 +159,43 @@ df <- data.frame(
 df <- df[min(which(is.finite(df$Qe))):nrow(df),]
 ```
 
+```{r}
+date_period <- as.duration(as.Date(max(df$time[is.finite(df$Qe)]), tz=tz) - 
+       as.Date(min(df$time[is.finite(df$Qe)]), tz=tz))
+```
+
 Add the calendar features to the dataset using the timezone contained in the RDF for that building.
 
 ````{r}
-tz <- get_tz_building(buildingsRdf, buildingId)
+# Detect the COVID influenced period if data is over COVID lockdown & return-to-normality period
+# with a minimum of one-year period.
+if( ( (as.Date(min(df$time[is.finite(df$Qe)]), tz=tz) <= as.Date("2020-03-14")) &&
+      (date_period >= as.duration("P1Y"))
+    ) ||
+    ( (as.Date(max(df$time[is.finite(df$Qe)]), tz=tz) >= as.Date("2022-06-30")) &&
+      (date_period >= as.duration("P1Y"))
+    )
+){
+  covid_affected_period <- detect_disruptive_period(data=df, consumptionColumn="Qe", 
+    temperatureColumn="temperature", timeColumn = "time", tz=tz, 
+    minIniDate = max(min(as.Date(df$time[is.finite(df$Qe)], tz=tz)),as.Date("2020-03-14")), 
+    maxIniDate = max(min(as.Date(df$time[is.finite(df$Qe)], tz=tz)),as.Date("2020-04-14")),
+    minEndDate = as.Date("2020-06-21"), 
+    maxEndDate = min(as.Date(max(as.Date(df$time[is.finite(df$Qe)], tz=tz))),as.Date("2022-06-30")))
+  
+  covid_affected_period <- 
+    seq.Date(covid_affected_period$minDate,covid_affected_period$maxDate,by = "days")
+} else {
+  covid_affected_period <- c()
+}
 
-# Detect holidays and define special periods
-covid_affected_period <- detect_disruptive_period(data=df, consumptionColumn="Qe", 
-  temperatureColumn="temperature", timeColumn = "time", tz=tz, 
-  minIniDate = as.Date("2020-03-14"), maxIniDate = as.Date("2020-04-14"),
-  minEndDate = as.Date("2020-06-21"), maxEndDate = as.Date(max(df$time)))
-
-covid_affected_period <- 
-  seq.Date(covid_affected_period$minDate,covid_affected_period$maxDate,by = "days")
-
-covid_lockdown_weekdays <- covid_affected_period[!(format(covid_affected_period,"%u") %in% c("6","7"))]
-
+# Detect holidays
 holidays_dates <- detect_holidays_in_tertiary_buildings(
   data = df, 
   valueColumn = "Qe", 
   timeColumn = "time", 
   tz=tz,
-  ignoreDates = covid_lockdown_weekdays
-                #COVID lockdown period
-  )
+  ignoreDates = covid_affected_period)
 
 # Add the calendar components
 df <- df %>% calendar_components(
@@ -209,7 +224,7 @@ ts_p <- ggplot(
   ) + 
   facet_wrap(~variable, scales = "free_y", ncol=1) +
   theme_bw()
-ts_p
+saveWidget(ggplotly(ts_p), "raw_consumption_temperature.html", selfcontained = T)
 ```
 
 Then, with the objective of understanding the relation between the electricity consumption and the outdoor temperature, a scatter plot of the electricity consumption and outdoor temperature is depicted.
@@ -799,7 +814,7 @@ with(mlflow_start_run(experiment_id = experimentId),{
   tryCatch(mlflow_create_registered_model(paste0(buildingId,"~rls")),error=function(e){})
   mlflow_create_model_version(paste0(buildingId,"~rls"),
                               run_link = sprintf("runs:/%s/model",
-                                                 mlflow_get_run()$run_uuid[1]))
+                                                 mlflow_get_run()$run_uuid[1]),)
 })
 ```
 

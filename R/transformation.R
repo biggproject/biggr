@@ -509,7 +509,7 @@ get_change_point_temperature <- function(consumptionData, weatherData,
                      y=mod_results[[best]]$yhat),
                  col="red",size=2) +
         geom_vline(aes(xintercept=results$tbal[best]),col="red") +
-      theme_bw() + xlab(""))
+      theme_bw() + xlab("temperature (ºC)") + ylab("consumption (kWh)"))
   }
   # mod_results <<- mod_results
   # consumptionDataD <<- consumptionDataD

@@ -8,6 +8,8 @@ Description: "This is the R implementation of the AI Toolbox functions developed
 Encoding: UTF-8
 LazyData: false 
 Depends:
+    glmnet,
+    ranger,
     rdflib,
     magrittr,
     parsedate,
