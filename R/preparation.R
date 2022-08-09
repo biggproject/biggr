@@ -345,15 +345,19 @@ detect_ts_calendar_model_outliers_window <- function(data,
 #' @param data timeSeries Data time serie with potential profiled content 
 #' @return list <date> List of dates with profiled data 
 
-detect_profiled_data <- function(data){
+detect_profiled_data <- function(data, valueColumn="value", localTimeColumn="localtime") {
   if(period("PT1H")<=detect_time_step(data)){
     # Create wide data frame with aggregated hourly demand per
     # each of the days
-    data_wide <- data %>% 
+    data_wide <- data %>%
+      rename(Qe = !!valueColumn) %>%
+      rename(localtime = !!localTimeColumn) %>%
       mutate(
-        "hourly_lt"=as.POSIXct(format(localtime,"%Y-%m-%d %H"),
-                               format="%Y-%m-%d %H",
-                               tz = attr(localtime[1],"tzone"))
+        hourly_lt=as.POSIXct(format(localtime,"%Y-%m-%d %H"),
+                              format="%Y-%m-%d %H",
+                              tz = attr(localtime[1],"tzone")),
+        date = lubridate::as_date(hourly_lt),
+        hour = lubridate::hour(hourly_lt)
       ) %>%
       group_by(hourly_lt) %>%
       summarise(Qe=sum(Qe),date=first(date),hour=first(hour)) %>%
@@ -432,7 +436,7 @@ detect_ts_calendar_model_outliers <- function(data,
                                               autoDetectProfiled = T) {
   if(autoDetectProfiled==T)
     # Ignore days if are profiled
-    daysThatAreOutliers <- c(daysThatAreOutliers, detect_profiled_data(data))
+    daysThatAreOutliers <- c(daysThatAreOutliers, detect_profiled_data(data, valueColumn, localTimeColumn))
   if(class(window)=="numeric"){
     start <- as.integer(seconds(data$time[1]))
     # Windowize data in order to obtain outliers in data samples
