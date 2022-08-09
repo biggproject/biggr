@@ -102,12 +102,15 @@ serie <- electricity5 %>%
   select(time, value) %>%
   head(150)
 serie$value[seq(125, 130)] <- 300
-serie$outlier <- detect_ts_calendar_model_outliers(
+outliers <- detect_ts_calendar_model_outliers(
     serie,
-    calendarFeatures = c("H")
+    localTimeColumn = "time",
+    calendarFeatures = c("H"),
+    autoDetectProfiled = FALSE,
+    valueColumn = "value"
   )
-
-serie %>% ggplot(aes(x=time, y=value, colour=outlier)) + geom_point()
+serie <- serie %>% left_join(outliers, by="time")
+serie %>% ggplot(aes(x=time, y=value, colour=outliers)) + geom_point()
 
 
 ## -----------------------------------------------------------------------------
@@ -156,17 +159,17 @@ newserie %>% ggplot(aes(x=time, y=value, colour=imputation)) + geom_point() + gg
 ## ---- fig.width=7,fig.height=4------------------------------------------------
 serie <- electricity5 %>%
   mutate(time=ymd_hms(time),) %>%
+  mutate(isReal=TRUE) %>%
   rename(c("value"="Qe")) %>%
-  select(time, value) %>%
+  select(time, value, isReal) %>%
   head(150)
 
 newserie <- align_time_grid(
   serie,
-  measurementReadingType = "",
-  outputTimeStep = "D",
-  aggregationFunction = "sum"
+  outputFrequency = "P1D",
+  aggregationFunction = "SUM"
 )
 
 serie %>% ggplot(aes(x=time, y=value)) + geom_point() + ggtitle("ante")
-newserie %>% ggplot(aes(x=time, y=value,)) + geom_point() + ggtitle("post")
+newserie %>% ggplot(aes(x=time, y=SUM,)) + geom_point() + ggtitle("post")
 
