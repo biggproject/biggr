@@ -139,7 +139,9 @@ serie <- electricity5 %>%
   rename(c("value"="Qe")) %>%
   select(time, value) %>%
   head(24*6)
-newserie <- normalise_zscore(serie$value)
+newvalues <- normalise_zscore(serie$value)
+newserie <- as.data.frame(cbind(serie$time, newvalues$values)) 
+colnames(newserie) <- c("time", "value")
 
 serie %>% ggplot(aes(x=time, y=value)) + geom_point() + ggtitle("ante")
 newserie %>% ggplot(aes(x=time, y=value)) + geom_point() + ggtitle("post")
