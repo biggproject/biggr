@@ -417,7 +417,7 @@ detect_profiled_data <- function(data){
 #' regression model prediction
 detect_ts_calendar_model_outliers <- function(data,
                                               localTimeColumn="localtime",
-                                              valueColumn=outputName,
+                                              valueColumn="value",
                                               calendarFeatures = c("HOL", "H"),
                                               mode = "upperAndLower",
                                               upperModelPercentile = 90,
