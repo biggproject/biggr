@@ -353,9 +353,11 @@ detect_profiled_data <- function(data, valueColumn="value", localTimeColumn="loc
       rename(Qe = !!valueColumn) %>%
       rename(localtime = !!localTimeColumn) %>%
       mutate(
-        "hourly_lt"=as.POSIXct(format(localtime,"%Y-%m-%d %H"),
-                               format="%Y-%m-%d %H",
-                               tz = attr(localtime[1],"tzone"))
+        hourly_lt=as.POSIXct(format(localtime,"%Y-%m-%d %H"),
+                              format="%Y-%m-%d %H",
+                              tz = attr(localtime[1],"tzone")),
+        date = lubridate::as_date(hourly_lt),
+        hour = lubridate::hour(hourly_lt)
       ) %>%
       group_by(hourly_lt) %>%
       summarise(Qe=sum(Qe),date=first(date),hour=first(hour)) %>%
