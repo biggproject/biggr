@@ -1,7 +1,7 @@
 Package: biggr
 Type: Package
 Title: biggr 
-Version: 0.1.1
+Version: 0.1.2
 Author: Pierre Lehanneur, Riccardo De Vivo, Romain Hollanders, Thea Gutmacher, Manu Lahariya, Jordi Carbonell, David Bouret, Aleix Badia, Gerard Mor
 Maintainer: Gerard Mor <gmor@cimne.upc.edu>
 Description: "This is the R implementation of the AI Toolbox functions developed in the framework of BIGG EU-funded project" 
@@ -28,6 +28,7 @@ Depends:
     caret,
     penalized,
     onlineforecast,
+    GA,
     R (>= 2.10)
 License: "" 
 RoxygenNote: 7.1.2
