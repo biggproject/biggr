@@ -553,7 +553,7 @@ test_that("Normalize range int", {
   row.names(expected_scaling) <- c("min", "max")
   expect(
     (all(obtained$values == expected_values) &
-    all(obtained$scalingAttr == expected_scaling)),
+      all(obtained$scalingAttr == expected_scaling)),
     "Expected and obtained are different"
   )
 })
@@ -564,11 +564,11 @@ test_that("Normalize range int with thresholds", {
     value2 = c(0, 0, 50, 50, 100, 100)
   )
   obtained <- normalise_range(
-      testdata,
-      lower = 0,
-      upper = 1,
-      lowerThreshold = c(0, 0),
-      upperThreshold = c(100, 100)
+    testdata,
+    lower = 0,
+    upper = 1,
+    lowerThreshold = c(0, 0),
+    upperThreshold = c(100, 100)
   )
   expected_values <- data.frame(
     value1 = c(0, 0, 0.25, 0.25, 1.0, 1.0),
@@ -580,7 +580,6 @@ test_that("Normalize range int with thresholds", {
   )
 
   expected_scaling <- data.frame(
-
     value1 = c(0, 100),
     value2 = c(0, 100)
   )
@@ -617,13 +616,13 @@ test_that("normalize zscore", {
   )
   expect(
     (all.equal(obtained$values, serie, tolerance = 0.0001)) &
-    (all.equal(obtained$scalingAttr["mean", 1], 11.250000, tolerance = 0.0001)) &
-    (all.equal(obtained$scalingAttr["sd", 1], 5.506283, tolerance = 0.0001)),
+      (all.equal(obtained$scalingAttr["mean", 1], 11.250000, tolerance = 0.0001)) &
+      (all.equal(obtained$scalingAttr["sd", 1], 5.506283, tolerance = 0.0001)),
     "Expected and obtained are different"
   )
 })
 
-#test_that("normalize load relative", {
+# test_that("normalize load relative", {
 #  serie <- c(rep(10, 12), rep(20, 12), rep(10, 12), rep(5, 12))
 #  testdata <- create_serie(48, serie, timestep = "hours")
 #  testdata$time <- with_tz(force_tz(testdata$time, "Europe/Madrid"), "UTC")
@@ -640,9 +639,9 @@ test_that("normalize zscore", {
 #    all.equal(expected, obtained),
 #    "Expected and obtained are different"
 #  )
-#})
+# })
 #
-#test_that("normalize load absolute", {
+# test_that("normalize load absolute", {
 #  serie <- c(rep(10, 12), rep(20, 12), rep(10, 12), rep(5, 12))
 #  testdata <- create_serie(48, serie, timestep = "hours")
 #  testdata$time <- with_tz(force_tz(testdata$time, "Europe/Madrid"), "UTC")
@@ -659,9 +658,9 @@ test_that("normalize zscore", {
 #    all.equal(expected, obtained),
 #    "Expected and obtained are different"
 #  )
-#})
+# })
 #
-#test_that("normalize load relative inputvars", {
+# test_that("normalize load relative inputvars", {
 #  serie <- c(rep(10, 12), rep(20, 12), rep(10, 12), rep(5, 12))
 #  testdata <- create_serie(48, serie, timestep = "hours")
 #  testdata$time <- with_tz(force_tz(testdata$time, "Europe/Madrid"), "UTC")
@@ -689,4 +688,4 @@ test_that("normalize zscore", {
 #    all.equal(expected, obtained),
 #    "Expected and obtained are different"
 #  )
-#})
+# })

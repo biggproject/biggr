@@ -44,10 +44,17 @@ opt_function__ <- function(X, df, test_arg1, ...) {
 }
 
 test_that("Test GA optimization - minimize", {
-  df__ = data.frame(rnorm(100, 10, 4), rnorm(100, 10, 50))
-  test_arg1__ = 45
+  df__ <- data.frame(rnorm(100, 10, 4), rnorm(100, 10, 50))
+  test_arg1__ <- 45
 
-  value <- optimize(opt_criteria="minimise", opt_function=opt_function__, features=features__, suggestions=suggestions__, df=df__, test_arg1=test_arg1__)
+  value <- optimize(
+    opt_criteria = "minimise",
+    opt_function = opt_function__,
+    features = features__,
+    suggestions = suggestions__,
+    df = df__,
+    test_arg1 = test_arg1__
+  )
 
   expected <- list(a = "min", b = 20, c = 60)
   expect(
@@ -57,9 +64,16 @@ test_that("Test GA optimization - minimize", {
 })
 
 test_that("Test GA optimization - maximise", {
-  df__ = data.frame(rnorm(100, 10, 4), rnorm(100, 10, 50))
-  test_arg1__ = 45
-  value <- optimize(opt_criteria="maximise", opt_function=opt_function__, features=features__, suggestions=suggestions__, df=df__, test_arg1=test_arg1__)
+  df__ <- data.frame(rnorm(100, 10, 4), rnorm(100, 10, 50))
+  test_arg1__ <- 45
+  value <- optimize(
+    opt_criteria = "maximise",
+    opt_function = opt_function__,
+    features = features__,
+    suggestions = suggestions__,
+    df = df__,
+    test_arg1 = test_arg1__
+  )
 
   expected <- list(a = "max", b = 20, c = 30)
   expect(

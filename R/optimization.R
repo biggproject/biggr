@@ -1,57 +1,59 @@
 library(GA)
 
-#' Get single attribute from each of the features in the features list 
+#' Get single attribute from each of the features in the features list
 #'
-#' Get single attribute from each of the features in the features list 
+#' Get single attribute from each of the features in the features list
 #'
 #' @param features <list> List of features to get attributes from
 #' Feature description
 #' feature = list(
-#'    datatype = <type of data> (discrete | integer | float) 
+#'    datatype = <type of data> (discrete | integer | float)
 #'    min = <min value>,
 #'    max = <max value>,
 #'    nlevels = <number of levels>,
 #'    levels = <levels> (optional: discrete type specific)
 #' )
 #' @param name <string> Name of the attribute to get
-#' @return <list> of features with the single attribute requested 
+#' @return <list> of features with the single attribute requested
 
-getAttribute <- function(features, name) lapply(function(feature) {
-   if ((name == "nlevels") & (any("levels" %in% names(feature)))) {
+getAttribute <- function(features, name) {
+  lapply(function(feature) {
+    if ((name == "nlevels") & (any("levels" %in% names(feature)))) {
       length(feature[["levels"]])
-   }
-   else {
-     feature[[name]]
-   }},
-   X = features
-)
+    } else {
+      feature[[name]]
+    }
+  },
+  X = features
+  )
+}
 
-#' Binary encoding of a value (integer representation) 
+#' Binary encoding of a value (integer representation)
 #'
-#' Binary encoding of a value (integer representation) 
+#' Binary encoding of a value (integer representation)
 #'
-#' @param x <integer> Value to be binary encoded 
-#' @return <integer> representation of binary coded value 
+#' @param x <integer> Value to be binary encoded
+#' @return <integer> representation of binary coded value
 
 toBin <- function(x) {
   as.integer(paste(rev(as.integer(intToBits(x))), collapse = ""))
 }
 
-#' Decode binary representation to value 
+#' Decode binary representation to value
 #'
-#' Decode binary representation to value 
+#' Decode binary representation to value
 #'
-#' @param binary <integer> Binary encoded value 
-#' @param features <list> List of features to decode 
+#' @param binary <integer> Binary encoded value
+#' @param features <list> List of features to decode
 #' Feature description
 #' feature = list(
-#'    datatype = <type of data> (discrete | integer | float) 
+#'    datatype = <type of data> (discrete | integer | float)
 #'    min = <min value>,
 #'    max = <max value>,
 #'    nlevels = <number of levels>,
 #'    levels = <levels> (optional: discrete type specific)
 #' )
-#' @return <list> of decoded values  
+#' @return <list> of decoded values
 
 decodeValueFromBin <- function(binary, features) {
   datatype <- getAttribute(features, "datatype")
@@ -106,17 +108,17 @@ decodeValueFromBin <- function(binary, features) {
 #'
 #' Encode value to binary representation
 #'
-#' @param values <list> List of values to encode 
-#' @param features <list> List of features to encode 
+#' @param values <list> List of values to encode
+#' @param features <list> List of features to encode
 #' Feature description
 #' feature = list(
-#'    datatype = <type of data> (discrete | integer | float) 
+#'    datatype = <type of data> (discrete | integer | float)
 #'    min = <min value>,
 #'    max = <max value>,
 #'    nlevels = <number of levels>,
 #'    levels = <levels> (optional: discrete type specific)
 #' )
-#' @return <list> of encoded values  
+#' @return <list> of encoded values
 
 decodeBinFromValue <- function(values, features) {
   datatype <- getAttribute(features, "datatype")
@@ -150,12 +152,12 @@ decodeBinFromValue <- function(values, features) {
   return(binary)
 }
 
-#' Genetic algorithm core monitor 
+#' Genetic algorithm core monitor
 #'
 #' Callback function called during the genetic algorithm
 #' execution in order to monitor optimization evolution
 #'
-#' @param object <ga object> GA optimization object 
+#' @param object <ga object> GA optimization object
 
 gaMonitor2 <- function(object, digits = getOption("digits"), ...) {
   fitness <- na.exclude(object@fitness)
@@ -168,19 +170,19 @@ gaMonitor2 <- function(object, digits = getOption("digits"), ...) {
 }
 
 
-#' Optimization function on binary representations of decision variables 
+#' Optimization function on binary representations of decision variables
 #'
-#' Optimization function on binary representations of decision variables 
+#' Optimization function on binary representations of decision variables
 #' Maximization of a fitness function using genetic algorithms (GAs).
 #' Local search using general-purpose optimisation algorithms can be
-#' applied stochastically to exploit interesting regions. 
+#' applied stochastically to exploit interesting regions.
 #'
 #' @param opt_criteria <string> Fitness function criteria (minimise | maximise)
 #' @param opt_function <function> Fitness function
-#' @param features <list> List of features as decision variables 
+#' @param features <list> List of features as decision variables
 #' Feature description
 #' feature = list(
-#'    datatype = <type of data> (discrete | integer | float) 
+#'    datatype = <type of data> (discrete | integer | float)
 #'    min = <min value>,
 #'    max = <max value>,
 #'    nlevels = <number of levels>,
@@ -214,9 +216,8 @@ gaMonitor2 <- function(object, digits = getOption("digits"), ...) {
 #' @return <list> of optim solution for each decision variable
 
 optimize <- function(opt_criteria, opt_function, features, suggestions,
-  selection = gabin_tourSelection, keepBest = TRUE, popSize = 64,
-  maxiter = 20, parallel = 16, elitism = 0.08, pmutation = 0.05,  ...) {
-
+                     selection = gabin_tourSelection, keepBest = TRUE, popSize = 64,
+                     maxiter = 20, parallel = 16, elitism = 0.08, pmutation = 0.05, ...) {
   minimise <- function(X, features, ...) {
     return(-opt_function(decodeValueFromBin(X, features), ...))
   }
@@ -235,7 +236,7 @@ optimize <- function(opt_criteria, opt_function, features, suggestions,
         function(x) {
           nchar(toBin(x))
         },
-	unlist(getAttribute(features, "nlevels"))
+        unlist(getAttribute(features, "nlevels"))
       )),
       features = features,
       opt_function = opt_function,
