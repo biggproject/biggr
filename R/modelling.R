@@ -176,7 +176,7 @@ PenalisedLM <- function(input_parameters){
       if(logOutput) y <- log(y)
       x <- as.matrix(model.matrix.lm(form,data,na.action=na.pass))
       y <- y[complete.cases(x)] 
-      x <- x[complete.cases(x)]
+      x <- x[complete.cases(x), ]
       mod <- list("model"=tryCatch({
         penalized::penalized(
           y,x,~0,positive = positivityOfTerms,
