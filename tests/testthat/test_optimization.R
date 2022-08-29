@@ -71,6 +71,10 @@ test_that("Test GA optimization - maximise", {
     opt_function = opt_function__,
     features = features__,
     suggestions = suggestions__,
+    popSize = 64,
+    pmutation = 0.05,
+    elitism = 0.08,
+    maxiter = 20,
     df = df__,
     test_arg1 = test_arg1__
   )
