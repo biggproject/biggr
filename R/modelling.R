@@ -494,15 +494,16 @@ RLS <- function(input_parameters){
     fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, 
                    transformationSentences=NULL, logOutput=F, 
                    minMonthsTraining=0, continuousTime=T,
-                   maxPredictionValue=NULL,...
+                   maxPredictionValue=NULL, weatherDependenceByCluster=NULL,
+                   clusteringResults=NULL,...
                    #estimateTheoreticalOccupancy=F, 
                    #theoreticalOccupancyColumnName="theoreticalOccupancy"
                    ) {
-      x <<- x
-      y <<- y
-      transformationSentences <<- transformationSentences
-      formulaTerms <<- formulaTerms
-      params <<- param
+      # x <<- x
+      # y <<- y
+      # transformationSentences <<- transformationSentences
+      # formulaTerms <<- formulaTerms
+      # params <<- param
       # param <- params#mod$bestTune
       print(paste(paste(colnames(param),param[1,],sep=": "),collapse=", "))
       
@@ -522,7 +523,8 @@ RLS <- function(input_parameters){
       # Transform input data if it is needed
       transformation <- data_transformation_wrapper(
         data=data, features=features, transformationSentences = transformationSentences, 
-        param = param)
+        param = param, weatherDependenceByCluster = weatherDependenceByCluster,
+        clusteringResults = clusteringResults)
       data <- transformation$data
       features <- transformation$features
       featuresAll <- transformation$featuresAll
@@ -673,7 +675,9 @@ RLS <- function(input_parameters){
         param = param,
         maxLag = maxLag,
         transformationSentences = transformationSentences,
-        transformationResults = transformationResults
+        transformationResults = transformationResults,
+        weatherDependenceByCluster = weatherDependenceByCluster,
+        clusteringResults = clusteringResults
       )
       mod
       
@@ -690,6 +694,8 @@ RLS <- function(input_parameters){
       newdata <<- newdata
       # newdata <- df_for_pred
       newdata <- as.data.frame(newdata)
+      newdata$localtime <- lubridate::with_tz(newdata$time,
+                                              lubridate::tz(modelFit$localtime))
       newdata <- newdata[order(newdata$localtime),]
       features <- modelFit$meta$features
       param <- modelFit$meta$param
@@ -717,11 +723,15 @@ RLS <- function(input_parameters){
       forceInitOutputFeatures <- if(is.null(forceInitOutputFeatures)){modelFit$meta$outputInit}else{forceInitOutputFeatures}
       transformationSentences <- modelFit$meta$transformationSentences
       transformationResults <- modelFit$meta$transformationResults
+      weatherDependenceByCluster <- modelFit$meta$weatherDependenceByCluster
+      clusteringResults <- modelFit$meta$clusteringResults
       
       # Transform input data if it is needed
       transformation <- data_transformation_wrapper(
         data=newdata, features=features, transformationSentences = transformationSentences, 
-        transformationResults = transformationResults, param = param)
+        transformationResults = transformationResults, param = param, 
+        weatherDependenceByCluster = weatherDependenceByCluster,
+        clusteringResults = clusteringResults)
       newdata <- transformation$data
       features <- transformation$features
       featuresAll <- transformation$featuresAll
@@ -937,7 +947,7 @@ RLS <- function(input_parameters){
 ###
 
 train.formula <- function (form, data, weights, subset, na.action = na.fail, 
-                           contrasts = NULL, ...) 
+                           contrasts = NULL,...) 
 {
   m <- match.call(expand.dots = FALSE)
   
@@ -948,7 +958,8 @@ train.formula <- function (form, data, weights, subset, na.action = na.fail,
   
   # Add features that are not directly specified in data, but are defined during
   # the transformation process
-  transformationSentences <- eval(m$...$transformationSentences)
+  transformationSentences <- eval(m$...$transformationSentences,envir = parent.frame())
+    #eval(m$...$transformationSentences)
   if (!is.null(transformationSentences)){
     for(f in all.vars(m$form)[!(all.vars(m$form) %in% colnames(data))]){
       if(any(f %in% names(transformationSentences))){
@@ -959,6 +970,17 @@ train.formula <- function (form, data, weights, subset, na.action = na.fail,
     }
   }
   m$data <- data
+  if("weatherDependenceByCluster" %in% names(m$...)){
+    weatherDependenceByCluster <- eval(m$...$weatherDependenceByCluster, envir = parent.frame())
+  } else {
+    weatherDependenceByCluster <- NULL
+  }
+  
+  if("clusteringResults" %in% names(m$...)){
+    clusteringResults <- eval(m$...$clusteringResults, envir = parent.frame())
+  } else {
+    clusteringResults <- NULL
+  }
   
   # continue caret official source code...
   if (is.matrix(eval.parent(m$data)))
@@ -976,7 +998,7 @@ train.formula <- function (form, data, weights, subset, na.action = na.fail,
   x <- model.matrix(Terms, m, contrasts)
   cons <- attr(x, "contrast")
   int_flag <- grepl("(Intercept)", colnames(x))
-
+  
   if (any(int_flag))
     x <- x[, !int_flag, drop = FALSE]
   w <- as.vector(model.weights(m))
@@ -986,7 +1008,7 @@ train.formula <- function (form, data, weights, subset, na.action = na.fail,
     x <- cbind(x,data[,!(colnames(data) %in% colnames(m))])
   }
   # continue caret official source code...
-  res <- train(x, y, weights = w, formulaTerms=Terms, ...)
+  res <- train(x, y, weights = w, formulaTerms=Terms,...)
   res$terms <- Terms
   res$coefnames <- colnames(x)
   res$call <- match.call()
@@ -1068,10 +1090,12 @@ predict.train <- function (object, newdata = NULL, type = "raw", na.action = na.
     newdata <- newdata[, colnames(newdata) %in% object$finalModel$xNames,drop = FALSE]
   # if ("outputName" %in% names(object$finalModel$meta))
   #   newdata_ini <- newdata_ini[,!(colnames(newdata_ini) %in% c(object$finalModel$meta$outputName))]
-  newdata <- cbind(
-    newdata[,!(colnames(newdata) %in% colnames(newdata_ini))],
-    newdata_ini
-  )
+  if(sum(!(colnames(newdata) %in% colnames(newdata_ini))) > 0){
+    newdata <- cbind(
+      newdata[,!(colnames(newdata) %in% colnames(newdata_ini))],
+      newdata_ini
+    )
+  }
   if (type == "prob") {
     out <- probFunction(method = object$modelInfo, modelFit = object$finalModel, 
                         newdata = newdata, preProc = object$preProcess, ...)

@@ -1,23 +1,46 @@
-calculate_and_load_indicators <- function(data, indicators, usage,
-                                         frequencies, buildingsRdf, buildingId,
-                                         timeColumn, localTimeZone, 
-                                         consumptionColumn,
-                                         buildingGrossFloorArea = 0,
-                                         outdoorTemperatureColumn = NULL, 
-                                         carbonEmissionsColumn = NULL, 
-                                         energyPriceColumn = NULL, 
-                                         dailyFixedPriceColumn = NULL,
-                                         modelName = NULL,
-                                         modelUri = NULL,
-                                         estimateWhenAggregate = T,
-                                         outputDirectory = ""
-                                         ){
-  # data <- df
-  # frequencies <- c("PT1H","P1D","P1M","P1Y")
-  # buildingGrossFloorArea <- 1000
-  # usage <- "Total"
-  # indicators <- c("EnergyUse","EnergyUseIntensity")
-  # modelId <- NULL
+generate_longitudinal_benchmarking_indicators <- function(
+  data, indicators, energyType, energyComponent, frequencies, 
+  buildingId, buildingSubject, timeColumn, localTimeZone, 
+  consumptionColumn, inputRDF=NULL, getResultantRDF=T, writeResultantRDF=F,
+  buildingGrossFloorArea = 0, outdoorTemperatureColumn = NULL,
+  carbonEmissionsColumn = NULL, energyPriceColumn = NULL, 
+  dailyFixedPriceColumn = NULL, modelName = NULL, modelId = NULL,
+  modelLocation = NULL, estimateWhenAggregate = T, outputDirectory = ""){
+  
+  buildingNamespace <- paste0(strsplit(buildingSubject,"#")[[1]][1],"#")
+  namespaces <- bigg_namespaces
+  namespaces["biggresults"] <- buildingNamespace
+  
+  obj <- if(is.null(inputRDF)){rdf()} else {inputRDF}
+  
+  # Create the analytical model to RDF, if needed
+  
+  if(!is.null(modelId)){
+    
+    modelSubject <- sprintf(
+      "biggresults:MODEL-%s-%s", buildingId, modelId)
+    
+    obj %>%
+      add_item_to_rdf(
+        subject = modelSubject,
+        classes = c("bigg:AnalyticalModel"),
+        dataProperties = list(
+          "bigg:modelLocation"= modelLocation,
+          #"bigg:modelId"= modelId,
+          "bigg:modelName"= modelName),
+        objectProperties = list(
+          "bigg:hasModelStorageInfrastructure" = "bigg:MODELINFRA-MLFlow"),
+        namespaces = namespaces
+      )
+    
+    # Link the building with the model
+    obj %>%
+      add_item_to_rdf(
+        subject = buildingSubject,
+        objectProperties = list("bigg:hasAnalyticalModel"= modelSubject),
+        namespaces = namespaces
+      )
+  }
   
   for (indicator in indicators){
     
@@ -48,10 +71,7 @@ calculate_and_load_indicators <- function(data, indicators, usage,
     } else {
       NULL
     }
-    indicatorNameJson <- paste0(usage,indicator,"_",buildingId,"_",
-                                if(is.null(modelUri)){"Real_"}else{
-                                  paste0("Estimated_",modelUri)}
-                                ,"_%s.json")
+      
     if(!is.null(valueInd)){
       indDf <- data.frame(
         "time" = data[,timeColumn],
@@ -74,7 +94,7 @@ calculate_and_load_indicators <- function(data, indicators, usage,
             } else {
               real
             },
-            isReal = if(is.null(modelUri)){
+            isReal = if(is.null(modelId)){
               ifelse(is.finite(real),T,
                      ifelse(is.finite(value),F,NA))
             } else {
@@ -87,10 +107,86 @@ calculate_and_load_indicators <- function(data, indicators, usage,
             iso8601_period_to_timedelta(frequency) - seconds(1),
           "UTC"
         )
-        write(jsonlite::toJSON(indDfAux,dataframe = "rows",POSIXt = "ISO8601",na = "null"),
-              file=paste(outputDirectory,sprintf(indicatorNameJson,frequency),sep="/"))
+        
+        # Create the SingleKPIAssessment object
+        keyPerformanceIndicatorName <- paste(indicator,
+                                             energyComponent,
+                                             energyType, sep=".")
+        keyPerformanceIndicatorSubject <- paste("bigg:KPI",
+                                                  keyPerformanceIndicatorName,
+                                                sep="-")
+        singleKPISubject <- paste("biggresults:SingleKPI",
+                                    buildingId, keyPerformanceIndicatorName,
+                                    modelName, modelId, frequency, sep="-")
+        singleKPISubjectHash <- digest(
+          namespace_integrator(singleKPISubject, namespaces), "sha256", 
+          serialize=T
+        )
+        singleKPIPointSubject <- paste0("biggresults:",singleKPISubjectHash)
+          
+        obj %>%
+          add_item_to_rdf(
+            subject = singleKPISubject,
+            classes = c("bigg:SingleKPIAssessment",
+                        "bigg:KPIAssessment",
+                        "bigg:TimeSeriesList"),
+            dataProperties = list(
+              "bigg:timeSeriesIsRegular" = T,
+              "bigg:timeSeriesIsOnChange" = F,
+              "bigg:timeSeriesIsCumulative" = F,
+              "bigg:timeSeriesStart" = min(indDfAux$start,na.rm=T),
+              "bigg:timeSeriesEnd" = max(indDfAux$end,na.rm=T),
+              "bigg:timeSeriesFrequency" = frequency,
+              "bigg:timeSeriesTimeAggregationFunction" = "SUM"
+            ),
+            objectProperties = if(is.null(modelId)){
+                list(
+                  "bigg:hasSingleKPIPoint" = singleKPIPointSubject,
+                  "bigg:quantifiesKPI" = keyPerformanceIndicatorSubject
+                )
+              } else {
+                list(
+                  "bigg:hasSingleKPIPoint" = singleKPIPointSubject,
+                  "bigg:quantifiesKPI" = keyPerformanceIndicatorSubject,
+                  "bigg:estimatesKPI" = modelSubject
+                )
+              },
+            namespaces = namespaces
+          )
+        # Link the building with the SingleKPIAssessment
+        obj %>%
+          add_item_to_rdf(
+            subject = buildingSubject,
+            objectProperties = list("bigg:assessesSingleKPI"= singleKPISubject),
+            namespaces = namespaces
+          )
+        
+        # Write the output JSON file
+        indDfAux$start <- parsedate::format_iso_8601(indDfAux$start)
+        indDfAux$end <- parsedate::format_iso_8601(indDfAux$end)
+        dir.create(outputDirectory,F)
+        
+        write(jsonlite::toJSON(
+          setNames(list(indDfAux),singleKPISubjectHash),
+          dataframe = "rows",na = "null"),
+              file=paste(outputDirectory,
+                         sprintf("%s.json",singleKPISubjectHash),
+                         sep="/") )
       }
     }
-    
+  }
+  
+  # Output RDF
+  if(writeResultantRDF){
+    write_rdf(
+      object = obj,
+      file = paste(outputDirectory,
+                   sprintf("%s.ttl", digest(
+                     paste0(buildingSubject, modelName, modelId, indicators,
+                            energyComponent, energyType, collapse="~"),
+                     algo = "sha256", serialize = T)), sep="/"))
+  } 
+  if (getResultantRDF){
+    return(obj)
   }
 }

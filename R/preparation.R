@@ -82,7 +82,7 @@ hourly_timesteps <- function(nHours, original_timestep) {
 #' @param data <timeSeries> Input time series to be resampled
 #' @param timeStep <string> A string in ISO 8601 format representing the period
 #' or timestep (e.g. "PT15M","PT1H", "P3M", "P1D" ,...).
-#' @return Resampled time serie
+#' @return Resampled time series
 
 resample <- function(data, timestep) {
   # Resample (upsample) by creating synthetic comple serie
@@ -276,7 +276,7 @@ detect_ts_calendar_model_outliers_window <- function(data,
       H = (hour(time)) / 24,
       U = (as.numeric(strftime(time,"%u"))-1) / 7,
       W = as.numeric(strftime(time,"%U")) / 53,
-      m = (as.numeric(strftime(time,"%m"))-1) / 12,#as.numeric(strftime(time,"%j")) / 366,
+      m = (as.numeric(strftime(time,"%m"))-1) / 12,
       HOL = as_date(time) %in% holidaysCalendar | strftime(time,"%u") %in% c("6","7"),
       intercept = 1
     )
@@ -418,7 +418,7 @@ detect_profiled_data <- function(data){
 detect_ts_calendar_model_outliers <- function(data,
                                               localTimeColumn="localtime",
                                               valueColumn=outputName,
-                                              calendarFeatures = c("HOL", "H"),
+                                              calendarFeatures = c("HOL","H"),
                                               mode = "upperAndLower",
                                               upperModelPercentile = 90,
                                               lowerModelPercentile = 10,
@@ -430,13 +430,37 @@ detect_ts_calendar_model_outliers <- function(data,
                                               outputPredictors = F,
                                               logValueColumn = F,
                                               autoDetectProfiled = T) {
+  # localTimeColumn = "localtime"
+  # valueColumn = "Qe" 
+  # calendarFeatures = settings$DataCleaning$OutliersDetection$calendarFeatures$PT1H
+  # mode = settings$DataCleaning$OutliersDetection$mode
+  # upperModelPercentile = settings$DataCleaning$OutliersDetection$upperModelPercentile
+  # lowerModelPercentile = settings$DataCleaning$OutliersDetection$lowerModelPercentile
+  # upperPercentualThreshold = settings$DataCleaning$OutliersDetection$upperPercentualThreshold
+  # lowerPercentualThreshold = settings$DataCleaning$OutliersDetection$lowerPercentualThreshold
+  # window = settings$DataCleaning$OutliersDetection$window$PT1H
+  # outputPredictors = T
+  # holidaysCalendar = holidays_dates
+  # daysThatAreOutliers = covid_affected_period
+  # logValueColumn = T
+  # autoDetectProfiled = F
+  
   if(autoDetectProfiled==T)
     # Ignore days if are profiled
     daysThatAreOutliers <- c(daysThatAreOutliers, detect_profiled_data(data))
+  
   if(class(window)=="numeric"){
     start <- as.integer(seconds(data$time[1]))
     # Windowize data in order to obtain outliers in data samples
     windowsize <- as.integer(duration(window, units = "seconds"))
+    data <- data %>%
+      mutate(
+        window = (as.integer(seconds(time)) - start) %/% windowsize
+      )
+  } else if (class(window)=="character" && startsWith(window,"P")) {
+    start <- as.integer(seconds(data$time[1]))
+    # Windowize data in order to obtain outliers in data samples
+    windowsize <- as.integer(lubridate::as.duration(window))
     data <- data %>%
       mutate(
         window = (as.integer(seconds(time)) - start) %/% windowsize
@@ -469,7 +493,7 @@ detect_ts_calendar_model_outliers <- function(data,
     result <- lapply(windows, function(w) {
       tmp <- newdata[newdata$window == w,]
       result <- detect_ts_calendar_model_outliers_window(
-        data=if(class(window)=="numeric"){
+        data=if(class(window)=="integer"){
           newdata[newdata$window %in% c(w-1,w,w+1),]
         } else {
           newdata[newdata$window == w,]
@@ -801,27 +825,30 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
   # In case of daily or greater frequency
   if(lubridate::as.period(detect_time_step(data)) >= lubridate::as.period("P1D")){
     data_monthly <- data %>% 
-      group_by("time" = lubridate::floor_date(lubridate::with_tz(time,tz),
-                                              unit = lubridate::as.period("P1M"),
-                                              week_start = getOption("lubridate.week.start", 1))) %>%
+      group_by("time" = lubridate::floor_date(
+        lubridate::with_tz(time,tz),
+        unit = lubridate::as.period("P1M"),
+        week_start = getOption("lubridate.week.start", 1))) %>%
       summarise(
-        across(c(consumptionColumn,temperatureColumn), sum,
+        across(c(consumptionColumn,temperatureColumn),
+               ~mean(.x*hourly_timesteps(720,detect_time_step(data$time)),na.rm=T),
                .names = c("consumption",temperatureColumn))
       )
   # In case of hourly or quarterhourly data
   } else {
     data_consumption <- data %>% 
-      group_by("time" = lubridate::floor_date(lubridate::with_tz(time,tz),
-                                              unit = lubridate::as.period("P1M"),
-                                              week_start = getOption("lubridate.week.start", 1))) %>%
+      group_by("time" = lubridate::floor_date(
+        lubridate::with_tz(time,tz),
+        unit = lubridate::as.period("P1M"),
+        week_start = getOption("lubridate.week.start", 1))) %>%
       summarise(
-        across(consumptionColumn, sum,.names = "consumption")
+        across(consumptionColumn, ~mean(.x*hourly_timesteps(720,detect_time_step(data$time)),na.rm=T),.names = "consumption")
       )
     data_hdd <- degree_days(
       data = data,
       temperatureFeature = temperatureColumn,
       localTimeZone = tz,
-      baseTemperature = seq(5,20,by=3),
+      baseTemperature = seq(8,20,by=3),
       mode = "heating",
       outputFrequency = "P1M",
       outputFeaturesName = "HDD")
@@ -829,13 +856,15 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
       data = data,
       temperatureFeature = temperatureColumn,
       localTimeZone = tz,
-      baseTemperature = seq(13,28,by=3),
+      baseTemperature = seq(16,28,by=3),
       mode = "cooling",
       outputFrequency = "P1M",
       outputFeaturesName = "CDD")
-    data_monthly <- data_consumption %>% left_join(data_hdd,"time") %>% left_join(data_cdd,"time")
+    data_monthly <- data_consumption %>% left_join(data_hdd,by="time") %>% 
+      left_join(data_cdd,by="time")
     data_monthly <- data_monthly[complete.cases(data_monthly),]
   }
+  
   disruptive_period_model <- function(dataM, minDate, maxDate){
     data_d <- data.frame(
       "time" = seq.Date(as.Date(min(dataM$time)), 
@@ -844,27 +873,38 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
     )
     data_d$disruptive <- ifelse(data_d$time >= minDate & data_d$time <= maxDate,
                                 1,0)
-    dataMD <- data_d %>% 
-      group_by(
-        "time" = floor_date(time,
-          unit = lubridate::as.period("P1M"),
-          week_start = getOption("lubridate.week.start", 1))
-      ) %>% 
-      summarise("disruptive" = sum(disruptive),
-                "disruptive_f" = as.factor(sum(disruptive)>0))
-    dataM <- dataM %>% left_join(dataMD)
-    cases <- expand.grid(HDD=colnames(dataM)[grepl("^HDD",colnames(dataM))],
-                CDD=colnames(dataM)[grepl("^CDD",colnames(dataM))])
-    err <- mapply(1:nrow(cases), FUN = function(i){
-      dataM$HDD <- unlist(dataM[cases$HDD[i]])
-      dataM$CDD <- unlist(dataM[cases$CDD[i]])
-      mod <- penalized(response = dataM$consumption, 
-                penalized = ~ HDD:disruptive_f + CDD:disruptive_f,
-                unpenalized = ~ 0 + disruptive_f + disruptive,
-                data = dataM,positive=T,trace = F)
-      RMSE(mod@fitted,dataM$consumption)
-    })
-    err[which.min(err)]
+    
+    if( ( (sum(data_d$disruptive==1)/nrow(data_d))>0.8 ||
+          (sum(data_d$disruptive==1)/nrow(data_d))<0.2 ) ||
+        ( nrow(dataM)<10 )
+      ){
+      return(NA)
+    } else {
+      dataMD <- data_d %>% 
+        group_by(
+          "time" = floor_date(time,
+            unit = lubridate::as.period("P1M"),
+            week_start = getOption("lubridate.week.start", 1))
+        ) %>% 
+        summarise("disruptive" = sum(disruptive),
+                  "disruptive_f" = as.factor(sum(disruptive)>0))
+      dataM <- dataM %>% left_join(dataMD,by="time")
+      cases <- expand.grid(HDD=colnames(dataM)[grepl("^HDD",colnames(dataM))],
+                  CDD=colnames(dataM)[grepl("^CDD",colnames(dataM))])
+      err <- mapply(1:nrow(cases), FUN = function(i){
+        dataM$HDD <- unlist(dataM[cases$HDD[i]])
+        dataM$CDD <- unlist(dataM[cases$CDD[i]])
+        mod <- lm(consumption ~ 0 + disruptive_f + disruptive + HDD:disruptive_f + 
+                    CDD:disruptive_f, data=dataM)
+        RMSE(mod$fitted.values, mod$model$consumption)
+        # mod <- penalized(response = dataM$consumption,
+        #           penalized = ~ HDD:disruptive_f + CDD:disruptive_f,
+        #           unpenalized = ~ 0 + disruptive_f + disruptive,
+        #           data = dataM, positive=T, trace = F, lambda1 = 1, lambda2 = 1)
+        # RMSE(mod@fitted,dataM$consumption)
+      })
+      return(err[which.min(err)])
+    }
   }
   cases_dates <- expand.grid(
     minDate=seq.Date(minIniDate, maxIniDate, by = "14 days"),
@@ -889,28 +929,28 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
 #'
 #' @param data <timeSeries> Time serie with potential anomalies in
 #' values
-#' @param valueColumn <string> Value column
+#' @param consumptionColumn <string> Value column
 #' @param timeColumn <string> Time column
 #' @param plotDensiry <boolean> Plot density function used to obtain
 #'  holidays consumption threshold
 #' @param ignoreDates <list> Ignore list of dates in time serie
 #' @return List of dates with classified as holidays
 
-detect_holidays_in_tertiary_buildings <- function(data, valueColumn, timeColumn, plotDensity=T, 
+detect_holidays_in_tertiary_buildings <- function(data, consumptionColumn, timeColumn, plotDensity=T, 
                                                   ignoreDates=c(), tz="UTC"){
   
-  data <- data[is.finite(data[,valueColumn]),]
-  data <- aggregate(setNames(data.frame(data[,valueColumn]),valueColumn),
+  data <- data[is.finite(data[,consumptionColumn]),]
+  data <- aggregate(setNames(data.frame(data[,consumptionColumn]),consumptionColumn),
                     by=setNames(list(as.Date(data[,timeColumn], tz=tz)),timeColumn),
                     FUN=function(x)sum(x,na.rm=T))
   data$dayweek <- strftime(data[,timeColumn],"%u")
   
   # Estimate the cons_limit using the density function
   summarise_per_day <- data %>% group_by(dayweek) %>%
-    summarise(across(valueColumn,list(~mean(.x,na.rm=T),
+    summarise(across(consumptionColumn,list(~mean(.x,na.rm=T),
                                       ~quantile(.x,0.9,na.rm=T))))
   low_consumption_day <- min(summarise_per_day[,2])
-  d <- density(data[!(data$dayweek %in% c("6","7")),valueColumn],na.rm=T)
+  d <- density(data[!(data$dayweek %in% c("6","7")),consumptionColumn],na.rm=T)
   # calculate the local extremes
   tp<-pastecs::turnpoints(ts(d$y))
   # defines the local maximums and minimums
@@ -925,27 +965,32 @@ detect_holidays_in_tertiary_buildings <- function(data, valueColumn, timeColumn,
   ## Estimate the cons_limit based on the day with minimum consumption of the week 
   data_dayweek <-
     mapply(function(i){
-      na.locf(zoo::rollapply(ifelse(data$dayweek==i,data[,valueColumn],NA),
+      na.locf(zoo::rollapply(ifelse(data$dayweek==i,data[,consumptionColumn],NA),
                      width=30*3,partial=T,align="center",fill=c(NA,NA,NA),
                      FUN=function(x){max(x,na.rm=T)}))
     },sort(unique(data$dayweek)))
-  cons_limit <- matrixStats::rowQuantiles(data_dayweek,probs = 0.01)
+  cons_min <- matrixStats::rowMins(data_dayweek)#matrixStats::rowQuantiles(data_dayweek,probs = 0.10)
+  cons_max <- matrixStats::rowMaxs(data_dayweek)#matrixStats::rowQuantiles(data_dayweek,probs = 0.90)
+  cons_limit <- ifelse(((cons_max-cons_min)/cons_min) > 0.5, cons_min, 0)
   #cons_limit <- matrixStats::rowMins(data_dayweek)
   
   days_detected <- as.Date(data[
     !(as.Date(data[,timeColumn],tz=tz) %in% ignoreDates) &
-      data[,valueColumn] <= cons_limit & is.finite(data[,valueColumn]), timeColumn], tz=tz)
+      data[,consumptionColumn] <= cons_limit & is.finite(data[,consumptionColumn]), timeColumn], tz=tz)
+  
+  # plot(data[,timeColumn],data[,consumptionColumn],ylab="Consumption [kWh]")
+  # points(days_detected,data[data[,timeColumn] %in% days_detected,consumptionColumn],col="red",cex=2)
   
   # Estimate the cons_limit based on the minimum standard deviation
   # data_dayweek <-
   #   mapply(function(i){
-  #     zoo::rollapply(ifelse(data$dayweek==i,data[,valueColumn],NA),
+  #     zoo::rollapply(ifelse(data$dayweek==i,data[,consumptionColumn],NA),
   #                    width=60,partial=T,align="center",fill=c(NA,NA,NA),
   #                    FUN=function(x){sd(x,na.rm=T)})
   #   },sort(unique(data$dayweek)))
   # cons_limit <- matrixStats::rowMins(data_dayweek)
   # 
-  # days_detected <- as.Date(data[data[,valueColumn] <= cons_limit & is.finite(data[,valueColumn]), timeColumn], tz=tz)
+  # days_detected <- as.Date(data[data[,consumptionColumn] <= cons_limit & is.finite(data[,consumptionColumn]), timeColumn], tz=tz)
   
   # plot the PDF and the local extremes
   if(plotDensity==T){

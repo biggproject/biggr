@@ -205,7 +205,8 @@ calendar_components <- function (data, localTimeZone = NULL, holidays = c(), inp
     dayYear = as.numeric(format(date,"%j")),
     timestamp = as.numeric(localtime),
     isWeekend = weekday %in% c(6, 7),
-    isHolidays = as.factor(date %in% holidays), 
+    isHolidays = as.factor(date %in% holidays),
+    holidaysDate = (date %in% holidays),
     year = year(localtime), 
     quarter = as.factor(quarter(localtime)), 
     semester = as.factor(semester(localtime)), 
@@ -492,7 +493,8 @@ get_change_point_temperature <- function(consumptionData, weatherData,
           localTimeZone = localTimeZone,
           baseTemperature = par[1], 
           mode = "heating",outputFeaturesName = "hdd",
-          fixedOutputFeaturesName=T)) %>%
+          fixedOutputFeaturesName=T),
+        by="time") %>%
       left_join(
         degree_days(
           data = weatherData, 
@@ -501,7 +503,8 @@ get_change_point_temperature <- function(consumptionData, weatherData,
           localTimeZone = localTimeZone,
           baseTemperature = par[1], 
           mode = "cooling",outputFeaturesName = "cdd",
-          fixedOutputFeaturesName=T))
+          fixedOutputFeaturesName=T),
+        by="time")
     
     newdata$heating_intercept <- ifelse(newdata$hdd>0, 1, 0)
     newdata$cooling_intercept <- ifelse(newdata$cdd>0, 1, 0)
@@ -509,8 +512,8 @@ get_change_point_temperature <- function(consumptionData, weatherData,
     # newdata <<- newdata
     if(length(unique(newdata$weekday))>1){
       #mod <- lm(consumption ~ 0 + weekday + hdd + cdd , newdata)
-      x <- model.matrix( ~ 0 + weekday + heating_intercept + cooling_intercept + 
-                           hdd + cdd,newdata)
+      x <- suppressMessages(model.matrix( ~ 0 + weekday + heating_intercept + cooling_intercept + 
+                           hdd + cdd,newdata))
       y <- unlist(newdata[,"consumption"])
       cv <- glmnet::cv.glmnet(x,y)
       hdd_slope <- coef(cv)["hdd",1]>0
@@ -527,12 +530,14 @@ get_change_point_temperature <- function(consumptionData, weatherData,
                                                              cdd")
                             } else {~ fix},
                         unpenalized = ~ 0 + weekday, data=newdata,
-                        positive = T)#, lambda1 = tail(cv$lambda,1))
+                        positive = T, lambda1 = tail(cv$lambda,1), lambda2 = tail(cv$lambda,1),
+                        trace = F)
       )
       mod[["yhat"]] <- mod$mod@fitted
       mod[["y"]] <- y
     } else {
-      x <- model.matrix(~ 1 + heating_intercept + cooling_intercept + hdd + cdd, newdata)
+      x <- suppressMessages(
+        model.matrix(~ 1 + heating_intercept + cooling_intercept + hdd + cdd, newdata))
       y <- unlist(newdata[,"consumption"])
       cv <- glmnet::cv.glmnet(x,y)
       hdd_slope <- coef(cv)["hdd",1]>0
@@ -546,7 +551,9 @@ get_change_point_temperature <- function(consumptionData, weatherData,
                            } else if (hdd_slope){as.formula("~ 0 + heating_intercept + hdd")
                            } else if (cdd_slope){as.formula("~ 0 + cooling_intercept + cdd")
                            } else {~ fix}, 
-                         data=newdata, positive = T)
+                         data=newdata,
+                         positive = T, lambda1 = tail(cv$lambda,1), lambda2 = tail(cv$lambda,1),
+                         trace=F)
       )
       mod[["yhat"]] <- mod$mod@fitted
       mod[["y"]] <- y
@@ -557,8 +564,8 @@ get_change_point_temperature <- function(consumptionData, weatherData,
     # plot(newdata$hdd,col="red", ylim=c(0,40))
     # points(newdata$cdd,col="blue")
   }
-  tbals <- seq(ceiling(quantile(weatherData$temperature,0.4,na.rm=T)),
-               floor(quantile(weatherData$temperature,0.6,na.rm=T)),
+  tbals <- seq(ceiling(quantile(weatherData$temperature,0.25,na.rm=T)),
+               floor(quantile(weatherData$temperature,0.75,na.rm=T)),
                by=0.5)
   mod_results <- lapply(FUN=function(tbal){
     estimate_signature(par = tbal, weatherData = weatherDataD, 
@@ -749,6 +756,13 @@ normalise_zscore <- function(data, scalingAttr=NULL) {
 normalise_dlc <- function(data, localTimeZone, transformation = "relative", 
                           inputVars = c("loadCurves"), nDayParts = 24, holidays = c(),
                           method = "range01", scalingAttr = NULL){
+  
+  # data = tmp
+  # transformation = loadCurveTransformation
+  # holidays = holidaysDates
+  # scalingAttr = NULL
+  # method = normalisationMethod
+  
   # if (class(holidays) == "character") {
   #   holidays <- read_csv(holidays, col_names = FALSE)
   #   holidays <- holidays$X1
@@ -803,9 +817,10 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
                dailyHdd = c("hdd"),
                dailyCdd = c("cdd")
     )
-  vars <- as.vector(unlist(vars[inputVars]))
-  return(list(dates = dates, values = norm$values[,vars], 
-              scalingAttr = norm$scalingAttr))
+  vars2 <- as.vector(unlist(vars[inputVars]))
+  return(list(dates = dates, values = norm$values[,vars2[vars2 %in% colnames(norm$values)]], 
+              scalingAttr = norm$scalingAttr, inputVars = 
+                inputVars[mapply(function(i)all(vars[[i]] %in% colnames(norm$values)),inputVars)]))
 }
 
 #' Calculate affinity
@@ -932,6 +947,23 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
                             localTimeZone, kMax, kMin, inputVars, loadCurveTransformation, 
                             nDayParts, ignoreDates = c(), holidaysDates = c(),
                             normalisationMethod = "range01") {
+  # data = df
+  # consumptionFeature = "Qe"
+  # outdoorTemperatureFeature = "temperature"
+  # localTimeZone = tz
+  # kMax = 8 
+  # kMin = 2
+  # inputVars = c("loadCurves","dailyConsumption","daysHolidays",
+  #               "ratioDailyConsumptionTemperature","dailyHdd","dailyCdd") 
+  # loadCurveTransformation = "relative"
+  # ignoreDates =
+  #   df %>% group_by(date) %>% summarise(outliers=sum(outliers)>0) %>% filter(
+  #     outliers==T | date >= (min(df$date)+years(1)) ) %>% select(date) %>% 
+  #   unlist %>% as.Date
+  # holidaysDates = holidays_dates
+  # nDayParts = 24
+  # normalisationMethod = "range01"
+  
   if(kMax>99){
     warning("kMax was coarced to 99. More than 100 groups are not allowed.")
     kMax<-99
@@ -941,6 +973,7 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
     filter(!(lubridate::date(time) %in% ignoreDates)) %>% rename(consumption = consumptionFeature, temperature = outdoorTemperatureFeature)
   tmp_norm <- normalise_dlc(data = tmp, localTimeZone, transformation = loadCurveTransformation, 
                             inputVars, nDayParts, holidays = holidaysDates, scalingAttr = NULL, method = normalisationMethod)
+  inputVars <- tmp_norm$inputVars
   S <- make.similarity(apply(tmp_norm$values,1:2,as.numeric), similarity)
   A <- make.affinity(S, 3)
   D <- diag(apply(A, 1, sum))
@@ -1042,8 +1075,29 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
 #' @return dailyClassification: <timeSeries>
 classification_dlc <- function(data, consumptionFeature, outdoorTemperatureFeature, 
                                localTimeZone, clustering, methodNormalDays="clusteringCentroids",
+                               holidaysDatesFeature = NULL, abnormalDaysFeature = NULL,
                                holidaysDates = c(), abnormalDays = c(), methodAbnormalDays="clusteringCentroids", 
                                normalizationMethod) {
+  
+  # data = df[is.na(df$s),]
+  # consumptionFeature = "Qe"
+  # outdoorTemperatureFeature = "temperature"
+  # localTimeZone = tz
+  # holidaysDates = holidays_dates
+  # clustering = clust
+  # methodNormalDays = "clusteringCentroids"
+  # abnormalDays = df %>% filter(is.na(s)) %>% 
+  #   group_by(date) %>% summarise(out=sum(outliers)) %>%
+  #   filter(out>0) %>% select(date) %>% unlist(.) %>% as.Date(.)
+  # methodAbnormalDays = "classificationModel"
+  
+  if(!is.null(holidaysDatesFeature)){
+    holidaysDates <- unique(data$date[holidaysDatesFeature])
+  }
+  if(!is.null(abnormalDaysFeature)){
+    abnormalDays <- unique(data$date[abnormalDaysFeature])
+  }
+  
   # Get consumption and temperatures from the dataset
   rows_with_consumption_and_temperature <- 
     complete.cases(data[,c(consumptionFeature, outdoorTemperatureFeature)])
@@ -1136,14 +1190,22 @@ classification_dlc <- function(data, consumptionFeature, outdoorTemperatureFeatu
     classification_results[,methodNormalDays]
   )
   
-  return(classification_results[,c("date","s")])
+  return(list(
+      dailyClassification = classification_results[,c("date","s")],
+      sRaw = (data[,!(colnames(data) %in% c("s"))] %>% 
+              left_join(classification_results[,c("date","s")],by="date"))$s
+  ))
 }
 
 ###
 ### Wrapper for data transformation in the modelling phase ----
 ###
 
-data_transformation_wrapper <- function(data, features, transformationSentences, param, transformationResults=list()){
+data_transformation_wrapper <- function(data, features, transformationSentences, param, 
+                                        transformationResults=list(), 
+                                        weatherDependenceByCluster=NULL,
+                                        clusteringResults=NULL){
+  
   transformationItems <- list()
   if(!is.null(transformationSentences)){
     for (feature in unique(c(names(transformationSentences), features))){

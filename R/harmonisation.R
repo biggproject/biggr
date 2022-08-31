@@ -1,6 +1,18 @@
+bigg_namespaces <- c("bigg" = "http://bigg-project.eu/ontology#")
+
+write_rdf <- function(object, file){
+  rdf_serialize(object, file,
+                namespace = bigg_namespaces,
+                format = "turtle")
+}
+
 get_all_device_aggregators <- function(buildingsRdf){
-  result <- suppressMessages(buildingsRdf %>% rdf_query(paste0('
-    PREFIX bigg: <http://bigg-project.eu/ontology#>
+  result <- suppressMessages(buildingsRdf %>% rdf_query(paste0(
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
     SELECT ?buildingId ?deviceAggregatorName ?deviceAggregatorFormula ?deviceAggregatorFrequency ?deviceAggregatorTimeAggregationFunction
     WHERE {
       ?b a bigg:Building .
@@ -16,8 +28,12 @@ get_all_device_aggregators <- function(buildingsRdf){
 }
 
 get_all_buildings_list <- function(buildingsRdf){
-  metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0('
-    PREFIX bigg: <http://bigg-project.eu/ontology#>
+  metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
+    paste0(mapply(function(i){
+    sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+            bigg_namespaces[i])},
+    1:length(bigg_namespaces))),
+    '
     SELECT ?buildingId
     WHERE {
       ?b a bigg:Building .
@@ -27,58 +43,111 @@ get_all_buildings_list <- function(buildingsRdf){
 }
 
 get_tz_building <- function(buildingsRdf, buildingId){
-  metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0('
-        PREFIX bigg: <http://bigg-project.eu/ontology#>
-        SELECT ?tz
-        WHERE {
-          ?b a bigg:Building .
-          ?b bigg:buildingIDFromOrganization "',buildingId,'" .
-          ?b bigg:hasLocationInfo ?l .
-          ?l bigg:addressTimeZone ?tz .
-        }')))
+  metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
+    SELECT ?tz
+    WHERE {
+      ?b a bigg:Building .
+      ?b bigg:buildingIDFromOrganization "',buildingId,'" .
+      ?b bigg:hasLocationInfo ?l .
+      ?l bigg:addressTimeZone ?tz .
+    }')))
   return( if(length(metadata_df)>0) {as.character(metadata_df$tz)} else {NULL} )
 }
 
 get_area_building <- function(buildingsRdf, buildingId){
-  metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0('
-        PREFIX bigg: <http://bigg-project.eu/ontology#>
-        SELECT ?area
-        WHERE {
-          ?b a bigg:Building .
-          ?b bigg:buildingIDFromOrganization "',buildingId,'" .
-          ?b bigg:hasSpace ?s .
-          ?s bigg:hasArea ?a .
-          ?a bigg:hasAreaType ?types .
-          FILTER regex(str(?types),"GrossFloorArea$") .
-          ?a bigg:areaValue ?area .
-        }')))
+  metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
+    SELECT ?area
+    WHERE {
+      ?b a bigg:Building .
+      ?b bigg:buildingIDFromOrganization "',buildingId,'" .
+      ?b bigg:hasSpace ?s .
+      ?s bigg:hasArea ?a .
+      ?a bigg:hasAreaType ?types .
+      FILTER regex(str(?types),"GrossFloorArea$") .
+      ?a bigg:areaValue ?area .
+    }')))
   return( if(length(metadata_df)>0) {as.numeric(metadata_df$area)} else {NULL} )
 }
 
+get_namespace_building <- function(buildingsRdf, buildingId){
+  metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
+    SELECT ?b
+    WHERE {
+      ?b a bigg:Building .
+      ?b bigg:buildingIDFromOrganization "',buildingId,'" .
+    }')))
+  
+  return( 
+    if(length(metadata_df)>0) {
+      paste0(strsplit(metadata_df$b,"#")[[1]][1],"#")
+    } else { NULL } 
+  )
+}
+
+get_subject_building <- function(buildingsRdf, buildingId){
+  metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
+    SELECT ?b
+    WHERE {
+      ?b a bigg:Building .
+      ?b bigg:buildingIDFromOrganization "',buildingId,'" .
+    }')))
+  
+  return( 
+    if(length(metadata_df)>0) {
+      metadata_df$b
+    } else { NULL } 
+  )
+}
+
 get_sensor_metadata <- function(buildingsRdf, sensorId){
-  metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0('
-        PREFIX bigg: <http://bigg-project.eu/ontology#>
-        SELECT ?hasMeasurement ?timeSeriesFrequency ?timeSeriesIsCumulative 
-          ?timeSeriesTimeAggregationFunction ?timeSeriesIsOnChange ?timeSeriesIsRegular
-          ?hasMeasuredProperty ?considerEstimatedValues ?tz
-        WHERE {
-          ?b a bigg:Building .
-          ?b bigg:hasLocationInfo ?l .
-          optional {?l bigg:addressTimeZone ?tz .}
-          ?b bigg:hasSpace ?bs .
-          ?bs bigg:isObservedByDevice ?d .
-          ?d bigg:hasSensor ?m .
-          ?m bigg:hasMeasurement ?hasMeasurement .
-          FILTER regex(str(?hasMeasurement), "',sensorId,'")
-          optional {?m bigg:timeSeriesTimeAggregationFunction ?timeSeriesTimeAggregationFunction .}
-          optional {?m bigg:timeSeriesIsCumulative ?timeSeriesIsCumulative .}
-          optional {?m bigg:timeSeriesIsOnChange ?timeSeriesIsOnChange .}
-          optional {?m bigg:timeSeriesIsRegular ?timeSeriesIsRegular .}
-          optional {?m bigg:hasMeasuredProperty ?hasMeasuredProperty .}
-          optional {?m bigg:timeSeriesFrequency ?timeSeriesFrequency .}
-          optional {?m bigg:hasSensorEstimationMethod ?hasSensorEstimationMethod .}
-          optional {?hasSensorEstimationMethod bigg:considerEstimatedValues ?considerEstimatedValues .}
-        }')))
+  metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
+    SELECT ?hasMeasurement ?timeSeriesFrequency ?timeSeriesIsCumulative 
+      ?timeSeriesTimeAggregationFunction ?timeSeriesIsOnChange ?timeSeriesIsRegular
+      ?hasMeasuredProperty ?considerEstimatedValues ?tz
+    WHERE {
+      ?b a bigg:Building .
+      ?b bigg:hasLocationInfo ?l .
+      optional {?l bigg:addressTimeZone ?tz .}
+      ?b bigg:hasSpace ?bs .
+      ?bs bigg:isObservedByDevice ?d .
+      ?d bigg:hasSensor ?m .
+      ?m bigg:hasMeasurement ?hasMeasurement .
+      FILTER regex(str(?hasMeasurement), "',sensorId,'")
+      optional {?m bigg:timeSeriesTimeAggregationFunction ?timeSeriesTimeAggregationFunction .}
+      optional {?m bigg:timeSeriesIsCumulative ?timeSeriesIsCumulative .}
+      optional {?m bigg:timeSeriesIsOnChange ?timeSeriesIsOnChange .}
+      optional {?m bigg:timeSeriesIsRegular ?timeSeriesIsRegular .}
+      optional {?m bigg:hasMeasuredProperty ?hasMeasuredProperty .}
+      optional {?m bigg:timeSeriesFrequency ?timeSeriesFrequency .}
+      optional {?m bigg:hasEstimationMethod ?hasEstimationMethod .}
+      optional {?hasEstimationMethod bigg:considerEstimatedValues ?considerEstimatedValues .}
+    }')))
+  metadata_df$hasMeasuredProperty <- gsub("bigg:","",metadata_df$hasMeasuredProperty)
   metadata_df$sensorId <- sensorId
   return(metadata_df)
 }
@@ -183,6 +252,21 @@ read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId,
       timeseriesSensor$value <- timeseriesSensor$value - lag(timeseriesSensor$value,1)
       timeseriesSensor <- timeseriesSensor[is.finite(timeseriesSensor$start),]
     }
+    
+    timesteps <- list(
+      "1" = "S",
+      "60" = "T",
+      "3600" = "H",
+      "86400" = "D",
+      "604800" = "W",
+      "2419200" = "M",
+      "2505600" = "M",
+      "2592000" = "M",
+      "2678400" = "M",
+      "31536000" = "Y",
+      "31622400" = "Y"
+    )
+    
     # If values are on change, reconsider the start and end timestamps
     if(metadata$timeSeriesIsOnChange){
       aux <- timeseriesSensor$end + lubridate::period(metadata$timeSeriesFrequency)
@@ -190,16 +274,16 @@ read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId,
       aux2[is.na(aux2)] <- T
       timeseriesSensor$end <- lubridate::as_datetime(
         ifelse(aux2, aux, lead(timeseriesSensor$start,1)))
-      interpolateFrequency <- tail(unlist(biggr:::timesteps)[
-        as.numeric(names(biggr:::timesteps)) <= 
-          min(difftime(lead(timeseriesSensor$start,1),timeseriesSensor$start,tz = "UTC",units = "secs"),
-              na.rm=T)],1)
+      interpolateFrequency <- lubridate::format_ISO8601(lubridate::as.period(
+          quantile(difftime(lead(timeseriesSensor$start,1),timeseriesSensor$start,
+                            tz = "UTC",units = "secs"),
+              0.1,na.rm=T)))
     } else {
       # Calculate the minimum frequency for series interpolation
-      interpolateFrequency <- tail(unlist(biggr:::timesteps)[
-        as.numeric(names(biggr:::timesteps)) <= 
-          min(difftime(timeseriesSensor$end,timeseriesSensor$start,tz = "UTC",units = "secs"),
-              na.rm=T)],1)
+      interpolateFrequency <- lubridate::format_ISO8601(lubridate::as.period(
+        quantile(difftime(timeseriesSensor$end,timeseriesSensor$start,
+                          tz = "UTC",units = "secs"),
+            0.1,na.rm=T)))
     }
     metadata$timeSeriesFrequency <- interpolateFrequency
     # Detect the subsets with no internal gaps
@@ -468,4 +552,53 @@ get_device_aggregators_by_building <- function(buildingsRdf, timeseriesObject=NU
 #   unlink(tmp_json)
 #   rdf
 # }
+
+namespace_integrator <- function(items, namespaces=NULL){
+  if(is.null(namespaces)){
+    return(items)
+  } else {
+    return(mapply(function(k){
+      nm <- namespaces[mapply(function(i)grepl(paste0("^",i,":"),k),names(namespaces))]
+      if(length(nm)==0){ k } else { gsub(paste0("^",names(nm),":"),nm,k) }
+    },items))
+  }
+}
+
+add_item_to_rdf <- function(object, subject, classes = NULL, dataProperties = NULL, 
+                            objectProperties = NULL, namespaces=NULL){
+  subject <- namespace_integrator(subject, namespaces)
+  for(cl in namespace_integrator(classes, namespaces)){
+    object %>% rdf_add(
+      subject = subject,
+      predicate = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      object = cl,
+      subjectType = "uri",objectType = "uri"
+    )
+  }
+  if(!is.null(dataProperties)){
+    for(i in 1:length(dataProperties)){
+      value <- dataProperties[[i]]
+      datetimeDetected <- class(value)[1]=="POSIXct"
+      object %>% rdf_add(
+        subject = subject,
+        predicate = namespace_integrator(names(dataProperties)[i],namespaces),
+        object = if(datetimeDetected){parsedate::format_iso_8601(value)} else {value},
+        subjectType = "uri",objectType = "literal",
+        datatype_uri = if(datetimeDetected){"xsd:dateTime"
+        } else {NA}
+      )
+    }
+  }
+  if(!is.null(objectProperties)){
+    for(i in 1:length(objectProperties)){
+      object %>% rdf_add(
+        subject = subject,
+        predicate = namespace_integrator(names(objectProperties)[i],namespaces),
+        object = namespace_integrator(objectProperties[[i]],namespaces),
+        subjectType = "uri",objectType = "uri"
+      )
+    }
+  }
+  return(object)
+}
 
