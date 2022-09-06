@@ -252,15 +252,15 @@ PenalisedLM <- function(input_parameters){
       
       # Predict
       options(na.action='na.pass')
-      newdata[,modelFit$meta$outputName] <- as.numeric(
+      newdata[,outputName] <- as.numeric(
         (
           as.matrix(
             model.matrix(modelFit$meta$formula[-2],newdata)
           )[,names(coef(modelFit$model))]
         ) %*% coef(modelFit$model)
       )
-      if(logOutput) newdata[,modelFit$meta$outputName] <- exp(newdata[,modelFit$meta$outputName])
-      newdata[,modelFit$meta$outputName]
+      if(logOutput) newdata[,outputName] <- exp(newdata[,outputName])
+      newdata[,outputName]
     },
     prob = NULL,
     varImp = NULL,
@@ -784,7 +784,7 @@ RLS <- function(input_parameters){
       
       # Predict at multi-step ahead or one-step ahead prediction, 
       # depending if some AR input is considered using the output variable
-      if(paste("AR",modelFit$meta$outputName,sep="_") %in% colnames(param)){
+      if(paste("AR",outputName,sep="_") %in% colnames(param)){
         for (i in 1:nrow(newdata)){
           newdata <- lag_components(data = newdata,
                                     maxLag = maxLag,
@@ -792,15 +792,18 @@ RLS <- function(input_parameters){
                                     predictionStep = i-1,
                                     forceInitInputFeatures = forceInitInputFeatures,
                                     forceInitOutputFeatures = forceInitOutputFeatures)
-          newdata[i,modelFit$meta$outputName] <- sum(
+          newdata[i,outputName] <- sum(
             newdata_matrix[i,colnames(modelFit$coefficients)] * 
               mod_coef[mod_coef$localtime==newdata$localtime[i],colnames(modelFit$coefficients)]
           )
         }
       } else {
-        newdata[,modelFit$meta$outputName] <- rowSums(
-          newdata_matrix[,colnames(modelFit$coefficients)] * 
-            as.matrix(mod_coef[mod_coef$localtime %in% newdata$localtime,colnames(modelFit$coefficients)]),
+        newdata[newdata$localtime %in% mod_coef$localtime, 
+                outputName] <- 
+          rowSums(
+            newdata_matrix[newdata$localtime %in% mod_coef$localtime,
+                           colnames(modelFit$coefficients)] * 
+              as.matrix(mod_coef[mod_coef$localtime %in% newdata$localtime,colnames(modelFit$coefficients)]),
           na.rm=T
         )
       }
@@ -808,9 +811,9 @@ RLS <- function(input_parameters){
       if(identical(modelMinMaxHorizonInHours,1)){
         result <- 
           if (logOutput) {
-            exp(newdata[,modelFit$meta$outputName])
+            exp(newdata[,outputName])
           } else { 
-            newdata[,modelFit$meta$outputName] 
+            newdata[,outputName] 
           }
         if (!is.null(maxPredictionValue)){
           ifelse(result > maxPredictionValue, maxPredictionValue, result)
@@ -819,7 +822,7 @@ RLS <- function(input_parameters){
         }
       } else {
         # When predicting a fixed horizon with each model coefficients set
-        if(paste("AR",modelFit$meta$outputName,sep="_") %in% colnames(param)){
+        if(paste("AR",outputName,sep="_") %in% colnames(param)){
           stop("Horizons per step higher than 1 are not allowed when predicting multiple step ahead of ARX models")
         } else {
           mod_coef <- mod_coef[
@@ -898,8 +901,8 @@ RLS <- function(input_parameters){
           timePred <- 
             data.frame(
               "localtime"=newdata$localtime,
-              "pred"= if (logOutput) { exp(newdata[,modelFit$meta$outputName]) } 
-                      else { newdata[,modelFit$meta$outputName] }
+              "pred"= if (logOutput) { exp(newdata[,outputName]) } 
+                      else { newdata[,outputName] }
             )
           if(!is.null(maxPredictionValue)){
             timePred[,"pred"] <- ifelse(timePred[,"pred"] > maxPredictionValue, 
@@ -1092,7 +1095,14 @@ predict.train <- function (object, newdata = NULL, type = "raw", na.action = na.
   #   newdata_ini <- newdata_ini[,!(colnames(newdata_ini) %in% c(object$finalModel$meta$outputName))]
   if(sum(!(colnames(newdata) %in% colnames(newdata_ini))) > 0){
     newdata <- cbind(
-      newdata[,!(colnames(newdata) %in% colnames(newdata_ini))],
+      if(sum(!(colnames(newdata) %in% colnames(newdata_ini)))==1){
+        setNames(
+          data.frame(newdata[,!(colnames(newdata) %in% colnames(newdata_ini))]),
+          nm = colnames(newdata)[!(colnames(newdata) %in% colnames(newdata_ini))]
+        )
+      } else {
+        newdata[,!(colnames(newdata) %in% colnames(newdata_ini))]
+      },
       newdata_ini
     )
   }

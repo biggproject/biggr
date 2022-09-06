@@ -814,13 +814,17 @@ align_time_grid <- function(data,
 #' @param maxIniDate <date> Maximum date to start looking for anomalies
 #' @param minEndDate <date> Minimum date to stop looking for anomalies
 #' @param maxEndDate <date> Maximum date to stop looking for anomalies
+#' @param checkFor <string> Which effect will the disruptive
+#' event generate? e.g. the SARS-CoV2 pandemia decrease the energy consumption of tertiary buildings,
+#' so in that case we should check for decrement in consumption 
+#' Options: decrement, increment, decrementAndIncrement.
 #' @return Period of time <start,end> with anomalous low consumption. Period
 #' of time is within the InitDate and EndDate limits
 
 detect_disruptive_period <- function(data, consumptionColumn, timeColumn, 
                                      temperatureColumn, tz, 
                                      minIniDate, maxIniDate,
-                                     minEndDate, maxEndDate){
+                                     minEndDate, maxEndDate, checkFor="decrement"){
   
   # In case of daily or greater frequency
   if(lubridate::as.period(detect_time_step(data)) >= lubridate::as.period("P1D")){
@@ -865,7 +869,7 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
     data_monthly <- data_monthly[complete.cases(data_monthly),]
   }
   
-  disruptive_period_model <- function(dataM, minDate, maxDate){
+  disruptive_period_model <- function(dataM, minDate, maxDate, checkFor="decrement"){
     data_d <- data.frame(
       "time" = seq.Date(as.Date(min(dataM$time)), 
                         as.Date(max(dataM$time) + months(1) - days(1)), 
@@ -874,10 +878,7 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
     data_d$disruptive <- ifelse(data_d$time >= minDate & data_d$time <= maxDate,
                                 1,0)
     
-    if( ( (sum(data_d$disruptive==1)/nrow(data_d))>0.8 ||
-          (sum(data_d$disruptive==1)/nrow(data_d))<0.2 ) ||
-        ( nrow(dataM)<10 )
-      ){
+    if( nrow(dataM)<12 ){
       return(NA)
     } else {
       dataMD <- data_d %>% 
@@ -889,14 +890,32 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
         summarise("disruptive" = sum(disruptive),
                   "disruptive_f" = as.factor(sum(disruptive)>0))
       dataM <- dataM %>% left_join(dataMD,by="time")
+      if((sum(dataM$disruptive_f==T)/nrow(dataM))<0.05){
+        return(NA)
+      }
       cases <- expand.grid(HDD=colnames(dataM)[grepl("^HDD",colnames(dataM))],
                   CDD=colnames(dataM)[grepl("^CDD",colnames(dataM))])
       err <- mapply(1:nrow(cases), FUN = function(i){
         dataM$HDD <- unlist(dataM[cases$HDD[i]])
         dataM$CDD <- unlist(dataM[cases$CDD[i]])
-        mod <- lm(consumption ~ 0 + disruptive_f + disruptive + HDD:disruptive_f + 
-                    CDD:disruptive_f, data=dataM)
-        RMSE(mod$fitted.values, mod$model$consumption)
+        mod <- lm(consumption ~ 1 + disruptive_f + CDD + HDD + 
+                    HDD:disruptive_f + CDD:disruptive_f, data=dataM)
+        dataR <- dataM[dataM$disruptive_f==F,]
+        #dataR$old_disruptive_f <- dataR$disruptive_f
+        #dataR$disruptive_f <- factor(F,levels=c(T,F))
+        #dataR$disruptive <- 0
+        pred <- predict(mod,dataR)
+        real <- dataR$consumption
+        # if(checkFor=="decrement"){
+        #   pred <- ifelse(dataR$old_disruptive_f==T,pred,
+        #                  ifelse(pred<real & dataR$old_disruptive_f==T,pred,real))
+        # } else if(checkFor=="increment") {
+        #   pred <- ifelse(dataR$old_disruptive_f==T,pred,
+        #                  ifelse(pred>real & dataR$old_disruptive_f==T,pred,real))
+        # }
+        RMSE(pred,real)
+        
+        #RMSE(mod$fitted.values, mod$model$consumption)
         # mod <- penalized(response = dataM$consumption,
         #           penalized = ~ HDD:disruptive_f + CDD:disruptive_f,
         #           unpenalized = ~ 0 + disruptive_f + disruptive,
@@ -908,7 +927,7 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
   }
   cases_dates <- expand.grid(
     minDate=seq.Date(minIniDate, maxIniDate, by = "14 days"),
-    maxDate=seq.Date(minEndDate, maxEndDate, by="14 days")
+    maxDate=seq.Date(minEndDate, maxEndDate, by = "14 days")
   )
   # Evaluate multiple time periods in order to find the best one
   # fitting a model which considers the relationship between
@@ -919,7 +938,9 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
                               maxDate=cases_dates$maxDate[k])
     }
   )
-  return(cases_dates[which.min(results),])
+  cases_dates$diff <- (cases_dates$maxDate - cases_dates$minDate)
+  return(cases_dates[cases_dates$diff==min(cases_dates$diff[results==min(results,na.rm=T) & is.finite(results)],na.rm=T),
+                     !(colnames(cases_dates) %in% "diff")][1,])
 }
 
 #' The function detects holidays period in tertiary building time serie.

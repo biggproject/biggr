@@ -119,7 +119,7 @@ get_subject_building <- function(buildingsRdf, buildingId){
   )
 }
 
-get_sensor_metadata <- function(buildingsRdf, sensorId){
+get_sensor_metadata <- function(buildingsRdf, sensorId, tz){
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
     paste0(mapply(function(i){
       sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
@@ -128,14 +128,9 @@ get_sensor_metadata <- function(buildingsRdf, sensorId){
     '
     SELECT ?hasMeasurement ?timeSeriesFrequency ?timeSeriesIsCumulative 
       ?timeSeriesTimeAggregationFunction ?timeSeriesIsOnChange ?timeSeriesIsRegular
-      ?hasMeasuredProperty ?considerEstimatedValues ?tz
+      ?hasMeasuredProperty ?considerEstimatedValues
     WHERE {
-      ?b a bigg:Building .
-      ?b bigg:hasLocationInfo ?l .
-      optional {?l bigg:addressTimeZone ?tz .}
-      ?b bigg:hasSpace ?bs .
-      ?bs bigg:isObservedByDevice ?d .
-      ?d bigg:hasSensor ?m .
+      ?m a bigg:Sensor.
       ?m bigg:hasMeasurement ?hasMeasurement .
       FILTER regex(str(?hasMeasurement), "',sensorId,'")
       optional {?m bigg:timeSeriesTimeAggregationFunction ?timeSeriesTimeAggregationFunction .}
@@ -147,6 +142,7 @@ get_sensor_metadata <- function(buildingsRdf, sensorId){
       optional {?m bigg:hasEstimationMethod ?hasEstimationMethod .}
       optional {?hasEstimationMethod bigg:considerEstimatedValues ?considerEstimatedValues .}
     }')))
+  metadata_df$tz <- tz
   metadata_df$hasMeasuredProperty <- gsub("bigg:","",metadata_df$hasMeasuredProperty)
   metadata_df$sensorId <- sensorId
   return(metadata_df)
@@ -215,12 +211,12 @@ iso8601_period_to_timedelta <- function(x){
            hours(x@hour) + minutes(x@minute) + seconds(lubridate::second(x)))
 }
 
-read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId,
+read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz,
                                       outputFrequency, aggFunctions,
                                       useEstimatedValues){
   
   # Get period and aggregation function specific for the timeseries
-  metadata <- get_sensor_metadata(buildingsRdf, sensorId)
+  metadata <- get_sensor_metadata(buildingsRdf, sensorId, tz)
   
   # Override condition if the estimated values should be used considering the 
   # estimation method defined in the sensor metadata
@@ -388,6 +384,7 @@ parse_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
   #formula <- devagg_buildings[4,3]
   result <- data.frame()
   op <- NULL
+  tz <- get_tz_building(buildingsRdf, buildingId)
   while (formula!=""){
     if (substr(formula,1,4)=="<mi>"){
       res <- stringr::str_match(formula, "<mi>\\s*(.*?)\\s*</mi>")
@@ -397,6 +394,7 @@ parse_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
             timeseriesObject = timeseriesObject,
             buildingsRdf = buildingsRdf,
             sensorId = "',res[1,2],'",
+            tz = "',tz,'",
             outputFrequency = "',outputFrequency,'",
             aggFunctions = ',paste0('c("',paste(aggFunctions,collapse='","'),'")'),',
             useEstimatedValues = ',useEstimatedValues,'

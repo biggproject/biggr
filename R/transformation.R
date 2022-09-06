@@ -742,7 +742,8 @@ normalise_zscore <- function(data, scalingAttr=NULL) {
 #' @param localTimeZone <string> timezone
 #' @param transformation <string> absolute or relative
 #' @param inputVars <list of strings> Possible values: loadCurves, daysWeekend,
-#' daysHolidays, daysWeek, dailyTemperature, dailyConsumption
+#' daysHolidays, daysWeek, dailyTemperature, dailyConsumption, dailyHdd, dailyCdd,
+#' ratioDailyConsumptionTemperature
 #' @param nDayParts <int> number of part days. Clustering considering
 #' parts of the day as "aggregation" of multiple hours. Default value 24 so
 #' each hour is considered a single part of the day
@@ -990,8 +991,8 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
     # kernlab::specc(apply(tmp_norm$values,1:2,as.numeric), centers = k,
     #                iterations = 400, mod.sample = 0.75, na.action = na.omit)
     kernlab::specc(apply(tmp_norm$values,1:2,as.numeric), centers = k, kernel = "polydot",
-          kpar = list(degree = 5), nystrom.red = T, nystrom.sample = nrow(tmp_norm$values)[1]/6,
-          iterations = 400, mod.sample = 0.75, na.action = na.omit)
+          kpar = list(degree = 4), nystrom.red = T, nystrom.sample = nrow(tmp_norm$values)[1]/6,
+          iterations = 200, mod.sample = 0.75, na.action = na.omit)
   }, error = function(e) {
     kernlab::specc(apply(tmp_norm$values,1:2,as.numeric), centers = k,
                    iterations = 400, mod.sample = 0.75, na.action = na.omit)
@@ -1092,10 +1093,10 @@ classification_dlc <- function(data, consumptionFeature, outdoorTemperatureFeatu
   # methodAbnormalDays = "classificationModel"
   
   if(!is.null(holidaysDatesFeature)){
-    holidaysDates <- unique(data$date[holidaysDatesFeature])
+    holidaysDates <- unique(data$date[data[,holidaysDatesFeature]])
   }
   if(!is.null(abnormalDaysFeature)){
-    abnormalDays <- unique(data$date[abnormalDaysFeature])
+    abnormalDays <- unique(data$date[data[,abnormalDaysFeature]])
   }
   
   # Get consumption and temperatures from the dataset
@@ -1171,19 +1172,22 @@ classification_dlc <- function(data, consumptionFeature, outdoorTemperatureFeatu
     "absoluteLoadCurvesCentroids" = sprintf("%02i",
         tmp_centroids_dist %>% apply(1, function(x) {ifelse(sum(is.na(x))>1, NA, order(x)[1])})),
     "clusteringCentroids" = sprintf("%02i",
-        tmp_clust_dist %>% apply(1, function(x) {ifelse(sum(is.na(x))>1, NA, order(x)[1])})),
-    "classificationModel" = if (class(clustering$classificationModel) %in% c("numeric","character","factor")) {
-      sprintf("%02i",as.numeric(as.character(clustering$classificationModel)))
-    } else {
-      as.character(
-        ranger::predictions(predict(clustering$classificationModel,
-                calendar_components(
-                  data.frame("time"=as.Date(tmp_spread$date,tz=localTimeZone)), 
-                  localTimeZone, holidaysDates, inplace = T)))
-      )
-    }
-  )
-  
+        tmp_clust_dist %>% apply(1, function(x) {ifelse(sum(is.na(x))>1, NA, order(x)[1])}))
+  ) %>% right_join(
+    data.frame(
+      "date" = unique(data$date),
+      "classificationModel" = if (class(clustering$classificationModel) %in% c("numeric","character","factor")) {
+        sprintf("%02i",as.numeric(as.character(clustering$classificationModel)))
+      } else {
+        as.character(
+          ranger::predictions(predict(clustering$classificationModel,
+                  calendar_components(
+                    data.frame("time"=as.Date(unique(data$date),tz=localTimeZone)), 
+                    localTimeZone, holidaysDates, inplace = T)))
+        )
+      }
+  ), by="date")
+  classification_results <- classification_results[order(classification_results$date),]
   classification_results$s <- ifelse(
     classification_results$date %in% abnormalDays, 
     classification_results[,methodAbnormalDays],
