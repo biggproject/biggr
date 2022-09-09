@@ -1,0 +1,247 @@
+---
+title: "BIGG BC1 - hyperparameter tuning"
+output:
+  rmdformats::html_docco:
+    thumbnails: true
+    lightbox: true
+    gallery: true
+pkgdown:
+  as_is: true  
+---
+
+Along this vignette, the implementation of the hyperparameter tuning via genetic algorithm is represented. Tuning is based on identfiying best fitting hyperparameter scenario for a regression model. The evaluation of the model is done via forecasting error evaluation using RMSE metrics. In this case a linear penalised model is trained using weather and calendar based features.
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+
+# Load the needed libraries
+
+```{r setup,echo=FALSE}
+library(data.table)
+library(ggplot2)
+library(gridExtra)
+library(plotly)
+library(padr)
+library(htmlwidgets)
+library(carrier)
+library(biggr)
+library(parallel)
+library(GA)
+source("/home/abadia/Documents/biggr/R/modelling.R")
+source("/home/abadia/Documents/biggr/R/optimization.R")
+```
+
+# Load an example dataset
+
+The biggr package has internally preloaded six datasets containing hourly electricity consumption and weather data from six different buildings.
+
+```{r}
+data(biggr)
+df <- electricity3 %>% calendar_components(localTimeZone = "Europe/Madrid")
+df <- cbind(df, do.call(cbind,oce::sunAngle(df$time,latitude=41.5,longitude=1))[,c("azimuth","altitude")])
+df <- df %>%
+  filter(!duplicated(df$time)) %>%
+  select(!(
+    contains("outliers") |
+    contains("upperPredCalendarModel") |
+    contains("lowerPredCalendarModel")
+  )) %>%
+  left_join(
+    detect_ts_calendar_model_outliers(
+      data = df,
+      localTimeColumn = "localtime",
+      valueColumn = "Qe",
+      window = "season",
+      outputPredictors = T
+    ),
+    by = "localtime"
+  )
+```
+
+Outliers are tagged using calendar model in order to remove noisy data and improve model performance.
+
+```{r}
+# Time series plots
+ts_p <- ggplot(
+    reshape2::melt( df %>% select(time, Qe, temperature, windSpeed, GHI) %>% pad(), 
+                    "time")
+  ) + 
+  geom_line(
+    aes(time,value)
+  ) + 
+  facet_wrap(~variable, scales = "free_y", ncol=1) +
+  theme_bw()
+ts_p <- ggplotly(ts_p)
+ts_p
+```
+
+```{r}
+# All daily load curves at once
+ggplot(df) + 
+  geom_line(
+    aes(hour, Qe, group=date),
+    alpha=0.05
+  ) + xlab("hour of the day")
+```
+
+```{r}
+# All weekly load curves at once
+ggplot(df) + 
+  geom_line(
+    aes(weekhour, Qe, group=paste(strftime(localtime,"%Y"),strftime(localtime,"%U"))),
+    alpha=0.1
+  ) + xlab("hour of the week")
+```
+
+# Hyperparameters specification 
+
+Model hyperparameters are described to let optimizer create hyperparameter scenarios to be evaluated. Hyperparameter specification is mainly focused on type of data, range of values and resolution or number of steps in range.
+
+```{r}
+features <- list(
+  "nhar" = list(
+    min = 5,
+    max = 6,
+    nlevels = 1,
+    datatype = "integer"
+  ),
+  "tbalh" = list(
+    min = 16,
+    max = 17,
+    nlevels = 1,
+    datatype = "float"
+  ),
+  "tbalc" = list(
+    min = 24,
+    max = 25,
+    nlevels = 1,
+    datatype = "float"
+  ),
+  "alpha" = list(
+    min = 0.1,
+    max = 0.2,
+    nlevels = 1,
+    datatype = "float"
+  )
+)
+```
+
+Initial hyperparameter values are provided to the genetic algorithm to help the optimizer find best scenario.
+
+```{r}
+# Suggestions initialization 
+suggestions <- list(5, 16, 24, 0.1)
+```
+
+# Cost function definition 
+
+Evaluation of the model performance is proposed as the cost function in the optimization. Different hyperparameter scenarios are evaluated on the penalised model to find the best performance model therefore the best hyperparameter scenario. The optimization criteria used is the backcasting performance obtained via RMSE indicator.
+
+```{r}
+opt_function <- function(X, df, ...) {
+  mod <- train(
+    Qe ~ hour + th + tc + wh + wc + isolh + isolc,
+    data = df[df$outliers == F, ],
+    method = PenalisedLM(
+      data.frame(
+        parameter = c("nhar", "tbalh", "tbalc", "alpha"),
+        class = c("integer", "float", "float", "float")
+      )
+    ),
+    trControl = trainControl(
+      method = "timeslice",
+      initialWindow = ceiling(nrow(df) * 0.5),
+      horizon = ceiling(nrow(df) * 0.1),
+      skip = ceiling(nrow(df) * 0.1) - 1,
+      fixedWindow = T
+    ),
+    tuneGrid = expand.grid(
+      "nhar" = c(X$nhar),
+      "tbalh" = c(X$tbalh),
+      "tbalc" = c(X$tbalc),
+      "alpha" = c(X$alpha)
+    ),
+    transformationSentences = list(
+      "hour" = c(
+        "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
+        "isWeekend"
+      ),
+      "tlpf" = "lpf_ts(...,featuresNames='temperature',smoothingTimeScaleParameter=param$alpha,
+              outputFeaturesNames='temperatureLpf')",
+      "th" = c(
+        "degree_raw(...,featuresName='temperatureLpf',baseTemperature=param$tbalh,
+              mode='heating',outputFeaturesName='heating',inplace=F)",
+        "hourBy3",
+        "isWeekend"
+      ),
+      "tc" = c(
+        "degree_raw(...,featuresName='temperatureLpf',baseTemperature=param$tbalc,
+              mode='cooling',outputFeaturesName='cooling',inplace=F)",
+        "hourBy3",
+        "isWeekend"
+      ),
+      "wh" = c(
+        "heating",
+        "hourBy3",
+        "windSpeed",
+        "isWeekend"
+      ),
+      "wc" = c(
+        "cooling",
+        "hourBy3",
+        "windSpeed",
+        "isWeekend"
+      ),
+      "GHIh" = "vectorial_transformation(ifelse(heating>0,-GHI,0),outputFeatureName='GHIh')",
+      "GHIc" = "vectorial_transformation(ifelse(cooling>0,GHI,0),outputFeatureName='GHIc')",
+      "isolh" = c(
+        "GHIh",
+        "fs_components(...,featuresName='azimuth',nHarmonics=3,inplace=F)",
+        "isWeekend"
+      ),
+      "isolc" = c(
+        "GHIc",
+        "fs_components(...,featuresName='azimuth',nHarmonics=3,inplace=F)",
+        "isWeekend"
+      )
+    ),
+    forcePositiveTerms = c("th", "tc", "wh", "wc", "isolh", "isolc")
+  )
+  predictor <- crate(function(x, forceGlobalInputFeatures = NULL) {
+    biggr::predict.train(
+      object = !!mod,
+      newdata = x,
+      forceGlobalInputFeatures = forceGlobalInputFeatures
+    )
+  })
+  expected <- df$Qe
+  obtained <- predictor(df)
+  RMSE(expected, obtained, na.rm=T)
+}
+```
+
+
+# Optimize hyperparameters
+
+Optimization is done to obtain best fitting hyperparameters.
+
+```{r}
+best_hyperparameters <- hyperparameters_tuning(
+  opt_criteria = "minimise",
+  opt_function = opt_function,
+  features = features,
+  suggestions = suggestions,
+  maxiter=1,
+  df = df
+)
+```
+
+See best fitting nhar, tbalh, tbalc and alpha  parameters.
+```{r}
+best_hyperparameters
+```

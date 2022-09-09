@@ -271,8 +271,8 @@ test_that("Detect outlier elements based on calendar model. No window", {
   # WARNING: Naive test to check it launches
   # No quality analysis done
   filename <- "test_data/test_ts_hourly.csv"
-  data <- readdata(filename) %>% 
-      mutate(localtime = lubridate::with_tz(time, "Europe/Madrid"))
+  data <- readdata(filename) %>%
+    mutate(localtime = lubridate::with_tz(time, "Europe/Madrid"))
   obtained <- detect_ts_calendar_model_outliers(
     data,
     localTimeColumn = "localtime",
@@ -293,7 +293,7 @@ test_that("Detect outlier elements based on calendar model. With window", {
   # set.seed(123); testdata <- create_serie(144, sample(seq(1000), 144))
   filename <- "test_data/test_ts_hourly.csv"
   data <- readdata(filename) %>%
-      mutate(localtime = lubridate::with_tz(time, "Europe/Madrid"))
+    mutate(localtime = lubridate::with_tz(time, "Europe/Madrid"))
   obtained <- detect_ts_calendar_model_outliers(
     data,
     localTimeColumn = "localtime",
@@ -551,7 +551,7 @@ test_that("Align time grid 1D avg", {
   testdata <- create_serie(48, c(rep(5, 12), rep(10, 12), rep(2, 24)))
   testdata$isReal <- TRUE
   expected <- create_serie(2, c(7.5, 2), timestep = "days") %>%
-      rename(AVG = value)
+    rename(AVG = value)
   expected$GAPS <- c(0, 0)
   expected$RATIO <- c(1, 1)
   obtained <- align_time_grid(testdata,
