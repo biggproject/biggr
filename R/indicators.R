@@ -254,4 +254,3 @@ generate_longitudinal_benchmarking_indicators <- function(
     return(obj)
   }
 }
-´

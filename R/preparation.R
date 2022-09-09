@@ -494,7 +494,7 @@ detect_ts_calendar_model_outliers <- function(data,
       tmp <- newdata[newdata$window == w,]
       result <- detect_ts_calendar_model_outliers_window(
         data=if(class(window)=="integer"){
-          newdata[newdata$window %in% c(w-1,w,w+1),]
+          newdata[newdata$window %in% c((w-2):(w+2)),]
         } else {
           newdata[newdata$window == w,]
         },
@@ -824,7 +824,8 @@ align_time_grid <- function(data,
 detect_disruptive_period <- function(data, consumptionColumn, timeColumn, 
                                      temperatureColumn, tz, 
                                      minIniDate, maxIniDate,
-                                     minEndDate, maxEndDate, checkFor="decrement"){
+                                     minEndDate, maxEndDate, checkFor="decrement",
+                                     minPercentualAffectation = 30){
   
   # In case of daily or greater frequency
   if(lubridate::as.period(detect_time_step(data)) >= lubridate::as.period("P1D")){
@@ -852,7 +853,7 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
       data = data,
       temperatureFeature = temperatureColumn,
       localTimeZone = tz,
-      baseTemperature = seq(8,20,by=3),
+      baseTemperature = seq(14,20,by=1),
       mode = "heating",
       outputFrequency = "P1M",
       outputFeaturesName = "HDD")
@@ -860,7 +861,7 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
       data = data,
       temperatureFeature = temperatureColumn,
       localTimeZone = tz,
-      baseTemperature = seq(16,28,by=3),
+      baseTemperature = seq(20,26,by=1),#seq(16,28,by=3),
       mode = "cooling",
       outputFrequency = "P1M",
       outputFeaturesName = "CDD")
@@ -869,7 +870,14 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
     data_monthly <- data_monthly[complete.cases(data_monthly),]
   }
   
-  disruptive_period_model <- function(dataM, minDate, maxDate, checkFor="decrement"){
+  disruptive_period_model <- function(dataM, minDate, maxDate, checkFor,
+                                      minIniDate, maxEndDate, minPercentualAffectation){
+    
+    # dataM<-data_monthly
+    # k=148
+    # minDate = cases_dates$minDate[k]
+    # maxDate=cases_dates$maxDate[k]
+
     data_d <- data.frame(
       "time" = seq.Date(as.Date(min(dataM$time)), 
                         as.Date(max(dataM$time) + months(1) - days(1)), 
@@ -877,7 +885,8 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
     )
     data_d$disruptive <- ifelse(data_d$time >= minDate & data_d$time <= maxDate,
                                 1,0)
-    
+    data_d$testing <- ifelse(data_d$time >= minIniDate & data_d$time <= maxEndDate,
+                                1,0)
     if( nrow(dataM)<12 ){
       return(NA)
     } else {
@@ -888,39 +897,48 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
             week_start = getOption("lubridate.week.start", 1))
         ) %>% 
         summarise("disruptive" = sum(disruptive),
-                  "disruptive_f" = as.factor(sum(disruptive)>0))
+                  "testing" = sum(testing),
+                  "disruptive_f" = as.factor(disruptive>0),
+                  "testing_f"= as.factor(testing>0) )
       dataM <- dataM %>% left_join(dataMD,by="time")
-      if((sum(dataM$disruptive_f==T)/nrow(dataM))<0.05){
+      if(sum(dataM$disruptive_f==T) < 3 ||
+         sum(dataM$disruptive_f==F) < 7){
         return(NA)
       }
       cases <- expand.grid(HDD=colnames(dataM)[grepl("^HDD",colnames(dataM))],
                   CDD=colnames(dataM)[grepl("^CDD",colnames(dataM))])
       err <- mapply(1:nrow(cases), FUN = function(i){
+        # i=1
         dataM$HDD <- unlist(dataM[cases$HDD[i]])
         dataM$CDD <- unlist(dataM[cases$CDD[i]])
-        mod <- lm(consumption ~ 1 + disruptive_f + CDD + HDD + 
-                    HDD:disruptive_f + CDD:disruptive_f, data=dataM)
-        dataR <- dataM[dataM$disruptive_f==F,]
-        #dataR$old_disruptive_f <- dataR$disruptive_f
-        #dataR$disruptive_f <- factor(F,levels=c(T,F))
-        #dataR$disruptive <- 0
-        pred <- predict(mod,dataR)
-        real <- dataR$consumption
-        # if(checkFor=="decrement"){
-        #   pred <- ifelse(dataR$old_disruptive_f==T,pred,
-        #                  ifelse(pred<real & dataR$old_disruptive_f==T,pred,real))
-        # } else if(checkFor=="increment") {
-        #   pred <- ifelse(dataR$old_disruptive_f==T,pred,
-        #                  ifelse(pred>real & dataR$old_disruptive_f==T,pred,real))
-        # }
-        RMSE(pred,real)
-        
-        #RMSE(mod$fitted.values, mod$model$consumption)
-        # mod <- penalized(response = dataM$consumption,
-        #           penalized = ~ HDD:disruptive_f + CDD:disruptive_f,
-        #           unpenalized = ~ 0 + disruptive_f + disruptive,
-        #           data = dataM, positive=T, trace = F, lambda1 = 1, lambda2 = 1)
-        # RMSE(mod@fitted,dataM$consumption)
+        dataM$time_ <- as.numeric(dataM$time - dataM$time[1])
+        dataM$time_2 <- (dataM$time_)^2
+        if(mean(dataM$HDD)==0 || mean(dataM$CDD)==0) return(NA)
+        if(nrow(dataM)>=36){
+          mod <- lm(consumption ~ 0 + disruptive_f + HDD:disruptive_f + CDD:disruptive_f, data=dataM)
+        } else if (nrow(dataM)>=18){
+          mod <- lm(consumption ~ 0 + disruptive_f + HDD + CDD, data=dataM)
+        } else if (nrow(dataM)<18){
+          mod <- lm(consumption ~ 0 + disruptive_f + HDD + CDD, data=dataM)
+        }
+        dataNoEff <- dataM 
+        dataNoEff$disruptive_f <- factor(F,levels=c(F,T))
+        pred <- predict(mod,dataM)
+        predNoEff <- predict(mod,dataNoEff)
+        real <- dataM$consumption
+        # plot(pred,type="l",col="blue",ylim=c(min(pred,real),max(pred,real)),main=paste(i))
+        # lines(predNoEff,col="red")
+        # lines(real)
+        # points(ifelse(as.logical(dataM$testing_f),real,NA))
+        rmseR <- #RMSE(real,pred)
+          RMSE(real[dataM$testing_f==T],pred[dataM$testing_f==T])
+        return(if(checkFor=="decrement" && 
+                  sum(pred[dataM$disruptive_f==T])<=
+                   ((100-minPercentualAffectation)/100*sum(predNoEff[dataM$disruptive_f==T]))){rmseR
+        } else if(checkFor=="increment" && 
+                  sum(pred[dataM$disruptive_f==T])>=
+                    ((100+minPercentualAffectation)/100*sum(predNoEff[dataM$disruptive_f==T]))){rmseR
+        } else if(!(checkFor %in% c("increment","decrement"))) {rmseR} else {Inf})
       })
       return(err[which.min(err)])
     }
@@ -935,12 +953,17 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
   results <- mapply(1:nrow(cases_dates),
     FUN = function(k){
       disruptive_period_model(dataM = data_monthly,minDate = cases_dates$minDate[k], 
-                              maxDate=cases_dates$maxDate[k])
+                              maxDate=cases_dates$maxDate[k], checkFor,
+                              minIniDate, maxEndDate, minPercentualAffectation)
     }
   )
   cases_dates$diff <- (cases_dates$maxDate - cases_dates$minDate)
-  return(cases_dates[cases_dates$diff==min(cases_dates$diff[results==min(results,na.rm=T) & is.finite(results)],na.rm=T),
-                     !(colnames(cases_dates) %in% "diff")][1,])
+  return(if(all(!is.finite(results))){
+    data.frame("minDate"=NA,"maxDate"=NA)
+  } else {
+    cases_dates[cases_dates$diff==min(cases_dates$diff[results==min(results,na.rm=T) & is.finite(results)],na.rm=T),
+                !(colnames(cases_dates) %in% "diff")][1,]
+  })
 }
 
 #' The function detects holidays period in tertiary building time serie.
