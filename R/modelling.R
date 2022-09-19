@@ -1170,7 +1170,7 @@ gaMonitor2 <- function(object, digits = getOption("digits"), ...) {
 #'     stepsize.T he stepsize or weighting factor
 #' @return <list> of optim solution for each decision variable
 
-optimize <- function(opt_criteria, opt_function, features, suggestions,
+optimize <- function(opt_criteria, opt_function, features, suggestions = NULL,
                      keepBest = TRUE, parallel = FALSE, monitor = TRUE, ...) {
 
   minimise <- function(X, features, ...) {
@@ -1183,10 +1183,12 @@ optimize <- function(opt_criteria, opt_function, features, suggestions,
   fitness <- minimise
   if (opt_criteria == "maximise") fitness <- maximise
 
-  suggestions <- decodeBinFromValue(
-    values = suggestions, 
-    features = features
-  )
+  if (!(is.null(suggestions))) {
+      suggestions <- decodeBinFromValue(
+        values = suggestions,
+        features = features
+      )
+  }
 
   if (is.null(parallel)) parallel <- detectCores() - 2
   if (monitor == FALSE) monitor <- interactive()
