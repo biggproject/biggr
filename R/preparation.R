@@ -950,17 +950,28 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
   # Evaluate multiple time periods in order to find the best one
   # fitting a model which considers the relationship between
   # cooling/heating and consumption
-  params = list(
-    "scenario"=list(
-       "datatype"="discrete",
-       "levels" = seq(nrow(cases_dates))
-    )
-  )
 
-  opt_function <- function(X, dataM, cases_dates, ...) {
+  params = list(
+    "ini"=list(
+       "datatype"="integer",
+       "min"=0,
+       "max"=as.numeric(maxIniDate - minIniDate),
+       "nlevels"=as.numeric(maxIniDate - minIniDate)
+    ),
+    "end"=list(
+       "datatype"="integer",
+       "min"=0,
+       "max"=as.numeric(maxEndDate - minEndDate),
+       "nlevels"=as.numeric(maxEndDate - minEndDate)
+    )
+
+  opt_function <- function(X, dataM, ...) {
     args <- list(...)
-    minDate <- cases_dates$minDate[X$scenario]
-    maxDate <- cases_dates$maxDate[X$scenario]
+    minDate <- minIniDate + days(X$ini) 
+    maxDate <- minEndDate + days(X$end)
+
+    if (minDate > maxDate) return(Inf)
+
     value <- disruptive_period_model(
       dataM=dataM,
       minDate=minDate,
@@ -986,18 +997,22 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
     features = params,
     maxiter = 1,
     dataM = data_monthly,
-    cases_dates=cases_dates,
     checkFor=checkFor,
     minIniDate=minIniDate,
     maxEndDate=maxEndDate,
     minPercentualAffectation=minPercentualAffectation
   )
-  best_scenario <- best_params$scenario
-  return(if(all(!is.finite(best_scenario))){
+
+  best_ini <- best_params$ini
+  best_end <- best_params$end
+  return(if(all(!is.finite(best_params))){
     data.frame("minDate"=NA,"maxDate"=NA)
   } else {
-    cases_dates[best_scenario, ]
+    data.frame( 
+      "minDate"=(minIniDate + days(best_ini)),
+      "maxDate"=(minEndDate + days(best_end)))
   })
+
 }
 
 #' The function detects holidays period in tertiary building time serie.
