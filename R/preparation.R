@@ -950,19 +950,53 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
   # Evaluate multiple time periods in order to find the best one
   # fitting a model which considers the relationship between
   # cooling/heating and consumption
-  results <- mapply(1:nrow(cases_dates),
-    FUN = function(k){
-      disruptive_period_model(dataM = data_monthly,minDate = cases_dates$minDate[k], 
-                              maxDate=cases_dates$maxDate[k], checkFor,
-                              minIniDate, maxEndDate, minPercentualAffectation)
-    }
+  params = list(
+    "scenario"=list(
+       "datatype"="discrete",
+       "levels" = seq(nrow(cases_dates))
+    )
   )
-  cases_dates$diff <- (cases_dates$maxDate - cases_dates$minDate)
-  return(if(all(!is.finite(results))){
+
+  opt_function <- function(X, dataM, cases_dates, ...) {
+    args <- list(...)
+    minDate <- cases_dates$minDate[X$scenario]
+    maxDate <- cases_dates$maxDate[X$scenario]
+    value <- disruptive_period_model(
+      dataM=dataM,
+      minDate=minDate,
+      maxDate=maxDate,
+      args$checkFor,
+      args$minIniDate,
+      args$maxEndDate,
+      args$minPercentualAffectation
+    )
+    if (!(is.finite(value))) {
+      value <- Inf
+    }
+
+    # Naïve discrimination criteria baed on duration
+    days<- as.numeric(maxDate - minDate)
+    value <- value + (days / 1000.0)
+    return(value)
+  }
+
+  best_params <- hyperparameters_tuning(
+    opt_criteria = "minimise",
+    opt_function = opt_function,
+    features = params,
+    maxiter = 1,
+    dataM = data_monthly,
+    cases_dates=cases_dates,
+    checkFor=checkFor,
+    minIniDate=minIniDate,
+    maxEndDate=maxEndDate,
+    minPercentualAffectation=minPercentualAffectation
+  )
+  best_scenario <- best_params$scenario
+  return(if(all(!is.finite(best_scenario))){
     data.frame("minDate"=NA,"maxDate"=NA)
   } else {
-    cases_dates[cases_dates$diff==min(cases_dates$diff[results==min(results,na.rm=T) & is.finite(results)],na.rm=T),
-                !(colnames(cases_dates) %in% "diff")][1,]
+    cases_dates[best_scenario, ]
   })
 }
 
