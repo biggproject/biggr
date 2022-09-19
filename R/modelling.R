@@ -1009,9 +1009,10 @@ decodeValueFromBin <- function(binary, features) {
     nchar(toBin(x))
   }, nlevels)
 
+  seq_bitOrders <- ifelse(length(bitOrders == 1), c(1), seq.int(bitOrders))
   binary <- split(
     binary,
-    rep.int(seq.int(bitOrders), times = bitOrders)
+    rep.int(seq_bitOrders, times = bitOrders)
   )
 
   orders <- sapply(binary, function(x) {
