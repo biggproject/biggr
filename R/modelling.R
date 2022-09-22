@@ -755,8 +755,10 @@ RLS <- function(input_parameters){
                                 forceGlobalInputFeatures = forceGlobalInputFeatures)
       
       # Data transformation for RLS framework
-      model_formula <- update.formula(modelFit$meta$formula,NULL~.)
-      newdata_matrix <- model.matrix.lm(model_formula, newdata, na.action=na.pass)
+      model_formula <- modelFit$meta$formula#update.formula(modelFit$meta$formula,NULL~.)
+      newdata[,outputName] <- NA
+      newdata_matrix <- model.matrix.lm(modelFit$meta$formula, newdata, na.action=na.pass)
+      newdata[,outputName] <- NULL
       colnames(newdata_matrix) <- gsub(":","_",colnames(newdata_matrix))
       
       all_times <- suppressMessages(pad(data.frame("localtime"=newdata$localtime),by = "localtime"))

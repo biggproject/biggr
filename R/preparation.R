@@ -494,7 +494,7 @@ detect_ts_calendar_model_outliers <- function(data,
       tmp <- newdata[newdata$window == w,]
       result <- detect_ts_calendar_model_outliers_window(
         data=if(class(window)=="integer"){
-          newdata[newdata$window %in% c((w-2):(w+2)),]
+          newdata[newdata$window %in% c((w-3):(w)),]
         } else {
           newdata[newdata$window == w,]
         },
@@ -825,8 +825,10 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
                                      temperatureColumn, tz, 
                                      minIniDate, maxIniDate,
                                      minEndDate, maxEndDate, checkFor="decrement",
-                                     minPercentualAffectation = 30){
+                                     minDecrementPercentualAffectation = 30,
+                                     minIncrementPercentualAffectation = 60){
   
+  n_timesteps <- hourly_timesteps(720,detect_time_step(data$time))
   # In case of daily or greater frequency
   if(lubridate::as.period(detect_time_step(data)) >= lubridate::as.period("P1D")){
     data_monthly <- data %>% 
@@ -836,7 +838,7 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
         week_start = getOption("lubridate.week.start", 1))) %>%
       summarise(
         across(c(consumptionColumn,temperatureColumn),
-               ~mean(.x*hourly_timesteps(720,detect_time_step(data$time)),na.rm=T),
+               ~mean(.x*n_timesteps,na.rm=T),
                .names = c("consumption",temperatureColumn))
       )
   # In case of hourly or quarterhourly data
@@ -847,7 +849,7 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
         unit = lubridate::as.period("P1M"),
         week_start = getOption("lubridate.week.start", 1))) %>%
       summarise(
-        across(consumptionColumn, ~mean(.x*hourly_timesteps(720,detect_time_step(data$time)),na.rm=T),.names = "consumption")
+        across(consumptionColumn, ~mean(.x*n_timesteps,na.rm=T),.names = "consumption")
       )
     data_hdd <- degree_days(
       data = data,
@@ -934,11 +936,19 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
           RMSE(real[dataM$testing_f==T],pred[dataM$testing_f==T])
         return(if(checkFor=="decrement" && 
                   sum(pred[dataM$disruptive_f==T])<=
-                   ((100-minPercentualAffectation)/100*sum(predNoEff[dataM$disruptive_f==T]))){rmseR
+                   ((100-minDecrementPercentualAffectation)/100*sum(predNoEff[dataM$disruptive_f==T]))){
+          rmseR
         } else if(checkFor=="increment" && 
                   sum(pred[dataM$disruptive_f==T])>=
-                    ((100+minPercentualAffectation)/100*sum(predNoEff[dataM$disruptive_f==T]))){rmseR
-        } else if(!(checkFor %in% c("increment","decrement"))) {rmseR} else {Inf})
+                    ((100+minIncrementPercentualAffectation)/100*sum(predNoEff[dataM$disruptive_f==T]))){
+          rmseR
+        } else if(!(checkFor %in% c("increment","decrement")) && (
+                  sum(pred[dataM$disruptive_f==T])>=
+                  ((100+minIncrementPercentualAffectation)/100*sum(predNoEff[dataM$disruptive_f==T])) ||
+                  sum(pred[dataM$disruptive_f==T])<=
+                  ((100-minDecrementPercentualAffectation)/100*sum(predNoEff[dataM$disruptive_f==T])))) {
+          rmseR
+        } else {Inf})
       })
       return(err[which.min(err)])
     }
