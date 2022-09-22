@@ -960,20 +960,69 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
   # Evaluate multiple time periods in order to find the best one
   # fitting a model which considers the relationship between
   # cooling/heating and consumption
-  results <- mapply(1:nrow(cases_dates),
-    FUN = function(k){
-      disruptive_period_model(dataM = data_monthly,minDate = cases_dates$minDate[k], 
-                              maxDate=cases_dates$maxDate[k], checkFor,
-                              minIniDate, maxEndDate, minPercentualAffectation)
+
+  params = list(
+    "ini"=list(
+       "datatype"="integer",
+       "min"=0,
+       "max"=as.numeric(maxIniDate - minIniDate),
+       "nlevels"=as.numeric(maxIniDate - minIniDate)
+    ),
+    "end"=list(
+       "datatype"="integer",
+       "min"=0,
+       "max"=as.numeric(maxEndDate - minEndDate),
+       "nlevels"=as.numeric(maxEndDate - minEndDate)
+    )
+
+  opt_function <- function(X, dataM, ...) {
+    args <- list(...)
+    minDate <- minIniDate + days(X$ini) 
+    maxDate <- minEndDate + days(X$end)
+
+    if (minDate > maxDate) return(Inf)
+
+    value <- disruptive_period_model(
+      dataM=dataM,
+      minDate=minDate,
+      maxDate=maxDate,
+      args$checkFor,
+      args$minIniDate,
+      args$maxEndDate,
+      args$minPercentualAffectation
+    )
+    if (!(is.finite(value))) {
+      value <- Inf
     }
+
+    # Naïve discrimination criteria baed on duration
+    days<- as.numeric(maxDate - minDate)
+    value <- value + (days / 1000.0)
+    return(value)
+  }
+
+  best_params <- hyperparameters_tuning(
+    opt_criteria = "minimise",
+    opt_function = opt_function,
+    features = params,
+    maxiter = 1,
+    dataM = data_monthly,
+    checkFor=checkFor,
+    minIniDate=minIniDate,
+    maxEndDate=maxEndDate,
+    minPercentualAffectation=minPercentualAffectation
   )
-  cases_dates$diff <- (cases_dates$maxDate - cases_dates$minDate)
-  return(if(all(!is.finite(results))){
+
+  best_ini <- best_params$ini
+  best_end <- best_params$end
+  return(if(all(!is.finite(best_params))){
     data.frame("minDate"=NA,"maxDate"=NA)
   } else {
-    cases_dates[cases_dates$diff==min(cases_dates$diff[results==min(results,na.rm=T) & is.finite(results)],na.rm=T),
-                !(colnames(cases_dates) %in% "diff")][1,]
+    data.frame( 
+      "minDate"=(minIniDate + days(best_ini)),
+      "maxDate"=(minEndDate + days(best_end)))
   })
+
 }
 
 #' The function detects holidays period in tertiary building time serie.

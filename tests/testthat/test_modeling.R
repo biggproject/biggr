@@ -1,16 +1,16 @@
-#Sys.setlocale("LC_ALL", "en_US.UTF-8")
+# Sys.setlocale("LC_ALL", "en_US.UTF-8")
 #
-#library(data.table)
-#library(ggplot2)
-#library(gridExtra)
-#library(plotly)
-#library(padr)
-#library(htmlwidgets)
-#library(carrier)
-#library(biggr)
-#library(fs)
+# library(data.table)
+# library(ggplot2)
+# library(gridExtra)
+# library(plotly)
+# library(padr)
+# library(htmlwidgets)
+# library(carrier)
+# library(biggr)
+# library(fs)
 #
-#setup_test <- function() {
+# setup_test <- function() {
 #  data(biggr)
 #  df <- electricity5 %>% calendar_components(localTimeZone = "Europe/Madrid")
 #  df <- cbind(df,
@@ -24,16 +24,16 @@
 #  # Clustering the daily load curves
 #  clust <- clustering_dlc(
 #    data = df,
-#    consumptionFeature = "Qe", 
-#    outdoorTemperatureFeature = "temperature", 
-#    localTimeZone = "Europe/Madrid", 
-#    kMax = 4, 
+#    consumptionFeature = "Qe",
+#    outdoorTemperatureFeature = "temperature",
+#    localTimeZone = "Europe/Madrid",
+#    kMax = 4,
 #    inputVars = c("loadCurves","dailyConsumption"),
 #    loadCurveTransformation = "absolute",
 #    nDayParts = 24
 #  )
 #  if("s" %in% colnames(df))
-#    df <- df %>% select(-s) 
+#    df <- df %>% select(-s)
 #  df <- df %>% left_join(clust$dailyClassification)
 #  df <- df[!is.na(df$s),] # Once the classification procedure works, no need for this.
 #
@@ -41,7 +41,7 @@
 #  df <- df %>%
 #    select(!(contains("outliers") |
 #      contains("upperPredCalendarModel") |
-#      contains("lowerPredCalendarModel"))) %>% 
+#      contains("lowerPredCalendarModel"))) %>%
 #    left_join(
 #      detect_ts_calendar_model_outliers(
 #        data = df,
@@ -54,9 +54,9 @@
 #  )
 #
 #  return(df)
-#}
+# }
 #
-#test_that("PenalisedLM b2back test. Using weekday/weekend as daily load curves groups", {
+# test_that("PenalisedLM b2back test. Using weekday/weekend as daily load curves groups", {
 #  expected <- "test_b2back/test_penalisedlm_modeling_weekday.rds"
 #
 #  df <- setup_test()
@@ -119,12 +119,12 @@
 #  # Generate the predictor object with the trained model
 #  predictor <- crate(function(x,forceGlobalInputFeatures=NULL){
 #    biggr::predict.train(
-#      object = !!mod, 
-#      newdata = x, 
+#      object = !!mod,
+#      newdata = x,
 #      forceGlobalInputFeatures = forceGlobalInputFeatures
 #    )
 #  })
-#  
+#
 #  # Predict with the validation set
 #  df_for_pred <- df
 #  df_for_pred$Qe_pred <- predictor(df_for_pred)
@@ -136,9 +136,9 @@
 #    obtained == expected,
 #    "Expected and obtained are different"
 #  )
-#})
+# })
 #
-#test_that("PenalisedLM b2back test. Using the clustering result of daily load curves", {
+# test_that("PenalisedLM b2back test. Using the clustering result of daily load curves", {
 #  expected <- "test_b2back/test_penalisedlm_modeling_clustering.rds"
 #
 #  df <- setup_test()
@@ -196,16 +196,16 @@
 #    ),
 #    forcePositiveTerms = c("th","tc","wh","wc","isolh","isolc")
 #  )
-#  
+#
 #  # Generate the predictor object with the trained model
 #  predictor <- crate(function(x,forceGlobalInputFeatures=NULL){
 #    biggr::predict.train(
-#      object = !!mod, 
-#      newdata = x, 
+#      object = !!mod,
+#      newdata = x,
 #      forceGlobalInputFeatures = forceGlobalInputFeatures
 #    )
 #  })
-#  
+#
 #  # Predict with the validation set
 #  df_for_pred <- df
 #  df_for_pred$Qe_pred <- predictor(df_for_pred)
@@ -217,9 +217,9 @@
 #    obtained == expected,
 #    "Expected and obtained are different"
 #  )
-#})
+# })
 #
-#test_that("RLS b2back test. Adjust a time-varying regression model", {
+# test_that("RLS b2back test. Adjust a time-varying regression model", {
 #  expected <- "test_b2back/test_rls_modeling_timevarying.rds"
 #
 #  df <- setup_test()
@@ -318,21 +318,21 @@
 #               )
 #    )
 #  )
-#  
+#
 #  # Generate the predictor object with the trained model
 #  predictor <- crate(
 #    function(x, forceGlobalInputFeatures = NULL, model_horizon_in_hours=1,
 #      model_window="%Y-%m-%d", model_selection="rmse"){
 #    biggr::predict.train(
-#      object = !!mod, 
-#      newdata = x, 
+#      object = !!mod,
+#      newdata = x,
 #      forceGlobalInputFeatures = forceGlobalInputFeatures,
 #      model_horizon_in_hours = model_horizon_in_hours,
 #      model_window = model_window,
 #      model_selection = model_selection
 #    )
 #  })
-#  
+#
 #  # Predict with the validation set
 #  df_for_pred <- df[df$time>=as.POSIXct("2018-01-01 00:00:00"),]
 #  df_for_pred <- df_for_pred[order(df_for_pred$time),]
@@ -345,4 +345,4 @@
 #    obtained == expected,
 #    "Expected and obtained are different"
 #  )
-#})
+# })
