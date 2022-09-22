@@ -873,7 +873,9 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
   }
   
   disruptive_period_model <- function(dataM, minDate, maxDate, checkFor,
-                                      minIniDate, maxEndDate, minPercentualAffectation){
+                                      minIniDate, maxEndDate, 
+                                      minDecrementPercentualAffectation,
+                                      minIncrementPercentualAffectation){
     
     # dataM<-data_monthly
     # k=148
@@ -960,7 +962,7 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
   # Evaluate multiple time periods in order to find the best one
   # fitting a model which considers the relationship between
   # cooling/heating and consumption
-
+  
   params = list(
     "ini"=list(
        "datatype"="integer",
@@ -974,12 +976,13 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
        "max"=as.numeric(maxEndDate - minEndDate),
        "nlevels"=as.numeric(maxEndDate - minEndDate)
     )
-
+  )
   opt_function <- function(X, dataM, ...) {
     args <- list(...)
+    
     minDate <- minIniDate + days(X$ini) 
     maxDate <- minEndDate + days(X$end)
-
+    
     if (minDate > maxDate) return(Inf)
 
     value <- disruptive_period_model(
@@ -989,7 +992,8 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
       args$checkFor,
       args$minIniDate,
       args$maxEndDate,
-      args$minPercentualAffectation
+      args$minDecrementPercentualAffectation,
+      args$minIncrementPercentualAffectation
     )
     if (!(is.finite(value))) {
       value <- Inf
@@ -1010,12 +1014,13 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
     checkFor=checkFor,
     minIniDate=minIniDate,
     maxEndDate=maxEndDate,
-    minPercentualAffectation=minPercentualAffectation
+    minDecrementPercentualAffectation=minDecrementPercentualAffectation,
+    minIncrementPercentualAffectation=minIncrementPercentualAffectation
   )
 
   best_ini <- best_params$ini
   best_end <- best_params$end
-  return(if(all(!is.finite(best_params))){
+  return(if(all(mapply(function(i)!is.finite(i),best_params))){
     data.frame("minDate"=NA,"maxDate"=NA)
   } else {
     data.frame( 
