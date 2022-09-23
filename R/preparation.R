@@ -955,10 +955,6 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
       return(err[which.min(err)])
     }
   }
-  cases_dates <- expand.grid(
-    minDate=seq.Date(minIniDate, maxIniDate, by = "14 days"),
-    maxDate=seq.Date(minEndDate, maxEndDate, by = "14 days")
-  )
   # Evaluate multiple time periods in order to find the best one
   # fitting a model which considers the relationship between
   # cooling/heating and consumption
@@ -1009,13 +1005,14 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
     opt_criteria = "minimise",
     opt_function = opt_function,
     features = params,
-    maxiter = 1,
+    maxiter = 5,
+    popSize = 12,
     dataM = data_monthly,
-    checkFor=checkFor,
-    minIniDate=minIniDate,
-    maxEndDate=maxEndDate,
-    minDecrementPercentualAffectation=minDecrementPercentualAffectation,
-    minIncrementPercentualAffectation=minIncrementPercentualAffectation
+    checkFor = checkFor,
+    minIniDate = minIniDate,
+    maxEndDate = maxEndDate,
+    minDecrementPercentualAffectation = minDecrementPercentualAffectation,
+    minIncrementPercentualAffectation = minIncrementPercentualAffectation
   )
 
   best_ini <- best_params$ini

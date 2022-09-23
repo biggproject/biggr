@@ -1218,7 +1218,12 @@ optimize <- function(opt_criteria, opt_function, features, suggestions = NULL,
       ...
     )
   )
-  return(decodeValueFromBin(opt_results@solution[1, ], features))
+  
+  results <- decodeValueFromBin(opt_results@solution[1,], features)
+  if(!is.finite(opt_results@fitnessValue)){
+    results <- lapply(results,function(i)NA)
+  }
+  return(results)
 }
 #' Hyperparameters tuning 
 #'
