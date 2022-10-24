@@ -1,4 +1,5 @@
-bigg_namespaces <- c("bigg" = "http://bigg-project.eu/ontology#")
+bigg_namespaces <- c("bigg" = "http://bigg-project.eu/ontology#",
+                     "unit" = "http://qudt.org/vocab/unit/")
 
 write_rdf <- function(object, file){
   rdf_serialize(object, file,
@@ -13,17 +14,27 @@ get_all_device_aggregators <- function(buildingsRdf){
               bigg_namespaces[i])},
       1:length(bigg_namespaces))),
     '
-    SELECT ?buildingId ?deviceAggregatorName ?deviceAggregatorFormula ?deviceAggregatorFrequency ?deviceAggregatorTimeAggregationFunction
+    SELECT ?buildingId ?deviceAggregatorName ?deviceAggregatorFormula 
+      ?deviceAggregatorFrequency ?deviceAggregatorTimeAggregationFunction
+      ?measuredProperty
     WHERE {
-      ?b a bigg:Building .
-      ?b bigg:buildingIDFromOrganization ?buildingId .
-      ?b bigg:hasSpace ?bs .
-      ?bs bigg:hasDeviceAggregator ?s .
+      {
+        SELECT ?buildingId ?s 
+        WHERE {
+          ?b a bigg:Building .
+          ?b bigg:buildingIDFromOrganization ?buildingId .
+          ?b bigg:hasSpace ?bs .
+          ?bs bigg:hasDeviceAggregator ?s .
+        }
+      }
       optional {?s bigg:deviceAggregatorName ?deviceAggregatorName .}
       optional {?s bigg:deviceAggregatorFrequency ?deviceAggregatorFrequency .}
       optional {?s bigg:deviceAggregatorTimeAggregationFunction ?deviceAggregatorTimeAggregationFunction .}
       optional {?s bigg:deviceAggregatorFormula ?deviceAggregatorFormula .}
+      optional {?s bigg:hasDeviceAggregatorProperty ?measuredProperty .}
     }')))
+  result$measuredProperty <- gsub(paste0(bigg_namespaces,collapse="|"),"",
+                                       result$measuredProperty)
   return(result)
 }
 
@@ -52,11 +63,14 @@ get_tz_building <- function(buildingsRdf, buildingId){
     SELECT ?tz
     WHERE {
       ?b a bigg:Building .
-      ?b bigg:buildingIDFromOrganization "',buildingId,'" .
+      ?b bigg:buildingIDFromOrganization ?o .
+      FILTER ( ?o IN ("',paste(buildingId,collapse='","'),'") ) .
       ?b bigg:hasLocationInfo ?l .
       ?l bigg:addressTimeZone ?tz .
     }')))
-  return( if(length(metadata_df)>0) {as.character(metadata_df$tz)} else {NULL} )
+  return( if(length(metadata_df)>0) {
+      setNames(as.character(metadata_df$tz),nm=buildingId)
+    } else {NULL} )
 }
 
 get_area_building <- function(buildingsRdf, buildingId){
@@ -69,14 +83,17 @@ get_area_building <- function(buildingsRdf, buildingId){
     SELECT ?area
     WHERE {
       ?b a bigg:Building .
-      ?b bigg:buildingIDFromOrganization "',buildingId,'" .
+      ?b bigg:buildingIDFromOrganization ?o .
+      FILTER ( ?o IN ("',paste(buildingId,collapse='","'),'") ) .
       ?b bigg:hasSpace ?s .
       ?s bigg:hasArea ?a .
       ?a bigg:hasAreaType ?types .
       FILTER regex(str(?types),"GrossFloorArea$") .
       ?a bigg:areaValue ?area .
     }')))
-  return( if(length(metadata_df)>0) {as.numeric(metadata_df$area)} else {NULL} )
+  return( if(length(metadata_df)>0) {
+      setNames(as.numeric(metadata_df$area),nm=buildingId)
+    } else {NULL} )
 }
 
 get_namespace_building <- function(buildingsRdf, buildingId){
@@ -89,7 +106,8 @@ get_namespace_building <- function(buildingsRdf, buildingId){
     SELECT ?b
     WHERE {
       ?b a bigg:Building .
-      ?b bigg:buildingIDFromOrganization "',buildingId,'" .
+      ?b bigg:buildingIDFromOrganization ?o .
+      FILTER ( ?o IN ("',paste(buildingId,collapse='","'),'") ) .
     }')))
   
   return( 
@@ -109,12 +127,13 @@ get_subject_building <- function(buildingsRdf, buildingId){
     SELECT ?b
     WHERE {
       ?b a bigg:Building .
-      ?b bigg:buildingIDFromOrganization "',buildingId,'" .
+      ?b bigg:buildingIDFromOrganization ?o .
+      FILTER ( ?o IN ("',paste(buildingId,collapse='","'),'") ) .
     }')))
   
   return( 
     if(length(metadata_df)>0) {
-      metadata_df$b
+      setNames(as.character(metadata_df$b),nm=buildingId)
     } else { NULL } 
   )
 }
@@ -126,26 +145,270 @@ get_sensor_metadata <- function(buildingsRdf, sensorId, tz){
               bigg_namespaces[i])},
       1:length(bigg_namespaces))),
     '
-    SELECT ?hasMeasurement ?timeSeriesFrequency ?timeSeriesIsCumulative 
-      ?timeSeriesTimeAggregationFunction ?timeSeriesIsOnChange ?timeSeriesIsRegular
-      ?hasMeasuredProperty ?considerEstimatedValues
+    SELECT ?hasMeasurement ?timeSeriesFrequency ?timeSeriesIsCumulative
+    ?timeSeriesTimeAggregationFunction ?timeSeriesIsOnChange ?timeSeriesIsRegular
+    ?measuredProperty ?considerEstimatedValues
     WHERE {
-      ?m a bigg:Sensor.
-      ?m bigg:hasMeasurement ?hasMeasurement .
-      FILTER regex(str(?hasMeasurement), "',sensorId,'")
+      {
+        SELECT ?m ?hasMeasurement 
+        WHERE {
+          ?m a bigg:Sensor.
+          ?m bigg:hasMeasurement ?hasMeasurement .
+          FILTER regex(str(?hasMeasurement), "',sensorId,'")
+        }
+      }
       optional {?m bigg:timeSeriesTimeAggregationFunction ?timeSeriesTimeAggregationFunction .}
       optional {?m bigg:timeSeriesIsCumulative ?timeSeriesIsCumulative .}
       optional {?m bigg:timeSeriesIsOnChange ?timeSeriesIsOnChange .}
       optional {?m bigg:timeSeriesIsRegular ?timeSeriesIsRegular .}
-      optional {?m bigg:hasMeasuredProperty ?hasMeasuredProperty .}
+      optional {?m bigg:hasMeasuredProperty ?measuredProperty .}
       optional {?m bigg:timeSeriesFrequency ?timeSeriesFrequency .}
       optional {?m bigg:hasEstimationMethod ?hasEstimationMethod .}
       optional {?hasEstimationMethod bigg:considerEstimatedValues ?considerEstimatedValues .}
     }')))
   metadata_df$tz <- tz
-  metadata_df$hasMeasuredProperty <- gsub("bigg:","",metadata_df$hasMeasuredProperty)
+  metadata_df$measuredProperty <- gsub(paste0(bigg_namespaces,collapse="|"),"",
+                                       metadata_df$measuredProperty)
   metadata_df$sensorId <- sensorId
   return(metadata_df)
+}
+
+get_tariff_metadata <- function(buildingsRdf, sensorId){
+  metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
+    SELECT ?tariff
+    WHERE {
+      ?upd a bigg:UtilityPointOfDelivery.
+      ?upd bigg:hasDevice ?dp.
+      ?dp bigg:hasSensor ?m.
+      ?m bigg:hasMeasurement ?hasMeasurement .
+      FILTER regex(str(?hasMeasurement), "',sensorId,'")
+      ?upd bigg:hasContractedTariff ?tariff.
+    }')))
+  metadata_df$sensorId <- sensorId
+  return(metadata_df)
+}
+
+get_emissions_metadata <- function(buildingsRdf, sensorId){
+  metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
+    SELECT ?emissions
+    WHERE {
+      ?upd a bigg:UtilityPointOfDelivery.
+      ?upd bigg:hasDevice ?dp.
+      ?dp bigg:hasSensor ?m.
+      ?m bigg:hasMeasurement ?hasMeasurement .
+      FILTER regex(str(?hasMeasurement), "',sensorId,'")
+      ?upd bigg:hasCO2EmissionsFactor ?emissions.
+    }')))
+  metadata_df$sensorId <- sensorId
+  return(metadata_df)
+}
+
+append_cost_to_sensor <- function(buildingsRdf, timeseriesObject, tariffUri, measuredProperty,
+                                frequency, energyTimeseriesSensor){
+  metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
+    SELECT ?measuredProperty ?timeSeriesFrequency ?hash ?start ?end
+    WHERE {
+      {
+        SELECT ?ct 
+        WHERE {
+          ?ct a bigg:ContractedTariff .
+          FILTER (?ct = <',tariffUri,'>) .
+        }
+      }
+      ?ct bigg:hasTariff ?tar .
+      ?ct bigg:contractStartDate ?start .
+      optional { ?ct bigg:contractEndDate ?end . }
+      ?tar bigg:hasTariffComponentList ?tcl.
+      ?tcl bigg:hasTariffMeasuredProperty ?measuredProperty.
+      ?tcl bigg:timeSeriesFrequency ?timeSeriesFrequency.
+      ?tcl bigg:hasTariffComponentPoint ?hash.
+    }')))
+  metadata_df$measuredProperty <- gsub(paste0(bigg_namespaces,collapse="|"),"",
+                                       metadata_df$measuredProperty)
+  metadata_df$hash <- mapply(function(i){i[2]},strsplit(metadata_df$hash,"#"))
+  if(any(metadata_df$timeSeriesFrequency==frequency)){
+    metadata_df <- metadata_df[metadata_df$measuredProperty==measuredProperty &
+                                 metadata_df$timeSeriesFrequency==frequency,]
+  } else {
+    frequency_ <- unique(metadata_df$timeSeriesFrequency[
+      (as.period(metadata_df$timeSeriesFrequency) < as.period(frequency))])
+    frequency_ <- frequency_[which.max(as.numeric(as.period(frequency_)))]
+    metadata_df <- metadata_df[metadata_df$measuredProperty==measuredProperty &
+                                 as.period(metadata_df$timeSeriesFrequency)==as.period(frequency_),]
+  }
+  if(nrow(metadata_df)==0){
+    return(energyTimeseriesSensor)
+  } else {
+    metadata_df <- metadata_df[order(metadata_df$start),]
+    prices <- do.call(rbind,lapply(1:nrow(metadata_df), function(i){
+      if(is.character(timeseriesObject)){
+        jsonFiles <- list.files(timeseriesObject,"json",full.names=T)
+        timeseriesObject_ <- unlist(lapply(
+          jsonFiles[grepl(metadata_df$hash[i],jsonFiles)],
+          function(x){jsonlite::fromJSON(x)}),recursive=F)
+      }
+      timeseriesTariff <- timeseriesObject_[metadata_df$hash[i]][[1]]
+      timeseriesTariff$start <- parse_iso_8601(timeseriesTariff$start)
+      timeseriesTariff$end <- parse_iso_8601(timeseriesTariff$end)
+      timeseriesTariff <- timeseriesTariff[order(timeseriesTariff$start),]
+      timeseriesTariff <- timeseriesTariff[
+        timeseriesTariff$start > metadata_df$start[i] & 
+          if(is.finite(metadata_df$end[i])){
+            timeseriesTariff$end < metadata_df$end[i]
+          } else {T},
+      ]}))
+    prices <- prices[!duplicated(prices$start,fromLast=T),]
+    prices <- align_time_grid(
+      data = prices,
+      timeColumn = "start",
+      outputFrequency = frequency,
+      aggregationFunctions = "AVG",
+      aggregationFunctionsSuffix = paste0(measuredProperty,"_EnergyPrice"))
+    prices <- prices %>% select(
+      "time",
+      paste0("AVG_",measuredProperty,"_EnergyPrice"))
+    energyTimeseriesSensor <- energyTimeseriesSensor %>% 
+      left_join(prices, by="time")
+    energyTimeseriesSensor[,"SUM_EnergyCost"] <- 
+      if(sum(grepl(measuredProperty,colnames(energyTimeseriesSensor)),na.rm=T)>1){
+        rowSums(
+          energyTimeseriesSensor[,grepl(measuredProperty,colnames(energyTimeseriesSensor))] *
+            energyTimeseriesSensor[,paste0("AVG_",measuredProperty,"_EnergyPrice")], 
+          na.rm=T)
+      } else {
+        energyTimeseriesSensor[,grepl(measuredProperty,colnames(energyTimeseriesSensor))] *
+          energyTimeseriesSensor[,paste0("AVG_",measuredProperty,"_EnergyPrice")]
+      }
+    return(energyTimeseriesSensor)
+  }
+}
+
+append_emissions_to_sensor <- function(buildingsRdf, timeseriesObject, emissionsUri, 
+                                       measuredProperty, frequency, energyTimeseriesSensor){
+  metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
+    SELECT ?measuredProperty ?timeSeriesFrequency ?hash
+    WHERE {
+      {
+        SELECT ?em
+        WHERE {
+          ?em a bigg:CO2EmissionsFactor .
+          FILTER (?em = <',emissionsUri,'>) .
+        }
+      }
+      ?em bigg:hasCO2EmissionsFactorList ?efl.
+      ?efl bigg:hasCO2RelatedMeasuredProperty ?measuredProperty.
+      ?efl bigg:timeSeriesFrequency ?timeSeriesFrequency.
+      ?efl bigg:hasCO2EmissionsFactorValue ?hash.
+    }')))
+  metadata_df$measuredProperty <- gsub(paste0(bigg_namespaces,collapse="|"),"",
+                                       metadata_df$measuredProperty)
+  metadata_df$hash <- mapply(function(i){i[2]},strsplit(metadata_df$hash,"#"))
+  if(any(metadata_df$timeSeriesFrequency==frequency)){
+    metadata_df <- metadata_df[metadata_df$measuredProperty==measuredProperty &
+                               metadata_df$timeSeriesFrequency==frequency,]
+  } else {
+    frequency_ <- unique(metadata_df$timeSeriesFrequency[
+      (as.period(metadata_df$timeSeriesFrequency) < as.period(frequency))])
+    frequency_ <- frequency_[which.max(as.numeric(as.period(frequency_)))]
+    metadata_df <- metadata_df[metadata_df$measuredProperty==measuredProperty &
+                               as.period(metadata_df$timeSeriesFrequency)==as.period(frequency_),]
+  }
+  if(nrow(metadata_df)==0){
+    return(energyTimeseriesSensor)
+  } else {
+    if(is.character(timeseriesObject)){
+      jsonFiles <- list.files(timeseriesObject,"json",full.names=T)
+      timeseriesObject_ <- unlist(lapply(
+        jsonFiles[grepl(metadata_df$hash,jsonFiles)],
+        function(x){jsonlite::fromJSON(x)}),recursive=F)
+    }
+    emissions <- timeseriesObject_[metadata_df$hash][[1]]
+    emissions$start <- parse_iso_8601(emissions$start)
+    emissions$end <- parse_iso_8601(emissions$end)
+    emissions <- emissions[order(emissions$start),]
+    emissions <- emissions[!duplicated(emissions$start,fromLast=T),]
+    emissions <- align_time_grid(
+      data = emissions,
+      timeColumn = "start",
+      outputFrequency = frequency,
+      aggregationFunctions = "AVG",
+      aggregationFunctionsSuffix = paste0(measuredProperty,"_EnergyEmissionsFactor"))
+    emissions <- emissions %>% select(
+      "time",
+      paste0("AVG_",measuredProperty,"_EnergyEmissionsFactor"))
+    energyTimeseriesSensor <- energyTimeseriesSensor %>% 
+      left_join(emissions, by="time")
+    energyTimeseriesSensor[,"SUM_EnergyEmissions"] <- 
+      if(sum(grepl(measuredProperty,colnames(energyTimeseriesSensor)),na.rm=T)>1){
+        rowSums(energyTimeseriesSensor[,
+            grepl(measuredProperty,colnames(energyTimeseriesSensor))] *
+          energyTimeseriesSensor[,paste0("AVG_",measuredProperty,"_EnergyEmissionsFactor")], na.rm=T)
+      } else {
+        energyTimeseriesSensor[,
+          grepl(measuredProperty,colnames(energyTimeseriesSensor))] *
+        energyTimeseriesSensor[,paste0("AVG_",measuredProperty,"_EnergyEmissionsFactor")]
+      }
+    return(energyTimeseriesSensor)
+  }
+}
+
+get_matrix_building_space_use_types <- function(buildingsRdf, splitSublevels=T){
+  types_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
+    SELECT ?buildingId ?typology
+    WHERE {
+      ?b a bigg:Building .
+      ?b bigg:buildingIDFromOrganization ?buildingId .
+      ?b bigg:hasSpace ?bs .
+      ?bs bigg:hasBuildingSpaceUseType ?typology
+    }')))
+  if(length(types_df)>0){
+    types_df$typology <- mapply(function(x){x[2]}, strsplit(types_df$typology,"#"))
+    if(splitSublevels){
+      typologies <- lapply(1:nrow(types_df),
+                           function(i){
+                             elems <- strsplit(types_df$typology[i],split = "\\.")[[1]]
+                             mapply(function(j) paste(elems[1:j],collapse="."), 1:length(elems))
+                           })
+      types_df<-do.call(rbind,
+                        lapply(1:nrow(types_df),function(i){
+                          data.frame(buildingId=types_df$buildingId[i],typology=typologies[[i]])
+                        }))
+    }
+    types_df <- dummy_cols(types_df,select_columns = "typology")
+    types_df$typology <- NULL
+    colnames(types_df) <- gsub("typology_","",colnames(types_df))
+    types_df <- types_df %>% group_by(buildingId) %>% summarise(across(colnames(types_df)[-1],sum))
+    types_df[,"NA"] <- NULL
+    types_df$all <- 1
+    return(types_df)
+  } else {
+    return(NULL)
+  }  
 }
 
 # ## Add fake series
@@ -217,6 +480,8 @@ read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId, 
   
   # Get period and aggregation function specific for the timeseries
   metadata <- get_sensor_metadata(buildingsRdf, sensorId, tz)
+  metadata_tariff <- get_tariff_metadata(buildingsRdf, sensorId)
+  metadata_emissions <- get_emissions_metadata(buildingsRdf, sensorId)
   
   # Override condition if the estimated values should be used considering the 
   # estimation method defined in the sensor metadata
@@ -226,12 +491,14 @@ read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId, 
   # If timeseriesObject is NULL, read certain sensor
   if(is.character(timeseriesObject)){
     jsonFiles <- list.files(timeseriesObject,"json",full.names=T)
-    timeseriesObject <- unlist(lapply(
+    timeseriesObject_ <- unlist(lapply(
       jsonFiles[grepl(sensorId,jsonFiles)],
       function(x){jsonlite::fromJSON(x)}),recursive=F)
+  } else {
+    timeseriesObject_ <- timeseriesObject
   }
   
-  timeseriesSensor <- timeseriesObject[sensorId][[1]]
+  timeseriesSensor <- timeseriesObject_[sensorId][[1]]
   timeseriesSensor$start <- parse_iso_8601(timeseriesSensor$start)
   timeseriesSensor$end <- parse_iso_8601(timeseriesSensor$end)
   timeseriesSensor <- timeseriesSensor[order(timeseriesSensor$start),]
@@ -364,7 +631,8 @@ read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId, 
     outputFrequency = outputFrequency,
     # if(any(c("HDD", "CDD") %in% aggFunctions)){
     #   "P1D" } else { outputFrequency },
-    aggregationFunctions = aggFunctions, 
+    aggregationFunctions = aggFunctions,
+    aggregationFunctionsSuffix = metadata$measuredProperty,
     # if(any(c("HDD", "CDD") %in% aggFunctions)){
     #   unique(c("AVG",aggFunctions[aggFunctions %in% c("SUM","MIN","MAX")]))
     # } else { 
@@ -373,6 +641,29 @@ read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId, 
     useEstimatedValues = useEstimatedValues,
     tz = metadata$tz
   )
+  
+  # Add energy cost component
+  if(nrow(metadata_tariff)>0){
+    timeseriesSensor <- append_cost_to_sensor(
+      buildingsRdf, timeseriesObject, 
+      tariffUri = metadata_tariff$tariff,
+      measuredProperty = metadata$measuredProperty,
+      frequency = metadata$timeSeriesFrequency,
+      energyTimeseriesSensor = timeseriesSensor)
+  }
+  # Add emissions component
+  if(nrow(metadata_emissions)>0){
+    timeseriesSensor <- append_emissions_to_sensor(
+      buildingsRdf, timeseriesObject, 
+      emissionsUri = metadata_emissions$emissions,
+      measuredProperty = metadata$measuredProperty,
+      frequency = metadata$timeSeriesFrequency,
+      energyTimeseriesSensor = timeseriesSensor)
+  }
+  
+  timeseriesSensor
+  
+  
   return(timeseriesSensor)
 }
 
@@ -401,8 +692,10 @@ parse_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
           )')
         ))
       if(ratioCorrection){
-        if("SUM" %in% colnames(aux_result)){
-          aux_result$SUM <- aux_result$SUM / aux_result$RATIO
+        if(any(grepl("^SUM",colnames(aux_result)))){
+          for (sum_col in colnames(aux_result)[grepl("^SUM",colnames(aux_result))]){
+            aux_result[,sum_col] <- aux_result[,sum_col] / aux_result$RATIO
+          }
         }
       }
       if(length(result)==0){
@@ -414,7 +707,7 @@ parse_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
           stop("Device aggregator operator is not defined")
         } else if(op=="+") {
           for (elem in elems[!(elems %in% c("time"))]){
-            if(elem %in% c("AVG","RATIO","GAPS")){
+            if(grepl("^AVG|RATIO|GAPS",elem)){
               result[,elem] <- rowMeans(result[,c(paste0(elem,"_1"),paste0(elem,"_2"))],na.rm=T)
             } else {
               result[,elem] <- rowSums(result[,c(paste0(elem,"_1"),paste0(elem,"_2"))],na.rm=T)
@@ -480,7 +773,7 @@ get_device_aggregators_by_building <- function(buildingsRdf, timeseriesObject=NU
          which.max(lubridate::seconds(lubridate::period(aux$deviceAggregatorFrequency)))]
        dfs <- setNames(lapply(unique(aux$deviceAggregatorName),
          function(devAggName){
-           #devAggName = "outdoorTemperature"
+           #devAggName = "totalElectricityConsumption"
            df <- parse_device_aggregator_formula(
              buildingsRdf = buildingsRdf,
              timeseriesObject = timeseriesObject,
@@ -492,7 +785,7 @@ get_device_aggregators_by_building <- function(buildingsRdf, timeseriesObject=NU
              outputFrequency = largerFrequency,
              aggFunctions = unlist(
                unique(aux[aux$deviceAggregatorName==devAggName,
-                "deviceAggregatorTimeAggregationFunction"]),use.names = F),
+                "deviceAggregatorTimeAggregationFunction"]), use.names = F),
              useEstimatedValues = useEstimatedValues,
              ratioCorrection = ratioCorrection
            )
@@ -500,9 +793,13 @@ get_device_aggregators_by_building <- function(buildingsRdf, timeseriesObject=NU
                              paste(devAggName, colnames(df), sep="."))
            df
          }), nm = unique(aux$deviceAggregatorName))
-       Reduce(function(df1, df2){merge(df1, df2, by = "time", all=T)}, dfs)
+       list(
+         "df"=Reduce(function(df1, df2){merge(df1, df2, by = "time", all=T)}, dfs),
+         "metadata"=devagg_buildings[devagg_buildings$buildingId==buildingId,]
+       )
       }
     ), nm = unique(devagg_buildings$buildingId))
+  
   return(all_buildings_timeseries)
 }
 

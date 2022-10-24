@@ -322,11 +322,11 @@ degree_raw <- function (data, featuresName, baseTemperature = 18, outputFeatures
   }
   result <- setNames(data.frame((if (mode == "heating") {
     ifelse(unlist(baseTemperature - data[,featuresName])>0,
-           unlist((baseTemperature-hysteresisBaseTemperature) - data[,featuresName]),
+           unlist((baseTemperature + abs(hysteresisBaseTemperature)) - data[,featuresName]),
            0)
   } else {
     ifelse(unlist(data[,featuresName] - baseTemperature)>0,
-           unlist((data[,featuresName]+hysteresisBaseTemperature) - baseTemperature),
+           unlist((data[,featuresName]) - (baseTemperature - abs(hysteresisBaseTemperature))),
            0)
   })),if(is.null(outputFeaturesName)){mode} else {outputFeaturesName})
   if(!is.null(maxValue)){
@@ -842,8 +842,8 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
   )
   tmp_daily$weekday_f <- as.factor(as.character(tmp_daily$weekday))
   for (b in balanceOutdoorTemperatures){
-    tmp_daily[,paste0("hdd",b)] <- ifelse(tmp_daily$temperature>b,0,(b+2)-tmp_daily$temperature)
-    tmp_daily[,paste0("cdd",b)] <- ifelse(tmp_daily$temperature>b,tmp_daily$temperature-(b-2),0)
+    tmp_daily[,paste0("hdd",b)] <- ifelse(tmp_daily$temperature>b,0,b-tmp_daily$temperature)
+    tmp_daily[,paste0("cdd",b)] <- ifelse(tmp_daily$temperature>b,tmp_daily$temperature-b,0)
   }
   if(is.null(scalingAttr$lm_hdd_cdd)){
     lm_hdd_cdd <- lapply(balanceOutdoorTemperatures,function(b){
@@ -1385,6 +1385,7 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
       }
       detach(data,unload = T)
       data <- cbind(data,trData)
+      data <- data[,!duplicated(colnames(data),fromLast=T)]
       transformationItems[[feature]] <- list(
         "formula" = do.call(paste,c(do.call(expand.grid,trFields),sep=":")),
         "vars" = do.call(c,trFields)
