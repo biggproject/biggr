@@ -1335,7 +1335,7 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
   if(!is.null(transformationSentences)){
     for (feature in unique(c(names(transformationSentences), features))){
       #print(feature)
-      #feature <- unique(c(names(transformationSentences), features))[1]
+      #feature <- unique(c(names(transformationSentences), features))[3]
       trFields <- list()
       trData <- NULL
       attach(data,warn.conflicts = F)

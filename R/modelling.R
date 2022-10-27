@@ -307,8 +307,9 @@ ARX <- function(input_parameters){
     loop = NULL,
     fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, 
                    transformationSentences=NULL, logOutput=T, trainMask=NULL,
-                   numericStatusVariable=NULL) {
+                   numericStatusVariable=NULL, characterStatusVariable=NULL) {
       
+      print("ok")
       x <<- x
       y <<- y
       transformationSentences <<- transformationSentences
@@ -352,10 +353,12 @@ ARX <- function(input_parameters){
       ARX_form <- as.formula(
         sprintf("%s ~ %s",
                 outputName,
-                paste(if(is.null(numericStatusVariable)){
-                        "0"
+                paste(if (!is.null(numericStatusVariable)){
+                        paste0("0 + as.factor(as.character(",numericStatusVariable,"))")
+                      } else if (!is.null(characterStatusVariable)) {
+                        "0"#paste0("0 + ",factorStatusVariable)
                       } else {
-                        paste0("0 + as.factor(",numericStatusVariable,")")
+                        "0"
                       },
                       paste0(do.call(
                         c,
@@ -374,10 +377,12 @@ ARX <- function(input_parameters){
                                     } else {
                                       0:param[,paste0("AR_",f_)]
                                     },
-                                    suffix = if(is.null(numericStatusVariable)){
-                                        NULL
-                                      } else {
+                                    suffix = if(!is.null(numericStatusVariable)){
                                         paste0(":",numericStatusVariable)
+                                      } else if (!is.null(characterStatusVariable)) {
+                                        paste0(":",characterStatusVariable)
+                                      } else {
+                                        NULL
                                       })
                           }
                         )
@@ -398,6 +403,7 @@ ARX <- function(input_parameters){
       
       # Store the meta variables
       mod$meta <- list(
+        formula = ARX_form,
         features = features,
         outputName = outputName,
         logOutput = logOutput,
@@ -1325,13 +1331,15 @@ train.formula <- function (form, data, weights, subset, na.action = na.fail,
   if (any(int_flag))
     x <- x[, !int_flag, drop = FALSE]
   w <- as.vector(model.weights(m))
-  y <- model.response(m)
+  y <- model.response(m,type="any")
   # Force the inclusion of all data columns, they might be needed by some transformation procedure
   if (!is.null(transformationSentences)){
-    x <- cbind(x,data[,!(colnames(data) %in% colnames(m))])
+    x <- as.data.frame(data)#cbind(x,data[,!(colnames(data) %in% colnames(m))])
+    # print(as.data.frame(x))
   }
   # continue caret official source code...
   res <- train(x, y, weights = w, formulaTerms=Terms,...)
+  print(res)
   res$terms <- Terms
   res$coefnames <- colnames(x)
   res$call <- match.call()
