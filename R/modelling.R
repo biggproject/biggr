@@ -55,21 +55,34 @@ regression_metrics <- function(data, lev=NULL, model=NULL){
   ) 
 }
 
-AR_term <- function(features,orders){
+AR_term <- function(features,orders,suffix=NULL){
   paste(
     mapply(features,FUN=function(feat){
       if(grepl(":",feat)){
         #feat=c("h_sin_1:s1","h_sin_2:s1")
         #orders=2
-        paste(mapply(function(l){
+        elements <- mapply(function(l){
           if(l==0){
-            feat
+            paste(paste0("`",strsplit(feat,":")[[1]],"`"),collapse=":")
           } else {
-            paste(paste0(strsplit(feat,":")[[1]],"_l",l),collapse=":")
+            paste(paste0("`",strsplit(feat,":")[[1]],"_l",l,"`"),collapse=":")
           }
-        },orders), collapse=" + ")
+        },orders)
+        if(!is.null(suffix)){
+          elements <- paste0(elements,suffix)
+        }
+        paste(elements, collapse=" + ")
       } else {
-        paste(mapply(function(l)if(l==0){feat}else{paste0(feat,"_l",l)}, orders), collapse=" + ")
+        elements <- mapply(function(l)
+          if(l==0){
+            paste0("`",feat,"`")
+          } else {
+            paste0("`",feat,"_l",l,"`")
+          }, orders)
+        if(!is.null(suffix)){
+          elements <- paste0(elements,suffix)
+        }
+        paste(elements, collapse=" + ")
       }
     }),
     collapse=" + "
@@ -81,7 +94,7 @@ AR_term <- function(features,orders){
 ###
 
 PenalisedLM <- function(input_parameters){
-  input_parameters$label <- input_parameters$parameters
+  input_parameters$label <- input_parameters$parameter
   modelFramework <- list(
     label = "penalisedRegression",
     library = NULL,
@@ -272,7 +285,7 @@ PenalisedLM <- function(input_parameters){
 }
 
 ARX <- function(input_parameters){
-  input_parameters$label <- input_parameters$parameters
+  input_parameters$label <- input_parameters$parameter
   modelFramework <- list(
     label = "ARX",
     library = NULL,
@@ -293,7 +306,14 @@ ARX <- function(input_parameters){
       },
     loop = NULL,
     fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, 
-                   transformationSentences=NULL, logOutput=T) {
+                   transformationSentences=NULL, logOutput=T, trainMask=NULL,
+                   numericStatusVariable=NULL) {
+      
+      x <<- x
+      y <<- y
+      transformationSentences <<- transformationSentences
+      formulaTerms <<- formulaTerms
+      #param <- bestParamsQe
       
       features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
       outputName <- all.vars(formulaTerms)[1]
@@ -332,7 +352,11 @@ ARX <- function(input_parameters){
       ARX_form <- as.formula(
         sprintf("%s ~ %s",
                 outputName,
-                paste("0",
+                paste(if(is.null(numericStatusVariable)){
+                        "0"
+                      } else {
+                        paste0("0 + as.factor(",numericStatusVariable,")")
+                      },
                       paste0(do.call(
                         c,
                         lapply(
@@ -342,14 +366,19 @@ ARX <- function(input_parameters){
                             if(f %in% names(transformationItems)){
                               f <- transformationItems[[f]]$formula
                             }
-                            AR_term(f,
+                            AR_term(features = f, 
                                     if(!(paste0("AR_",f_) %in% colnames(param))){
                                       0
                                     } else if(f[1]==outputName){
                                       1:param[,paste0("AR_",f_)]
                                     } else {
                                       0:param[,paste0("AR_",f_)]
-                                    })
+                                    },
+                                    suffix = if(is.null(numericStatusVariable)){
+                                        NULL
+                                      } else {
+                                        paste0(":",numericStatusVariable)
+                                      })
                           }
                         )
                       ),
@@ -359,6 +388,9 @@ ARX <- function(input_parameters){
       )
       
       # Train the model
+      if(!is.null(trainMask)){
+        data <- data[trainMask,]
+      }
       mod <- lm(
         ARX_form,
         data
@@ -393,6 +425,7 @@ ARX <- function(input_parameters){
       param <- modelFit$meta$param
       maxLag <- modelFit$meta$maxLag
       logOutput <- modelFit$meta$logOutput
+      outputName <- modelFit$meta$outputName
       
       # Initialize the global input features if needed
       # Change the inputs if are specified in forceGlobalInputFeatures
@@ -441,23 +474,23 @@ ARX <- function(input_parameters){
       
       # Predict at multi-step ahead or one-step ahead prediction, 
       # depending if some AR input is considered using the output variable
-      if(forceOneStepPrediction==F && paste("AR",modelFit$meta$outputName,sep="_") %in% colnames(param)){
+      if(forceOneStepPrediction==F && paste("AR",outputName,sep="_") %in% colnames(param)){
         for (i in 1:nrow(newdata)){
           newdata <- lag_components(data = newdata,
                                     maxLag = maxLag,
-                                    featuresNames = featuresAll,
+                                    featuresNames = outputName,
                                     predictionStep = i-1,
                                     forceInitInputFeatures = forceInitInputFeatures,
                                     forceInitOutputFeatures = forceInitOutputFeatures)
-          newdata[i,modelFit$meta$outputName] <- predict(modelFit,newdata[i,])
+          newdata[i,outputName] <- predict(modelFit,newdata[i,])
         }
       } else {
-        newdata[,modelFit$meta$outputName] <- predict(modelFit,newdata)
+        newdata[,outputName] <- predict(modelFit,newdata)
       }
       if(logOutput) { 
-        exp(newdata[,modelFit$meta$outputName])
+        exp(newdata[,outputName])
       } else {
-        newdata[,modelFit$meta$outputName]
+        newdata[,outputName]
       }
       
     },
@@ -471,7 +504,7 @@ ARX <- function(input_parameters){
 }
 
 RLS <- function(input_parameters){
-  input_parameters$label <- input_parameters$parameters
+  input_parameters$label <- input_parameters$parameter
   modelFramework <- list(
     label = "RLS",
     library = NULL,

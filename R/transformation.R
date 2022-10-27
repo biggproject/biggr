@@ -346,7 +346,7 @@ degree_raw <- function (data, featuresName, baseTemperature = 18, outputFeatures
 #' of the arrays provided as input
 #' @return <data.frame> Data frame with input series as named columns
 
-vectorial_transformation <- function(series, outputFeatureName){
+vectorial_transformation <- function(series, outputFeatureName="transformated"){
   return(setNames(data.frame(series),outputFeatureName))
 }
 
@@ -1335,7 +1335,7 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
   if(!is.null(transformationSentences)){
     for (feature in unique(c(names(transformationSentences), features))){
       #print(feature)
-      #feature <- unique(c(names(transformationSentences), features))[10]
+      #feature <- unique(c(names(transformationSentences), features))[1]
       trFields <- list()
       trData <- NULL
       attach(data,warn.conflicts = F)
@@ -1355,7 +1355,9 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
             colnames(trDataElem) <- gsub(".data",trFunc,colnames(trDataElem))
           } else if(any(class(trDataElem) %in% c("numeric","integer"))){
             trDataElem <- data.frame(trDataElem)
-            colnames(trDataElem) <- trFunc
+            colnames(trDataElem) <- trFunc#feature
+          } else if(any(class(trDataElem) %in% c("data.frame")) && length(trDataElem)==1){
+            colnames(trDataElem) <- feature
           }
           
           trData <- if(!is.null(trData)){cbind(trData,trDataElem)} else {trDataElem}

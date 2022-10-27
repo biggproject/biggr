@@ -59,16 +59,18 @@ detect_time_step <- function(data){
 #' @return Amount of ISO 8601 timesteps corresponding to nHours
 
 hourly_timesteps <- function(nHours, original_timestep) {
-  timesteps_to_hour <- list(
-    "PT1S" = 3600,
-    "PT1M" = 60,
-    "PT1H" = 1,
-    "P1D" = 1/24,
-    "P1W" = 1/168,
-    "P1M" = 1/(30*24),
-    "P1Y" = 1/(365*24)
+  # timesteps_to_hour <- list(
+  #   "PT1S" = 3600,
+  #   "PT1M" = 60,
+  #   "PT1H" = 1,
+  #   "P1D" = 1/24,
+  #   "P1W" = 1/168,
+  #   "P1M" = 1/(30*24),
+  #   "P1Y" = 1/(365*24)
+  #   )
+  return(#round(timesteps_to_hour[[original_timestep]]*nHours))
+    ceiling(60*60/(as.numeric(as.period(original_timestep)))*nHours)
     )
-  return(round(timesteps_to_hour[[original_timestep]]*nHours))
 }
 
 
