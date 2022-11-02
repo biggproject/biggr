@@ -309,12 +309,11 @@ ARX <- function(input_parameters){
                    transformationSentences=NULL, logOutput=T, trainMask=NULL,
                    numericStatusVariable=NULL, characterStatusVariable=NULL) {
       
-      print("ok")
       x <<- x
       y <<- y
       transformationSentences <<- transformationSentences
       formulaTerms <<- formulaTerms
-      #param <- bestParamsQe
+      #param <- as.data.frame(bestParamsQe)
       
       features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
       outputName <- all.vars(formulaTerms)[1]

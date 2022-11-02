@@ -52,7 +52,12 @@ lag_components <- function(data, maxLag, featuresNames=NULL, predictionStep=NULL
       for (f in featuresNames){
         if (f %in% colnames(data)) {
           for (l in 1:maxLag) {
-            data[, paste0(f,"_l",as.character(l))] <- zoo::na.fill(shift(data[,f],l),"extend")
+            data[, paste0(f,"_l",as.character(l))] <- 
+              if(is.numeric(data[,f])){
+                zoo::na.fill(shift(data[,f],l),"extend")
+              } else {
+                shift(data[,f],l)
+              }
             if(fillInitNAs){
               data[1:l, paste0(f,"_l",as.character(l))] <- data[l+1, paste0(f,"_l",as.character(l))]
             }
@@ -1367,8 +1372,21 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
           # trData <- trData[,(ncol(data)+1):(ncol(trData))]
         }
       } else {
-        trData <- tryCatch(
-          cbind(trData, eval(parse(text=feature))),
+        trData <- tryCatch({
+          aux <- eval(parse(text=feature))
+          aux <- if(is.list(aux)){
+            as.data.frame(aux)
+          } else {
+            data.frame(aux)
+          }
+          aux <- if(ncol(aux)==1){
+            setNames(aux,feature)
+          }
+          trData <- if (is.null(trData)) {
+            aux
+          } else {
+            cbind(trData,aux)
+          }},
           error=function(e){
             if(is.null(trData)){
               setNames(
@@ -1383,7 +1401,8 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
               )
             }
           })
-        trFields[[length(trFields)+1]] <- feature
+        trFields[[length(trFields)+1]] <- if(ncol(aux)==1){feature}else{
+          colnames(aux)}
       }
       detach(data,unload = T)
       data <- cbind(data,trData)
