@@ -10,8 +10,6 @@ generate_longitudinal_benchmarking_indicators <- function(
   modelLocation = NULL, modelStorageInfrastructureURI=NULL,
   modelTypeURI = NULL, modelBaselineYear=NULL, estimateWhenAggregate = T, outputDirectory = ""){
   
-  
-  
   buildingNamespace <- paste0(strsplit(buildingSubject,"#")[[1]][1],"#")
   namespaces <- bigg_namespaces
   namespaces["biggresults"] <- buildingNamespace
@@ -25,38 +23,40 @@ generate_longitudinal_benchmarking_indicators <- function(
     modelSubject <- sprintf(
       "biggresults:MODEL-%s-%s", buildingId, modelId)
     
-    obj %>%
-      add_item_to_rdf(
-        subject = modelSubject,
-        classes = c("bigg:AnalyticalModel"),
-        dataProperties = if(is.null(modelBaselineYear)){
-            list(
-              "bigg:modelLocation"= modelLocation,
-              "bigg:modelTrainedDate"= parsedate::format_iso_8601(lubridate::now("UTC")),
-              "bigg:modelName"= modelName
-            )
-          } else {
-            list(
-              "bigg:modelLocation"= modelLocation,
-              "bigg:modelTrainedDate"= parsedate::format_iso_8601(lubridate::now("UTC")),
-              "bigg:modelBaselineYear" = modelBaselineYear,
-              "bigg:modelName"= modelName
-            )
-          },
-        objectProperties = list(
-          "bigg:hasModelStorageInfrastructure" = modelStorageInfrastructureURI,
-          "bigg:hasModelType"= modelTypeURI
-        ),
-        namespaces = namespaces
-      )
-    
-    # Link the building with the model
-    obj %>%
-      add_item_to_rdf(
-        subject = buildingSubject,
-        objectProperties = list("bigg:hasAnalyticalModel"= modelSubject),
-        namespaces = namespaces
-      )
+    if(!exists_analytical_model(obj, modelSubject)){
+      # Create the model object
+      obj %>%
+        add_item_to_rdf(
+          subject = modelSubject,
+          classes = c("bigg:AnalyticalModel"),
+          dataProperties = if(is.null(modelBaselineYear)){
+              list(
+                "bigg:modelLocation"= modelLocation,
+                "bigg:modelTrainedDate"= parsedate::format_iso_8601(lubridate::now("UTC")),
+                "bigg:modelName"= modelName
+              )
+            } else {
+              list(
+                "bigg:modelLocation"= modelLocation,
+                "bigg:modelTrainedDate"= parsedate::format_iso_8601(lubridate::now("UTC")),
+                "bigg:modelBaselineYear" = modelBaselineYear,
+                "bigg:modelName"= modelName
+              )
+            },
+          objectProperties = list(
+            "bigg:hasModelStorageInfrastructure" = modelStorageInfrastructureURI,
+            "bigg:hasModelType"= modelTypeURI
+          ),
+          namespaces = namespaces
+        )
+      # Link the building with the model
+      obj %>%
+        add_item_to_rdf(
+          subject = buildingSubject,
+          objectProperties = list("bigg:hasAnalyticalModel"= modelSubject),
+          namespaces = namespaces
+        )
+    }
   }
   
   for (indicator in indicators){

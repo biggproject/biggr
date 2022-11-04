@@ -60,7 +60,7 @@ get_tz_building <- function(buildingsRdf, buildingId){
               bigg_namespaces[i])},
       1:length(bigg_namespaces))),
     '
-    SELECT ?tz
+    SELECT ?o ?tz
     WHERE {
       ?b a bigg:Building .
       ?b bigg:buildingIDFromOrganization ?o .
@@ -69,7 +69,7 @@ get_tz_building <- function(buildingsRdf, buildingId){
       ?l bigg:addressTimeZone ?tz .
     }')))
   return( if(length(metadata_df)>0) {
-      setNames(as.character(metadata_df$tz),nm=buildingId)
+    setNames(as.character(metadata_df$tz),nm=as.character(metadata_df$o))
     } else {NULL} )
 }
 
@@ -80,7 +80,7 @@ get_area_building <- function(buildingsRdf, buildingId){
               bigg_namespaces[i])},
       1:length(bigg_namespaces))),
     '
-    SELECT ?area
+    SELECT ?o ?area
     WHERE {
       ?b a bigg:Building .
       ?b bigg:buildingIDFromOrganization ?o .
@@ -92,7 +92,7 @@ get_area_building <- function(buildingsRdf, buildingId){
       ?a bigg:areaValue ?area .
     }')))
   return( if(length(metadata_df)>0) {
-      setNames(as.numeric(metadata_df$area),nm=buildingId)
+    setNames(as.numeric(metadata_df$area),nm=as.character(metadata_df$o))
     } else {NULL} )
 }
 
@@ -124,7 +124,7 @@ get_subject_building <- function(buildingsRdf, buildingId){
               bigg_namespaces[i])},
       1:length(bigg_namespaces))),
     '
-    SELECT ?b
+    SELECT ?o ?b
     WHERE {
       ?b a bigg:Building .
       ?b bigg:buildingIDFromOrganization ?o .
@@ -133,7 +133,7 @@ get_subject_building <- function(buildingsRdf, buildingId){
   
   return( 
     if(length(metadata_df)>0) {
-      setNames(as.character(metadata_df$b),nm=buildingId)
+      setNames(as.character(metadata_df$b),nm=as.character(metadata_df$o))
     } else { NULL } 
   )
 }
@@ -172,6 +172,20 @@ get_sensor_metadata <- function(buildingsRdf, sensorId, tz){
   metadata_df$sensorId <- sensorId
   return(metadata_df)
 }
+
+exists_analytical_model <- function(buildingsRdf, modelSubject){
+  return(nrow(suppressMessages(buildingsRdf %>% rdf_query(paste0(    
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
+    SELECT ?m
+    WHERE {
+      ?m a bigg:AnalyticalModel .
+      FILTER (?m = <',modelSubject,'>) .
+    }'))))>0)
+  }
 
 get_tariff_metadata <- function(buildingsRdf, sensorId){
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
@@ -662,7 +676,6 @@ read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId, 
   }
   
   timeseriesSensor
-  
   
   return(timeseriesSensor)
 }
