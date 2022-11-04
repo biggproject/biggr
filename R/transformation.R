@@ -67,6 +67,24 @@ lag_components <- function(data, maxLag, featuresNames=NULL, predictionStep=NULL
             data[, paste0(f,"_l",as.character(l))] <- NA
           }
         }
+        if(!is.null(forceInitOutputFeatures)){
+          if(f %in% names(forceInitOutputFeatures)){
+            initItem <- forceInitOutputFeatures[[f]]
+            initItem <- c(rep(initItem[1],max(0,maxLag-length(initItem))),tail(initItem,maxLag))
+            for(i in 1:maxLag){
+              data[i,mapply(function(l){paste0(f,"_l",as.character(l))},i:maxLag)] <- na.omit(lag(rev(initItem),i-1))
+            }
+          }
+        }
+        if(!is.null(forceInitInputFeatures)){
+          if(f %in% names(forceInitInputFeatures)){
+            initItem <- forceInitInputFeatures[[f]]
+            initItem <- c(rep(initItem[1],maxLag-length(initItem)),initItem)
+            for(i in 1:maxLag){
+              data[i,mapply(function(l){paste0(f,"_l",as.character(l))},i:maxLag)] <- na.omit(lag(rev(initItem),i-1))
+            }
+          }
+        }
       }
       # Calculate the lag components in prediction mode
     } else {
@@ -669,7 +687,7 @@ get_change_point_temperature <- function(consumptionData, weatherData,
 
 #' Normalze time serie using min-max range normalization method
 #'
-#' @param data <serie> containing serie to normalise
+#' @param data <data.frame> containing a set of time series to normalise
 #' @param lower <float> lower value
 #' @param upper <float> upper value
 #' @param lowerThreshold <float> lower threshold value
@@ -1337,8 +1355,10 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
                                         clusteringResults=NULL){
   
   transformationItems <- list()
-  if(!is.null(transformationSentences)){
-    for (feature in unique(c(names(transformationSentences), features))){
+  if(is.null(transformationSentences)){
+    transformationSentences <- list()
+  }
+  for (feature in unique(c(names(transformationSentences), features))){
       #print(feature)
       #feature <- unique(c(names(transformationSentences), features))[3]
       trFields <- list()
@@ -1379,8 +1399,11 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
           } else {
             data.frame(aux)
           }
-          aux <- if(ncol(aux)==1){
-            setNames(aux,feature)
+          if(ncol(aux)==1 && any(class(aux[,1]) %in% c("factor","character"))){
+            aux <- fastDummies::dummy_cols(as.factor(aux[,1]),remove_selected_columns = T)
+            colnames(aux) <- gsub(".data",feature,colnames(aux))
+          } else if(ncol(aux)==1){
+            aux <- setNames(aux,feature)
           }
           trData <- if (is.null(trData)) {
             aux
@@ -1417,9 +1440,9 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
     for(trFeat in names(transformationItems)[names(transformationItems) %in% features]){
       featuresAll <- c(featuresAll, transformationItems[[trFeat]]$vars)
     }
-  } else {
-    featuresAll <- features
-  }
-  return(list("featuresAll" = featuresAll, "features" = features, "items" = transformationItems, 
+  # } else {
+  #   featuresAll <- features
+  # }
+  return(list("featuresAll" = unique(featuresAll), "features" = unique(features), "items" = transformationItems, 
               "results" = transformationResults, "data" = data))
 }

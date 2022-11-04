@@ -2,6 +2,7 @@
 ### Model candidates auxiliar functions ----
 ###
 
+
 estimate_occupancy <- function(real=NULL, predicted, minOccupancy, timestep){
   
   if(is.null(real)){
@@ -87,6 +88,45 @@ AR_term <- function(features,orders,suffix=NULL){
     }),
     collapse=" + "
   )
+}
+
+#' Check the ratio of the periodogram out of the boundaries
+#'
+#' @param ts <vector> A univariate time series of values, usually the training residuals of a model
+#' @param taper <numeric> A proportion tapered in forming the periodogram.
+#' @return The proportion of the periodogram out of boundaries.
+
+relative_out_of_boundaries_in_periodogram <- function(ts, taper = 0.1){
+  
+  if (NCOL(ts) > 1) 
+    stop("only implemented for univariate time series")
+  x <- as.vector(ts)
+  x <- x[!is.na(x)]
+  x <- spec.taper(scale(x, TRUE, FALSE), p = taper)
+  y <- Mod(fft(x))^2/length(x)
+  y[1L] <- 0
+  n <- length(x)
+  x <- (0:(n/2)) * frequency(ts)/n
+  if (length(x)%%2 == 0) {
+    n <- length(x) - 1
+    y <- y[1L:n]
+    x <- x[1L:n]
+  } else { 
+    y <- y[seq_along(x)]
+  }
+  xm <- frequency(ts)/2
+  mp <- length(x) - 1
+  crit <- 1.358/(sqrt(mp) + 0.12 + 0.11/sqrt(mp))
+  oldpty <- par(pty = "s")
+  on.exit(par(oldpty))
+  
+  return(
+    sum(((cumsum(y)/sum(y))-x*1/max(x)) > crit | ((cumsum(y)/sum(y))-x*1/max(x)) < -crit)/length(x)
+  )
+  # ggplot() +
+  #   geom_point(aes(x,(cumsum(y)/sum(y))-x*1/max(x))) +
+  #   geom_hline(aes(yintercept=crit),col="blue") +
+  #   geom_hline(aes(yintercept=-crit),col="blue")
 }
 
 ###
@@ -309,10 +349,10 @@ ARX <- function(input_parameters){
                    transformationSentences=NULL, logOutput=T, trainMask=NULL,
                    numericStatusVariable=NULL, characterStatusVariable=NULL) {
       
-      x <<- x
-      y <<- y
-      transformationSentences <<- transformationSentences
-      formulaTerms <<- formulaTerms
+      # x <<- x
+      # y <<- y
+      # transformationSentences <<- transformationSentences
+      # formulaTerms <<- formulaTerms
       #param <- as.data.frame(bestParamsQe)
       
       features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
@@ -425,8 +465,12 @@ ARX <- function(input_parameters){
     predict = function(modelFit, newdata, submodels, forceGlobalInputFeatures=NULL, forceInitInputFeatures=NULL,
                        forceInitOutputFeatures=NULL, forceOneStepPrediction=F) {
       
+      # newdata <<- newdata
+      # modelFit <<- modelFit
+      
       newdata <- as.data.frame(newdata)
-      features <- modelFit$meta$features
+      features <- modelFit$meta$features[
+        !(modelFit$meta$features %in% modelFit$meta$outputName)]
       param <- modelFit$meta$param
       maxLag <- modelFit$meta$maxLag
       logOutput <- modelFit$meta$logOutput
@@ -451,6 +495,47 @@ ARX <- function(input_parameters){
       transformationSentences <- modelFit$meta$transformationSentences
       transformationResults <- modelFit$meta$transformationResults
       
+      newdata <- if(any(!(names(forceInitOutputFeatures) %in% colnames(newdata)))){
+        cbind(newdata,do.call(cbind,lapply(FUN = function(i){
+          rep(NA,nrow(newdata))
+        }, names(forceInitOutputFeatures)[
+          names(forceInitOutputFeatures) %in% colnames(newdata)])))
+      } else {newdata}
+      
+      newdata <- 
+        rbind(
+          setNames(data.frame(lapply(FUN = function(f){
+              initItem <- if(f %in% names(forceInitInputFeatures)) {
+                forceInitInputFeatures[[f]]
+              } else if(f %in% names(forceInitOutputFeatures)) {
+                forceInitOutputFeatures[[f]]
+              } else {
+                rep(newdata[1,f],maxLag)
+              }
+              c(rep(initItem[1],max(0,maxLag-length(initItem))),tail(initItem,maxLag))
+            },unique(c(colnames(newdata),names(forceInitOutputFeatures))))),
+            nm=unique(c(colnames(newdata),names(forceInitOutputFeatures))))[,colnames(newdata)],
+          newdata)
+      
+      # if(!is.null(forceInitInputFeatures)){
+      #   factor_char_features <- names(forceInitInputFeatures)[
+      #     mapply(FUN=function(i)class(i),forceInitInputFeatures) %in% c("factor","character")]
+      #   for(fcf in factor_char_features){
+      #     aux <- fastDummies::dummy_cols(as.factor(forceInitInputFeatures[[fcf]]),remove_selected_columns = T)
+      #     colnames(aux) <- gsub(".data",fcf,colnames(aux))
+      #     forceInitInputFeatures <- c(forceInitInputFeatures, as.list(aux))
+      #   }
+      # }
+      # if(!is.null(forceInitOutputFeatures)){
+      #   factor_char_features <- names(forceInitOutputFeatures)[
+      #     mapply(FUN=function(i)class(i),forceInitOutputFeatures) %in% c("factor","character")]
+      #   for(fcf in factor_char_features){
+      #     aux <- fastDummies::dummy_cols(as.factor(forceInitOutputFeatures[[fcf]]),remove_selected_columns = T)
+      #     colnames(aux) <- gsub(".data",fcf,colnames(aux))
+      #     forceInitOutputFeatures <- c(forceInitOutputFeatures, as.list(aux))
+      #   }
+      # }
+      
       # Transform input data if it is needed
       transformation <- data_transformation_wrapper(
         data=newdata, features=features, transformationSentences = transformationSentences, 
@@ -463,19 +548,28 @@ ARX <- function(input_parameters){
       if (!is.null(forceGlobalInputFeatures)){
         for (f in names(forceGlobalInputFeatures)){
           if(!(length(forceGlobalInputFeatures[[f]])==1 || 
-               length(forceGlobalInputFeatures[[f]])==nrow(newdata))){
+               length(forceGlobalInputFeatures[[f]])==(nrow(newdata)+maxLag))){
             stop(sprintf("forceGlobalInputFeatures[[%s]] needs to have a length of 1 
                      or equal to the number of rows of newdata argument (%s).",f, nrow(newdata)))
           }
-          newdata[,f] <- forceGlobalInputFeatures[[f]]
+          if(length(forceGlobalInputFeatures[[f]])==1){
+            newdata[,f] <- c(rep(NA,maxLag),rep(forceGlobalInputFeatures[[f]],
+                                                nrow(newdata)-maxLag))
+          } else {
+            newdata[,f] <- c(rep(NA,maxLag),forceGlobalInputFeatures[[f]])
+          }
         }
       }
       
       # Lag the components that has been initialised
       newdata <- lag_components(data = newdata, 
                                 maxLag = maxLag, 
-                                featuresNames = featuresAll,#modelFit$meta$features, 
-                                forceGlobalInputFeatures = forceGlobalInputFeatures)
+                                featuresNames = c(outputName,featuresAll)#modelFit$meta$features, 
+                                # forceGlobalInputFeatures = forceGlobalInputFeatures,
+                                # forceInitInputFeatures = forceInitInputFeatures,
+                                # forceInitOutputFeatures = forceInitOutputFeatures
+                                )
+      newdata <- newdata[(maxLag+1):nrow(newdata),]
       
       # Predict at multi-step ahead or one-step ahead prediction, 
       # depending if some AR input is considered using the output variable
@@ -484,9 +578,10 @@ ARX <- function(input_parameters){
           newdata <- lag_components(data = newdata,
                                     maxLag = maxLag,
                                     featuresNames = outputName,
-                                    predictionStep = i-1,
-                                    forceInitInputFeatures = forceInitInputFeatures,
-                                    forceInitOutputFeatures = forceInitOutputFeatures)
+                                    predictionStep = i-1#,
+                                    # forceInitInputFeatures = forceInitInputFeatures,
+                                    # forceInitOutputFeatures = forceInitOutputFeatures
+                                    )
           newdata[i,outputName] <- predict(modelFit,newdata[i,])
         }
       } else {
@@ -728,14 +823,15 @@ RLS <- function(input_parameters){
                        forceInitInputFeatures=NULL, forceInitOutputFeatures=NULL, 
                        modelMinMaxHorizonInHours=1, modelWindow="%Y-%m-%d", 
                        modelSelection="rmse") {
-      modelFit <<- modelFit
-      newdata <<- newdata
+      # modelFit <<- modelFit
+      # newdata <<- newdata
       # newdata <- df_for_pred
       newdata <- as.data.frame(newdata)
       newdata$localtime <- lubridate::with_tz(newdata$time,
                                               lubridate::tz(modelFit$localtime))
       newdata <- newdata[order(newdata$localtime),]
-      features <- modelFit$meta$features
+      features <- modelFit$meta$features[
+        !(modelFit$meta$features %in% modelFit$meta$outputName)]
       param <- modelFit$meta$param
       maxLag <- modelFit$meta$maxLag
       logOutput <- modelFit$meta$logOutput
@@ -764,6 +860,47 @@ RLS <- function(input_parameters){
       weatherDependenceByCluster <- modelFit$meta$weatherDependenceByCluster
       clusteringResults <- modelFit$meta$clusteringResults
       
+      newdata <- if(any(!(names(forceInitOutputFeatures) %in% colnames(newdata)))){
+        cbind(newdata,do.call(cbind,lapply(FUN = function(i){
+          rep(NA,nrow(newdata))
+        }, names(forceInitOutputFeatures)[
+          names(forceInitOutputFeatures) %in% colnames(newdata)])))
+      } else {newdata}
+      
+      newdata <- 
+        rbind(
+          setNames(data.frame(lapply(FUN = function(f){
+            initItem <- if(f %in% names(forceInitInputFeatures)) {
+              forceInitInputFeatures[[f]]
+            } else if(f %in% names(forceInitOutputFeatures)) {
+              forceInitOutputFeatures[[f]]
+            } else {
+              rep(newdata[1,f],maxLag)
+            }
+            c(rep(initItem[1],max(0,maxLag-length(initItem))),tail(initItem,maxLag))
+          },unique(c(colnames(newdata),names(forceInitOutputFeatures))))),
+          nm=unique(c(colnames(newdata),names(forceInitOutputFeatures))))[,colnames(newdata)],
+          newdata)
+      
+      # if(!is.null(forceInitInputFeatures)){
+      #   factor_char_features <- names(forceInitInputFeatures)[
+      #     mapply(FUN=function(i)class(i),forceInitInputFeatures) %in% c("factor","character")]
+      #   for(fcf in factor_char_features){
+      #     aux <- fastDummies::dummy_cols(as.factor(forceInitInputFeatures[[fcf]]),remove_selected_columns = T)
+      #     colnames(aux) <- gsub(".data",fcf,colnames(aux))
+      #     forceInitInputFeatures <- c(forceInitInputFeatures, as.list(aux))
+      #   }
+      # }
+      # if(!is.null(forceInitOutputFeatures)){
+      #   factor_char_features <- names(forceInitOutputFeatures)[
+      #     mapply(FUN=function(i)class(i),forceInitOutputFeatures) %in% c("factor","character")]
+      #   for(fcf in factor_char_features){
+      #     aux <- fastDummies::dummy_cols(as.factor(forceInitOutputFeatures[[fcf]]),remove_selected_columns = T)
+      #     colnames(aux) <- gsub(".data",fcf,colnames(aux))
+      #     forceInitOutputFeatures <- c(forceInitOutputFeatures, as.list(aux))
+      #   }
+      # }
+      
       # Transform input data if it is needed
       transformation <- data_transformation_wrapper(
         data=newdata, features=features, transformationSentences = transformationSentences, 
@@ -778,19 +915,28 @@ RLS <- function(input_parameters){
       if (!is.null(forceGlobalInputFeatures)){
         for (f in names(forceGlobalInputFeatures)){
           if(!(length(forceGlobalInputFeatures[[f]])==1 || 
-               length(forceGlobalInputFeatures[[f]])==nrow(newdata))){
+               length(forceGlobalInputFeatures[[f]])==(nrow(newdata)+maxLag))){
             stop(sprintf("forceGlobalInputFeatures[[%s]] needs to have a length of 1 
                      or equal to the number of rows of newdata argument (%s).",f, nrow(newdata)))
           }
-          newdata[,f] <- forceGlobalInputFeatures[[f]]
+          if(length(forceGlobalInputFeatures[[f]])==1){
+            newdata[,f] <- c(rep(NA,maxLag),rep(forceGlobalInputFeatures[[f]],
+                                                nrow(newdata)-maxLag))
+          } else {
+            newdata[,f] <- c(rep(NA,maxLag),forceGlobalInputFeatures[[f]])
+          }
         }
       }
       
       # Lag the components that has been initialised
       newdata <- lag_components(data = newdata, 
                                 maxLag = maxLag, 
-                                featuresNames = featuresAll,#modelFit$meta$features, 
-                                forceGlobalInputFeatures = forceGlobalInputFeatures)
+                                featuresNames = c(outputName,featuresAll)#modelFit$meta$features, 
+                                # forceGlobalInputFeatures = forceGlobalInputFeatures,
+                                # forceInitInputFeatures = forceInitInputFeatures,
+                                # forceInitOutputFeatures = forceInitOutputFeatures)
+                                )
+      newdata <- newdata[(maxLag+1):nrow(newdata),]
       
       # Data transformation for RLS framework
       model_formula <- modelFit$meta$formula#update.formula(modelFit$meta$formula,NULL~.)
@@ -829,9 +975,10 @@ RLS <- function(input_parameters){
           newdata <- lag_components(data = newdata,
                                     maxLag = maxLag,
                                     featuresNames = featuresAll,
-                                    predictionStep = i-1,
-                                    forceInitInputFeatures = forceInitInputFeatures,
-                                    forceInitOutputFeatures = forceInitOutputFeatures)
+                                    predictionStep = i-1#,
+                                    # forceInitInputFeatures = forceInitInputFeatures,
+                                    # forceInitOutputFeatures = forceInitOutputFeatures
+                                    )
           newdata[i,outputName] <- sum(
             newdata_matrix[i,colnames(modelFit$coefficients)] * 
               mod_coef[mod_coef$localtime==newdata$localtime[i],colnames(modelFit$coefficients)]
@@ -1156,6 +1303,15 @@ gaMonitor2 <- function(object, digits = getOption("digits"), ...) {
   flush.console()
 }
 
+bee_uCrossover <- function(object, parents, nlevels_per_feature)
+{
+  parents <- object@population[parents,,drop = FALSE]
+  u <- unlist(lapply(nlevels_per_feature,function(i)rep(runif(1),nchar(toBin(i)))))
+  children <- parents
+  children[1:2, u > 0.5] <- children[2:1, u > 0.5]
+  out <- list(children = children, fitness = rep(NA,2))
+  return(out)
+}
 
 #' Optimization function on binary representations of decision variables
 #'
@@ -1251,6 +1407,9 @@ optimize <- function(opt_criteria, opt_function, features, suggestions = NULL,
       suggestions = suggestions,
       monitor = if (monitor == TRUE) gaMonitor2 else FALSE,
       selection = gabin_tourSelection,
+      mutation = gabin_raMutation,
+      crossover = purrr::partial(bee_uCrossover,
+                          nlevels_per_feature =  unlist(getAttribute(features, "nlevels"))),
       keepBest = keepBest,
       parallel = parallel,
       ...
@@ -1263,12 +1422,12 @@ optimize <- function(opt_criteria, opt_function, features, suggestions = NULL,
   }
   return(results)
 }
+
 #' Hyperparameters tuning 
 #'
 #' Hyperparameter tuning via model fitting optimization. See optimize
 #' documentation for more details
 hyperparameters_tuning <- optimize
-
 
 ###
 ### Reformulation of Caret package functions ----
@@ -1332,9 +1491,18 @@ train.formula <- function (form, data, weights, subset, na.action = na.fail,
   w <- as.vector(model.weights(m))
   y <- model.response(m,type="any")
   # Force the inclusion of all data columns, they might be needed by some transformation procedure
-  if (!is.null(transformationSentences)){
-    x <- as.data.frame(data)#cbind(x,data[,!(colnames(data) %in% colnames(m))])
-    # print(as.data.frame(x))
+  if(sum(!(colnames(data) %in% colnames(x))) > 0){
+    x <- cbind(
+      as.data.frame(if(sum(!(colnames(data) %in% colnames(x)))==1){
+        setNames(
+          data.frame(data[,!(colnames(data) %in% colnames(x))]),
+          nm = colnames(data)[!(colnames(data) %in% colnames(x))]
+        )
+      } else {
+        data[,!(colnames(data) %in% colnames(x))]
+      }),
+      as.data.frame(x)
+    )
   }
   # continue caret official source code...
   res <- train(x, y, weights = w, formulaTerms=Terms,...)
@@ -1420,17 +1588,17 @@ predict.train <- function (object, newdata = NULL, type = "raw", na.action = na.
     newdata <- newdata[, colnames(newdata) %in% object$finalModel$xNames,drop = FALSE]
   # if ("outputName" %in% names(object$finalModel$meta))
   #   newdata_ini <- newdata_ini[,!(colnames(newdata_ini) %in% c(object$finalModel$meta$outputName))]
-  if(sum(!(colnames(newdata) %in% colnames(newdata_ini))) > 0){
+  if(sum(!(colnames(newdata_ini) %in% colnames(newdata))) > 0){
     newdata <- cbind(
-      if(sum(!(colnames(newdata) %in% colnames(newdata_ini)))==1){
+      as.data.frame(if(sum(!(colnames(newdata_ini) %in% colnames(newdata)))==1){
         setNames(
-          data.frame(newdata[,!(colnames(newdata) %in% colnames(newdata_ini))]),
-          nm = colnames(newdata)[!(colnames(newdata) %in% colnames(newdata_ini))]
+          data.frame(newdata_ini[,!(colnames(newdata_ini) %in% colnames(newdata))]),
+          nm = colnames(newdata_ini)[!(colnames(newdata_ini) %in% colnames(newdata))]
         )
       } else {
-        newdata[,!(colnames(newdata) %in% colnames(newdata_ini))]
-      },
-      newdata_ini
+        newdata_ini[,!(colnames(newdata_ini) %in% colnames(newdata))]
+      }),
+      as.data.frame(newdata)
     )
   }
   if (type == "prob") {
