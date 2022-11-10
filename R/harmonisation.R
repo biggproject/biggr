@@ -7,6 +7,88 @@ write_rdf <- function(object, file){
                 format = "turtle")
 }
 
+get_KPI_timeseries <- function(buildingsRdf, timeseriesObject, buildingId, 
+                               name, fromModel, frequency){
+  
+  KPI_metadata <- suppressMessages(buildingsRdf %>% rdf_query(paste0(
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
+          SELECT ?buildingId ?SingleKPI ?uriTimeSeries ?date
+          WHERE {
+            {
+            SELECT ?buildingId ?SingleKPI ?uriTimeSeries
+            WHERE {
+                ?buildingId a bigg:Building .
+                ?buildingId bigg:buildingIDFromOrganization "',buildingId,'" .
+                ?buildingId bigg:assessesSingleKPI ?SingleKPI .
+                FILTER regex(str(?SingleKPI),"',name,'")
+                ?SingleKPI bigg:timeSeriesFrequency "',frequency,'".
+                ?SingleKPI bigg:hasSingleKPIPoint ?uriTimeSeries .
+              }
+            }
+            optional {?SingleKPI bigg:isEstimatedByModel ?est .}
+            FILTER (',if(fromModel){""}else{"!"},'BOUND(?est)).
+            optional {?est bigg:modelTrainedDate ?date}
+          }
+          ORDER BY DESC(?date) LIMIT 1
+          ')))
+  
+  if(nrow(KPI_metadata)==0) return(NULL)
+  
+  KPI_metadata$uriTimeSeries <- mapply(
+    function(i){i[2]},
+    strsplit(KPI_metadata$uriTimeSeries,"#"))
+  
+  if(is.character(timeseriesObject)){
+    timeseriesObject_ <- unlist(lapply(
+      timeseriesObject[grepl(KPI_metadata$uriTimeSeries[1],timeseriesObject)],
+      function(x){jsonlite::fromJSON(x)}),recursive=F)
+  } else {
+    timeseriesObject_ <- timeseriesObject[[KPI_metadata$uriTimeSeries[1]]]
+  }
+  
+  timeseriesKPI <- timeseriesObject_[[KPI_metadata$uriTimeSeries[1]]]
+  timeseriesKPI$start <- parse_iso_8601(timeseriesKPI$start)
+  timeseriesKPI$end <- parse_iso_8601(timeseriesKPI$end)
+  timeseriesKPI <- timeseriesKPI[order(timeseriesKPI$start),]
+  timeseriesKPI <- timeseriesKPI %>% filter(is.finite(value))
+  timeseriesKPI$time <- timeseriesKPI$start
+  timeseriesKPI$start <- timeseriesKPI$end <- timeseriesKPI$isReal <- NULL
+  
+  return(timeseriesKPI)
+}
+
+get_KPI_by_building <- function(buildingsRdf,timeseriesObject,buildingId,
+                                KPI, frequency, ratedBy, localTz){
+  
+  timeseriesKPI <- get_KPI_timeseries(buildingsRdf, timeseriesObject, buildingId,
+                                      name = KPI$Name, fromModel = KPI$FromModel, frequency)
+  
+  if(is.null(timeseriesKPI)) return(NULL)
+  
+  if(!is.null(KPI$RatedBy)){
+    for (rb in KPI$RatedBy){
+      timeseriesKPI <- timeseriesKPI %>%
+        left_join(
+          get_KPI_timeseries(buildingsRdf, timeseriesObject, buildingId,
+                             rb$Name, rb$FromModel, frequency),by="time")
+      timeseriesKPI$value <- ifelse(timeseriesKPI$value.y==0, 0,
+                                    timeseriesKPI$value.x / timeseriesKPI$value.y)
+      timeseriesKPI$value.x <- timeseriesKPI$value.y <- NULL
+    }
+  }
+  timeseriesKPI[,buildingId] <- timeseriesKPI$value
+  timeseriesKPI$localtime <- format(with_tz(timeseriesKPI$time, localTz),
+                                    format="%Y-%m-%d %H:%M:%S")
+  timeseriesKPI[,paste0("utctime_",localTz)] <- timeseriesKPI$time
+  timeseriesKPI$time <- timeseriesKPI$value <- NULL
+  
+  return(timeseriesKPI)
+}
+
 get_all_device_aggregators <- function(buildingsRdf){
   result <- suppressMessages(buildingsRdf %>% rdf_query(paste0(
     paste0(mapply(function(i){
@@ -173,7 +255,8 @@ get_sensor_metadata <- function(buildingsRdf, sensorId, tz){
   return(metadata_df)
 }
 
-exists_analytical_model <- function(buildingsRdf, modelSubject){
+exists_analytical_model <- function(buildingsRdf, modelSubject, namespaces){
+  modelSubject <- namespace_integrator(modelSubject, namespaces)
   return(nrow(suppressMessages(buildingsRdf %>% rdf_query(paste0(    
     paste0(mapply(function(i){
       sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
@@ -229,6 +312,7 @@ get_emissions_metadata <- function(buildingsRdf, sensorId){
 
 append_cost_to_sensor <- function(buildingsRdf, timeseriesObject, tariffUri, measuredProperty,
                                 frequency, energyTimeseriesSensor){
+  tariffUri <- namespace_integrator(tariffUri,bigg_namespaces)
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
     paste0(mapply(function(i){
       sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
@@ -314,6 +398,7 @@ append_cost_to_sensor <- function(buildingsRdf, timeseriesObject, tariffUri, mea
 
 append_emissions_to_sensor <- function(buildingsRdf, timeseriesObject, emissionsUri, 
                                        measuredProperty, frequency, energyTimeseriesSensor){
+  emissionsUri <- namespace_integrator(emissionsUri,bigg_namespaces)
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
     paste0(mapply(function(i){
       sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
@@ -512,6 +597,7 @@ read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId, 
     timeseriesObject_ <- timeseriesObject
   }
   
+  if(is.null(timeseriesObject_)) return(NULL)
   timeseriesSensor <- timeseriesObject_[sensorId][[1]]
   timeseriesSensor$start <- parse_iso_8601(timeseriesSensor$start)
   timeseriesSensor$end <- parse_iso_8601(timeseriesSensor$end)
@@ -737,7 +823,9 @@ parse_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
         #   result[,"value_2"] <- 1/result[,"value_2"]
         #   result[,"value"] <- matrixStats::rowProds(result[,c("value_1","value_2")],na.rm=T)
         }
-        result[,endsWith(colnames(result),"_1") | endsWith(colnames(result),"_2")] <- NULL
+        if(!is.null(result)){
+          result[,endsWith(colnames(result),"_1") | endsWith(colnames(result),"_2")] <- NULL
+        }
     } else if (substr(formula,1,4)=="<mo>"){
       res <- stringr::str_match(formula, "<mo>\\s*(.*?)\\s*</mo>")
       formula <- gsub(res[1,1],"",formula,fixed = T)
@@ -782,11 +870,14 @@ get_device_aggregators_by_building <- function(buildingsRdf, timeseriesObject=NU
       function(buildingId){
        #buildingId="04752"
        aux <- devagg_buildings[devagg_buildings$buildingId==buildingId,]
+       aux$deviceAggregatorFrequency <- ifelse(
+         is.na(aux$deviceAggregatorFrequency), 
+         "P1Y", aux$deviceAggregatorFrequency)
        largerFrequency <- aux$deviceAggregatorFrequency[
          which.max(lubridate::seconds(lubridate::period(aux$deviceAggregatorFrequency)))]
        dfs <- setNames(lapply(unique(aux$deviceAggregatorName),
          function(devAggName){
-           #devAggName = "totalElectricityConsumption"
+           #devAggName = "totalGasConsumption"
            df <- parse_device_aggregator_formula(
              buildingsRdf = buildingsRdf,
              timeseriesObject = timeseriesObject,
@@ -802,10 +893,16 @@ get_device_aggregators_by_building <- function(buildingsRdf, timeseriesObject=NU
              useEstimatedValues = useEstimatedValues,
              ratioCorrection = ratioCorrection
            )
-           colnames(df) <- ifelse(colnames(df)=="time","time",
+           if(is.null(df)){
+             return(NULL)
+           } else {
+             colnames(df) <- ifelse(colnames(df)=="time","time",
                              paste(devAggName, colnames(df), sep="."))
-           df
+             return(df)
+           }
          }), nm = unique(aux$deviceAggregatorName))
+       dfs <- dfs[mapply(function(l)!is.null(l),dfs)]
+       if(is.null(dfs)) return(NULL)
        list(
          "df"=Reduce(function(df1, df2){merge(df1, df2, by = "time", all=T)}, dfs),
          "metadata"=devagg_buildings[devagg_buildings$buildingId==buildingId,]

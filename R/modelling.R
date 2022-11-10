@@ -502,21 +502,22 @@ ARX <- function(input_parameters){
           names(forceInitOutputFeatures) %in% colnames(newdata)])))
       } else {newdata}
       
-      newdata <- 
-        rbind(
-          setNames(data.frame(lapply(FUN = function(f){
-              initItem <- if(f %in% names(forceInitInputFeatures)) {
-                forceInitInputFeatures[[f]]
-              } else if(f %in% names(forceInitOutputFeatures)) {
-                forceInitOutputFeatures[[f]]
-              } else {
-                rep(newdata[1,f],maxLag)
-              }
-              c(rep(initItem[1],max(0,maxLag-length(initItem))),tail(initItem,maxLag))
-            },unique(c(colnames(newdata),names(forceInitOutputFeatures))))),
-            nm=unique(c(colnames(newdata),names(forceInitOutputFeatures))))[,colnames(newdata)],
-          newdata)
-      
+      if(maxLag>0){
+        newdata <- 
+          rbind(
+            setNames(data.frame(lapply(FUN = function(f){
+                initItem <- if(f %in% names(forceInitInputFeatures)) {
+                  forceInitInputFeatures[[f]]
+                } else if(f %in% names(forceInitOutputFeatures)) {
+                  forceInitOutputFeatures[[f]]
+                } else {
+                  rep(newdata[1,f],maxLag)
+                }
+                c(rep(initItem[1],max(0,maxLag-length(initItem))),tail(initItem,maxLag))
+              },unique(c(colnames(newdata),names(forceInitOutputFeatures))))),
+              nm=unique(c(colnames(newdata),names(forceInitOutputFeatures))))[,colnames(newdata)],
+            newdata)
+      }
       # if(!is.null(forceInitInputFeatures)){
       #   factor_char_features <- names(forceInitInputFeatures)[
       #     mapply(FUN=function(i)class(i),forceInitInputFeatures) %in% c("factor","character")]
@@ -813,7 +814,6 @@ RLS <- function(input_parameters){
         clusteringResults = clusteringResults
       )
       mod
-      
       # ggplotly(ggplot()+geom_line(aes(mod$localtime,mod$yreal)) +
       #            geom_line(aes(mod$localtime,mod$yhat),col="red",alpha=0.4)+
       #   geom_line(aes(mod$localtime,data$coolingLpf), col="blue",alpha=0.3))
@@ -867,21 +867,22 @@ RLS <- function(input_parameters){
           names(forceInitOutputFeatures) %in% colnames(newdata)])))
       } else {newdata}
       
-      newdata <- 
-        rbind(
-          setNames(data.frame(lapply(FUN = function(f){
-            initItem <- if(f %in% names(forceInitInputFeatures)) {
-              forceInitInputFeatures[[f]]
-            } else if(f %in% names(forceInitOutputFeatures)) {
-              forceInitOutputFeatures[[f]]
-            } else {
-              rep(newdata[1,f],maxLag)
-            }
-            c(rep(initItem[1],max(0,maxLag-length(initItem))),tail(initItem,maxLag))
-          },unique(c(colnames(newdata),names(forceInitOutputFeatures))))),
-          nm=unique(c(colnames(newdata),names(forceInitOutputFeatures))))[,colnames(newdata)],
-          newdata)
-      
+      if(maxLag>0){
+        newdata <- 
+          rbind(
+            setNames(data.frame(lapply(FUN = function(f){
+              initItem <- if(f %in% names(forceInitInputFeatures)) {
+                forceInitInputFeatures[[f]]
+              } else if(f %in% names(forceInitOutputFeatures)) {
+                forceInitOutputFeatures[[f]]
+              } else {
+                rep(newdata[1,f],maxLag)
+              }
+              c(rep(initItem[1],max(0,maxLag-length(initItem))),tail(initItem,maxLag))
+            },unique(c(colnames(newdata),names(forceInitOutputFeatures))))),
+            nm=unique(c(colnames(newdata),names(forceInitOutputFeatures))))[,colnames(newdata)],
+            newdata)
+      }
       # if(!is.null(forceInitInputFeatures)){
       #   factor_char_features <- names(forceInitInputFeatures)[
       #     mapply(FUN=function(i)class(i),forceInitInputFeatures) %in% c("factor","character")]
@@ -1409,7 +1410,7 @@ optimize <- function(opt_criteria, opt_function, features, suggestions = NULL,
       selection = gabin_tourSelection,
       mutation = gabin_raMutation,
       crossover = purrr::partial(bee_uCrossover,
-                          nlevels_per_feature =  unlist(getAttribute(features, "nlevels"))),
+                          nlevels_per_feature = unlist(getAttribute(features, "nlevels"))),
       keepBest = keepBest,
       parallel = parallel,
       ...
@@ -1506,7 +1507,6 @@ train.formula <- function (form, data, weights, subset, na.action = na.fail,
   }
   # continue caret official source code...
   res <- train(x, y, weights = w, formulaTerms=Terms,...)
-  print(res)
   res$terms <- Terms
   res$coefnames <- colnames(x)
   res$call <- match.call()
