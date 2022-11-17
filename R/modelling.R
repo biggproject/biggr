@@ -822,7 +822,7 @@ RLS <- function(input_parameters){
     predict = function(modelFit, newdata, submodels, forceGlobalInputFeatures=NULL, 
                        forceInitInputFeatures=NULL, forceInitOutputFeatures=NULL, 
                        modelMinMaxHorizonInHours=1, modelWindow="%Y-%m-%d", 
-                       modelSelection="rmse") {
+                       forceOneStepPrediction=F, modelSelection="rmse") {
       # modelFit <<- modelFit
       # newdata <<- newdata
       # newdata <- df_for_pred
@@ -971,7 +971,7 @@ RLS <- function(input_parameters){
       
       # Predict at multi-step ahead or one-step ahead prediction, 
       # depending if some AR input is considered using the output variable
-      if(paste("AR",outputName,sep="_") %in% colnames(param)){
+      if(forceOneStepPrediction==F & (paste("AR",outputName,sep="_") %in% colnames(param))){
         for (i in 1:nrow(newdata)){
           newdata <- lag_components(data = newdata,
                                     maxLag = maxLag,

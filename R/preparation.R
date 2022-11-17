@@ -888,14 +888,19 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
                                       minIncrementPercentualAffectation){
     
     # dataM<-data_daily
-    # minDate = as.Date("2020-03-22")
-    # maxDate = as.Date("2020-10-22")
+    # minDate = as.Date("2020-03-14")
+    # maxDate = as.Date("2020-08-31")
 
-    data_d <- data.frame(
-      "time" = seq.Date(as.Date(min(dataM$time)), 
-                        as.Date(max(dataM$time) + months(1) - days(1)), 
-                        by="days")
-    )
+    data_d <- tryCatch({
+      data.frame(
+        "time" = seq.Date(as.Date(min(dataM$time)), 
+                          as.Date(max(dataM$time) + months(1) - days(1)), 
+                          by="days"))},
+      error = function(e){
+        data.frame(
+          "time" = seq.Date(as.Date(min(dataM$time)), 
+                            as.Date(max(dataM$time) + days(30)), 
+                            by="days"))})
     data_d$disruptive <- ifelse(data_d$time >= minDate & data_d$time <= maxDate,
                                 1,0)
     data_d$testing <- ifelse(data_d$time >= minIniDate & data_d$time <= maxEndDate,
