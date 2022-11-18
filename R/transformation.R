@@ -1146,7 +1146,7 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
   qu = c(0.05,0.25,0.5,0.75,0.95)
   if(is.null(scalingAttr$gam)){
     gam_temperature <-
-      mqgam(
+      qgam::mqgam(
         consumption ~ 1 + s(temperature,bs="cs"),
         data=tmp_daily,
         qu=qu
@@ -1155,7 +1155,7 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
     gam_temperature <- scalingAttr$gam
   }
   for (i in qu){
-    tmp_daily[,sprintf("GAM%s",i*100)] <- as.numeric(qdo(gam_temperature, i, 
+    tmp_daily[,sprintf("GAM%s",i*100)] <- as.numeric(qgam::qdo(gam_temperature, i, 
                                                      predict, newdata = tmp_daily))
     tmp_daily[,sprintf("residualsGAM%s",i*100)] <- 
       (tmp_daily$consumption - tmp_daily[,sprintf("GAM%s",i*100)]) / tmp_daily[,sprintf("GAM%s",i*100)]
@@ -1167,7 +1167,7 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
   #   geom_line(aes(temperature,GAM75))+
   #   geom_line(aes(temperature,GAM95))
   
-  gam_temperature_50 <- qdo(gam_temperature,0.5)
+  gam_temperature_50 <- qgam::qdo(gam_temperature,0.5)
   aux <- gam_temperature_50$model$temperature
   tmp_daily$tbal <- mean(aux[which(gam_temperature_50$fitted.values <=
                      quantile(gam_temperature_50$fitted.values,0.2,na.rm=T))])
