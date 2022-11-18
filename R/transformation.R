@@ -1269,7 +1269,7 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
         data_for_rls[[outputName]] <- if (logOutput){
           log(ifelse(data[,outputName]>0,data[,outputName],0.01))
         } else { data[,outputName] }
-        data_for_rls[["t"]] <- data$date
+        data_for_rls[["t"]] <- seq(min(data$date),min(data$date)+length(data$date)-1,by="days")
         data_for_rls$scoreperiod <- sample(c(F,T),length(data_for_rls$t),replace = T,prob = c(0.9,0.1))
         
         # Fit the RLS model and obtain the time-varying coefficients
