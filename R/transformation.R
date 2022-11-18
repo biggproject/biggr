@@ -477,7 +477,7 @@ degree_days <- function(data, temperatureFeature, localTimeZone, baseTemperature
 #      - heating. Heating dependency detected
 #      - cooling. Cooling dependency detected
 
-get_change_point_temperature <- function(consumptionData, weatherData, 
+get_change_point_temperature <- function(df,consumptionData, weatherData, 
                                          consumptionFeature, 
                                          temperatureFeature,
                                          localTimeZone, plot = F){
