@@ -744,7 +744,7 @@ get_change_point_temperature_v2 <- function(consumptionData, weatherData,
     
     newdata$heating_intercept <- ifelse(newdata$hdd>0, 1, 0)
     newdata$cooling_intercept <- ifelse(newdata$cdd>0, 1, 0)
-    newdata$weekday <- as.factor(strftime(newdata$time,"%w"))
+    newdata$weekday <- strftime(newdata$time,"%w")
     
     # if(length(unique(newdata$weekday))>1){
     #   mod <- lm(consumption ~ 0 + weekday + hdd + cdd , newdata)
@@ -779,10 +779,10 @@ get_change_point_temperature_v2 <- function(consumptionData, weatherData,
     if(group_var){
       #newdata$group <- as.factor(newdata$group)
       form <- if(hdd_slope && cdd_slope){
-        as.formula("consumption ~ 0 + group + hdd:group + cdd:group")
-      } else if (hdd_slope) { as.formula("consumption ~ 0 + group + hdd:group")
-      } else if (cdd_slope) { as.formula("consumption ~ 0 + group + cdd:group")
-      } else {consumption ~ 0 + group}
+        as.formula("consumption ~ 1 + hdd:group + cdd:group + heating_intercept:group + cooling_intercept*group")
+      } else if (hdd_slope) { as.formula("consumption ~ 1 + hdd:group + heating_intercept*group")
+      } else if (cdd_slope) { as.formula("consumption ~ 1 + cdd:group + cooling_intercept*group")
+      } else {consumption ~ group}
     } else {
       form <- if(hdd_slope && cdd_slope){
         as.formula("consumption ~ 0 + hdd + cdd")
@@ -882,25 +882,24 @@ get_change_point_temperature_v2 <- function(consumptionData, weatherData,
                  warning=function(e){0})
   baseload <- predict(mod_results[[best]],data.frame(
     "group"=sort(unique(consumptionDataD$group)),
-    "hdd"=0,
-    "cdd"=0
+    "hdd"=0,"cdd"=0,"heating_intercept"=0,"cooling_intercept"=0
   ))
   avg_hdd_cdd <- data.frame(
     "group" = sort(unique(consumptionDataD$group)),
     "baseload"=baseload,
     "heating" = predict(mod_results[[best]],data.frame(
       "group"=unique(consumptionDataD$group),
-      "hdd"=1, "cdd"=0)) - baseload,
+      "hdd"=1, "cdd"=0, "heating_intercept"=0, "cooling_intercept"=0)) - baseload,
     "cooling" = predict(mod_results[[best]],data.frame(
       "group"=unique(consumptionDataD$group),
-      "hdd"=0, "cdd"=1)) - baseload)
+      "hdd"=0, "cdd"=1, "heating_intercept"=0, "cooling_intercept"=0)) - baseload)
   
   # Check if the hdd and cdd are higher or equal than 
   # 0.75% of average daily consumption per degree day
-  heating_dep <- (if(is.finite(avg_hdd_cdd$heating) && r2>=0.1){avg_hdd_cdd$heating} else {0}) >= 
-    baseload*0.01
-  cooling_dep <- (if(is.finite(avg_hdd_cdd$cooling) && r2>=0.1){avg_hdd_cdd$cooling} else {0}) >= 
-    baseload*0.01
+  heating_dep <- (if(is.finite(avg_hdd_cdd$heating) && r2>=0.2){avg_hdd_cdd$heating} else {0}) >= 
+    baseload*0.005
+  cooling_dep <- (if(is.finite(avg_hdd_cdd$cooling) && r2>=0.2){avg_hdd_cdd$cooling} else {0}) >= 
+    baseload*0.005
   return(
     setNames(data.frame(
       avg_hdd_cdd$group,
@@ -1082,9 +1081,10 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
   #   holidays <- holidays$X1
   # }
   
-  tmp <- data %>% mutate(localtime = with_tz(time, localTimeZone), 
-                         date = lubridate::date(localtime), hour = hour(localtime), 
-                         daypart = floor(hour(localtime)/(24/nDayParts)) ) %>% 
+  tmp <- data %>% 
+    mutate(localtime = with_tz(time, localTimeZone), 
+           date = lubridate::date(localtime), hour = hour(localtime), 
+           daypart = floor(hour(localtime)/(24/nDayParts)) ) %>% 
     distinct(date, hour, .keep_all = TRUE)
   n_timesteps <- hourly_timesteps(24,detect_time_step(data))
   tmp_daily <- tmp %>% 
@@ -1095,75 +1095,97 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
     group_by(date, weekday, isWeekend, isHolidays) %>% 
     summarize(
       consumption = mean(consumption, na.rm=T) * n_timesteps, 
-      temperature = mean(temperature, na.rm = TRUE)
+      temperature = mean(temperature, na.rm = TRUE),
+      minConsumption = min(consumption, na.rm=T),
+      maxConsumption = max(consumption, na.rm=T)
       ) %>% 
     ungroup()
   tmp_daily <- as.data.frame(tmp_daily)
   tmp_daily$weekday_f <- as.factor(as.character(tmp_daily$weekday))
   if(is.null(scalingAttr$levels_consumption)){
-    # levels_consumption <- c(min(tmp_daily$consumption,na.rm=T),
-    #   get_local_min_from_density(tmp_daily$consumption,minNumberValleys=1),
-    #   max(tmp_daily$consumption,na.rm=T))
-    levels_consumption <- setNames(lapply(levels(tmp_daily$weekday_f), function(d){
-      aux <- tmp_daily$consumption[tmp_daily$weekday_f==d]
-      density_mins <- lapply(seq(2,3.5,by=0.1), function(k){
-        density_mins <- get_local_min_from_density(
-          aux,minNumberValleys=1,kDensityAdjuster = k)
-      })
-      density_mins <- density_mins[mapply(function(d){is.null(d) || length(d)<=1},density_mins)][1][[1]]
-      c(min(aux,na.rm=T),
-        density_mins,
-        max(aux,na.rm=T))}),levels(tmp_daily$weekday_f))
+    levels_consumption <- c(min(tmp_daily$minConsumption,na.rm=T),
+      get_local_min_from_density(tmp_daily$minConsumption,minNumberValleys=1),
+      max(tmp_daily$minConsumption,na.rm=T))
+    # levels_consumption <- setNames(lapply(levels(tmp_daily$weekday_f), function(d){
+    #   aux <- tmp_daily$consumption[tmp_daily$weekday_f==d]
+    #   density_mins <- lapply(seq(2,3.5,by=0.1), function(k){
+    #     density_mins <- get_local_min_from_density(
+    #       aux,minNumberValleys=1,kDensityAdjuster = k)
+    #   })
+    #   density_mins <- density_mins[mapply(function(d){is.null(d) || length(d)<=1},density_mins)][1][[1]]
+    #   c(min(aux,na.rm=T),
+    #     density_mins,
+    #     max(aux,na.rm=T))}),levels(tmp_daily$weekday_f))
   } else {
     levels_consumption <- scalingAttr$levels_consumption
-    # levels_consumption[1] <- min(levels_consumption[1],min(tmp_daily$consumption,na.rm=T))
-    # levels_consumption[length(levels_consumption)] <- max(
-    #   levels_consumption[length(levels_consumption)],
-    #   max(tmp_daily$consumption,na.rm=T))
-    levels_consumption <- setNames(
-      lapply(levels(tmp_daily$weekday_f), function(d){
-        aux <- tmp_daily$consumption[tmp_daily$weekday_f==d]
-        lc <- levels_consumption[[d]]
-        lc[1] <- min(aux,na.rm=T)
-        lc[length(lc)] <- max(aux,na.rm=T)
-        lc
-      }),
-      levels(tmp_daily$weekday_f))
+    levels_consumption[1] <- min(levels_consumption[1],min(tmp_daily$minConsumption,na.rm=T))
+    levels_consumption[length(levels_consumption)] <- max(
+      levels_consumption[length(levels_consumption)],
+      max(tmp_daily$minConsumption,na.rm=T))
+    # levels_consumption <- setNames(
+    #   lapply(levels(tmp_daily$weekday_f), function(d){
+    #     aux <- tmp_daily$consumption[tmp_daily$weekday_f==d]
+    #     lc <- levels_consumption[[d]]
+    #     lc[1] <- min(aux,na.rm=T)
+    #     lc[length(lc)] <- max(aux,na.rm=T)
+    #     lc
+    #   }),
+    #   levels(tmp_daily$weekday_f))
   }
-  tmp_daily <- tmp_daily %>% left_join(
-    do.call(rbind, lapply(levels(tmp_daily$weekday_f), function(d){
-      data.frame(
-        date = tmp_daily$date[tmp_daily$weekday_f==d],
-        lev = as.factor(paste(d,arules::discretize(
-            tmp_daily$consumption[tmp_daily$weekday_f==d], 
-            method = "fixed", breaks = levels_consumption[[d]], labels=F),
-          sep="_"))
-      )})), by="date")
+  tmp_daily$lev <- arules::discretize(
+              tmp_daily$minConsumption, method = "fixed", breaks = levels_consumption, labels=F)
+  # tmp_daily <- tmp_daily %>% left_join(
+  #   do.call(rbind, lapply(levels(tmp_daily$weekday_f), function(d){
+  #     data.frame(
+  #       date = tmp_daily$date[tmp_daily$weekday_f==d],
+  #       lev = as.factor(paste(d,arules::discretize(
+  #           tmp_daily$consumption[tmp_daily$weekday_f==d], 
+  #           method = "fixed", breaks = levels_consumption[[d]], labels=F),
+  #         sep="_"))
+  #     )})), by="date")
+  qu = c(0.05,0.25,0.5,0.75,0.95)
   if(is.null(scalingAttr$gam)){
     gam_temperature <-
-      mgcv::gam(
-        consumption ~ lev + s(temperature,bs="cs") +
-          s(temperature,by=lev,bs="cs"),
-        data=tmp_daily
+      mqgam(
+        consumption ~ 1 + s(temperature,bs="cs"),
+        data=tmp_daily,
+        qu=qu
       )
   } else {
     gam_temperature <- scalingAttr$gam
   }
-  tmp_daily$tbal <- as.numeric(as.character(factor(
-    tmp_daily$lev,
-    levels=levels(tmp_daily$lev),
-    labels=
-      mapply(function(g){
-        aux <- gam_temperature$model$temperature[gam_temperature$model$lev==g]
-        tbalaux <- mean(aux[which(gam_temperature$fitted.values[gam_temperature$model$lev==g] <=
-                    quantile(gam_temperature$fitted.values[gam_temperature$model$lev==g],0.2,na.rm=T))])
-        # ggplot() + geom_point(aes(
-        #   gam_temperature$model$temperature[gam_temperature$model$weekday_f==g],
-        #   gam_temperature$fitted.values[gam_temperature$model$weekday_f==g]
-        # )) + geom_vline(aes(xintercept = tbalaux))
-        },
-        levels(tmp_daily$lev))
-  )))
+  for (i in qu){
+    tmp_daily[,sprintf("GAM%s",i*100)] <- as.numeric(qdo(gam_temperature, i, 
+                                                     predict, newdata = tmp_daily))
+    tmp_daily[,sprintf("residualsGAM%s",i*100)] <- 
+      (tmp_daily$consumption - tmp_daily[,sprintf("GAM%s",i*100)]) / tmp_daily[,sprintf("GAM%s",i*100)]
+  }
+  # ggplot(tmp_daily)+geom_point(aes(temperature,consumption))+
+  #   geom_line(aes(temperature,GAM5))+
+  #   geom_line(aes(temperature,GAM25))+
+  #   geom_line(aes(temperature,GAM50))+
+  #   geom_line(aes(temperature,GAM75))+
+  #   geom_line(aes(temperature,GAM95))
+  
+  gam_temperature_50 <- qdo(gam_temperature,0.5)
+  aux <- gam_temperature_50$model$temperature
+  tmp_daily$tbal <- mean(aux[which(gam_temperature_50$fitted.values <=
+                     quantile(gam_temperature_50$fitted.values,0.2,na.rm=T))])
+  # tmp_daily$tbal <- as.numeric(as.character(factor(
+  #   tmp_daily$lev,
+  #   levels=levels(tmp_daily$lev),
+  #   labels=
+  #     mapply(function(g){
+  #       aux <- gam_temperature_50$model$temperature[gam_temperature_50$model$lev==g]
+  #       tbalaux <- mean(aux[which(gam_temperature_50$fitted.values[gam_temperature_50$model$lev==g] <=
+  #                   quantile(gam_temperature_50$fitted.values[gam_temperature_50$model$lev==g],0.2,na.rm=T))])
+  #       # ggplot() + geom_point(aes(
+  #       #   gam_temperature_50$model$temperature[gam_temperature_50$model$weekday_f==g],
+  #       #   gam_temperature_50$fitted.values[gam_temperature_50$model$weekday_f==g]
+  #       # )) + geom_vline(aes(xintercept = tbalaux))
+  #       },
+  #       levels(tmp_daily$lev))
+  # )))
   tmp_daily$tbal <- ifelse(
     tmp_daily$tbal > quantile(tmp_daily$temperature,0.8,na.rm=T),
     quantile(tmp_daily$temperature,0.8,na.rm=T),
@@ -1172,25 +1194,25 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
            tmp_daily$tbal))
   # tmp_daily$tbal <- 
   #   if(length(unique(as.character(tmp_daily$lev)))==1){
-  #     as.numeric(gam_temperature$model$temperature[which.min(gam_temperature$fitted.values)])
+  #     as.numeric(gam_temperature_50$model$temperature[which.min(gam_temperature_50$fitted.values)])
   #   } else {
   #     as.numeric(as.character(factor(
   #     as.factor(as.character(tmp_daily$lev)),
   #     levels=unique(as.character(tmp_daily$lev)),
   #     labels=
   #       mapply(function(g){
-  #         aux <- gam_temperature$model$temperature[gam_temperature$model$`as.factor(lev)`==g]
-  #         aux[which.min(gam_temperature$fitted.values[gam_temperature$model$`as.factor(lev)`==g])]},
+  #         aux <- gam_temperature_50$model$temperature[gam_temperature_50$model$`as.factor(lev)`==g]
+  #         aux[which.min(gam_temperature_50$fitted.values[gam_temperature_50$model$`as.factor(lev)`==g])]},
   #         unique(as.character(tmp_daily$lev)))
   #     )))
   # }
   tmp_daily[,"baseload"] <- 
-    as.numeric(predict(gam_temperature,
+    as.numeric(predict(gam_temperature_50,
                       tmp_daily %>% 
                         mutate(temperature=tbal) %>% 
                         select(temperature,lev,weekday_f)))
   tmp_daily["residualsEnergySignature"] <- 
-    ((as.numeric(predict(gam_temperature,tmp_daily)))-tmp_daily$consumption)/
+    ((as.numeric(predict(gam_temperature_50,tmp_daily)))-tmp_daily$consumption)/
     tmp_daily$consumption
   tmp_daily[,"positiveResidualsEnergySignature"] <- 
     ifelse(tmp_daily[,"residualsEnergySignature"]>0,
@@ -1220,7 +1242,7 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
     lm_hdd_cdd <- lapply(balanceOutdoorTemperatures,function(b){
       form <- as.formula(
           sprintf("consumption ~ 0 + lev +
-                   hdd%s:lev + cdd%s:lev",b,b) )
+                   hdd%s + cdd%s",b,b) )
       tryCatch({
         quantreg::rq(form, data = tmp_daily, tau = 0.75)
       }, error = function(m){ lm(form, tmp_daily) })
@@ -1241,47 +1263,47 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
     return(list(data=data, data_matrix=data_matrix))
   }
   
-  if(is.null(scalingAttr$rls_hdd_cdd)){
-    rls_hdd_cdd <- lapply(balanceOutdoorTemperatures,function(b){
-        form <- as.formula(
-          sprintf("consumption ~ 0 + lev +
-                       hdd%s:lev + cdd%s:lev",b,b) )
-        
-        rls_data <- rls_data_builder(form, tmp_daily)
-        data <- rls_data$data
-        data_matrix <- rls_data$data_matrix
-        outputName = "consumption"
-        
-        # Create the model object
-        model <- forecastmodel$new()
-        model$output <- outputName
-        do.call(model$add_inputs,as.list(setNames(colnames(data_matrix),colnames(data_matrix))))
-        model$add_regprm("rls_prm(lambda=0.9)")
-        model$kseq <- 0
-        
-        # Data transformation for RLS framework
-        data_for_rls <- setNames(
-          lapply(colnames(data_matrix),
-                 function(x) data.frame("k0"=data_matrix[,x])),
-          colnames(data_matrix)
-        )
-        logOutput=F
-        data_for_rls[[outputName]] <- if (logOutput){
-          log(ifelse(data[,outputName]>0,data[,outputName],0.01))
-        } else { data[,outputName] }
-        data_for_rls[["t"]] <- data$date
-        data_for_rls$scoreperiod <- sample(c(F,T),length(data_for_rls$t),replace = T,prob = c(0.9,0.1))
-        
-        # Fit the RLS model and obtain the time-varying coefficients
-        mod_rls <- rls_fit(c("lambda"=0.91),model, data_for_rls, scorefun = rmse, printout = F)
-        mod_rls$form <- form
-        
-        return(mod_rls)
-      })
-      names(rls_hdd_cdd) <- balanceOutdoorTemperatures
-  } else {
-    rls_hdd_cdd <- scalingAttr$rls_hdd_cdd
-  }
+  # if(is.null(scalingAttr$rls_hdd_cdd)){
+  #   rls_hdd_cdd <- lapply(balanceOutdoorTemperatures,function(b){
+  #       form <- as.formula(
+  #         sprintf("consumption ~ 0 + lev +
+  #                      hdd%s:lev + cdd%s:lev",b,b) )
+  #       
+  #       rls_data <- rls_data_builder(form, tmp_daily)
+  #       data <- rls_data$data
+  #       data_matrix <- rls_data$data_matrix
+  #       outputName = "consumption"
+  #       
+  #       # Create the model object
+  #       model <- forecastmodel$new()
+  #       model$output <- outputName
+  #       do.call(model$add_inputs,as.list(setNames(colnames(data_matrix),colnames(data_matrix))))
+  #       model$add_regprm("rls_prm(lambda=0.9)")
+  #       model$kseq <- 0
+  #       
+  #       # Data transformation for RLS framework
+  #       data_for_rls <- setNames(
+  #         lapply(colnames(data_matrix),
+  #                function(x) data.frame("k0"=data_matrix[,x])),
+  #         colnames(data_matrix)
+  #       )
+  #       logOutput=F
+  #       data_for_rls[[outputName]] <- if (logOutput){
+  #         log(ifelse(data[,outputName]>0,data[,outputName],0.01))
+  #       } else { data[,outputName] }
+  #       data_for_rls[["t"]] <- data$date
+  #       data_for_rls$scoreperiod <- sample(c(F,T),length(data_for_rls$t),replace = T,prob = c(0.9,0.1))
+  #       
+  #       # Fit the RLS model and obtain the time-varying coefficients
+  #       mod_rls <- rls_fit(c("lambda"=0.91),model, data_for_rls, scorefun = rmse, printout = F)
+  #       mod_rls$form <- form
+  #       
+  #       return(mod_rls)
+  #     })
+  #     names(rls_hdd_cdd) <- balanceOutdoorTemperatures
+  # } else {
+  #   rls_hdd_cdd <- scalingAttr$rls_hdd_cdd
+  # }
   for (b in balanceOutdoorTemperatures){
     tmp_daily[,paste0("baseload",b)] <-
       predict(lm_hdd_cdd[[as.character(b)]],
@@ -1343,18 +1365,18 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
       predict(lm_hdd_cdd[[as.character(b)]],one_cdd_data) - tmp_daily[paste0("baseload",b)]
     tmp_daily[paste0("slopeCdd",b)] <- ifelse(tmp_daily[,paste0("slopeCdd",b)]>0,
                                               tmp_daily[,paste0("slopeCdd",b)],0)
-    tmp_daily <- tmp_daily %>% left_join(
-      setNames(data.frame(
-        rls_hdd_cdd[[as.character(b)]]$data$t,
-        rowSums(rls_data_builder(rls_hdd_cdd[[as.character(b)]]$form, one_cdd_data,na.rm=T)$data_matrix[
-        ,colnames(rls_hdd_cdd[[as.character(b)]]$Lfitval$k0)] * rls_hdd_cdd[[as.character(b)]]$Lfitval$k0) - 
-          rowSums(rls_data_builder(rls_hdd_cdd[[as.character(b)]]$form, zero_dd_data,na.rm=T)$data_matrix[
-          ,colnames(rls_hdd_cdd[[as.character(b)]]$Lfitval$k0)] * rls_hdd_cdd[[as.character(b)]]$Lfitval$k0),
-        rowSums(rls_data_builder(rls_hdd_cdd[[as.character(b)]]$form, one_hdd_data,na.rm=T)$data_matrix[
-          ,colnames(rls_hdd_cdd[[as.character(b)]]$Lfitval$k0)] * rls_hdd_cdd[[as.character(b)]]$Lfitval$k0) - 
-          rowSums(rls_data_builder(rls_hdd_cdd[[as.character(b)]]$form, zero_dd_data,na.rm=T)$data_matrix[
-            ,colnames(rls_hdd_cdd[[as.character(b)]]$Lfitval$k0)] * rls_hdd_cdd[[as.character(b)]]$Lfitval$k0)
-      ),c("date",paste0("slopeCddDyn",b),paste0("slopeHddDyn",b))) )
+    # tmp_daily <- tmp_daily %>% left_join(
+    #   setNames(data.frame(
+    #     rls_hdd_cdd[[as.character(b)]]$data$t,
+    #     rowSums(rls_data_builder(rls_hdd_cdd[[as.character(b)]]$form, one_cdd_data,na.rm=T)$data_matrix[
+    #     ,colnames(rls_hdd_cdd[[as.character(b)]]$Lfitval$k0)] * rls_hdd_cdd[[as.character(b)]]$Lfitval$k0) - 
+    #       rowSums(rls_data_builder(rls_hdd_cdd[[as.character(b)]]$form, zero_dd_data,na.rm=T)$data_matrix[
+    #       ,colnames(rls_hdd_cdd[[as.character(b)]]$Lfitval$k0)] * rls_hdd_cdd[[as.character(b)]]$Lfitval$k0),
+    #     rowSums(rls_data_builder(rls_hdd_cdd[[as.character(b)]]$form, one_hdd_data,na.rm=T)$data_matrix[
+    #       ,colnames(rls_hdd_cdd[[as.character(b)]]$Lfitval$k0)] * rls_hdd_cdd[[as.character(b)]]$Lfitval$k0) - 
+    #       rowSums(rls_data_builder(rls_hdd_cdd[[as.character(b)]]$form, zero_dd_data,na.rm=T)$data_matrix[
+    #         ,colnames(rls_hdd_cdd[[as.character(b)]]$Lfitval$k0)] * rls_hdd_cdd[[as.character(b)]]$Lfitval$k0)
+    #   ),c("date",paste0("slopeCddDyn",b),paste0("slopeHddDyn",b))) )
 
   }
   tmp_daily$weekday_f <- NULL
@@ -1362,6 +1384,7 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
   tmp_spread <- tmp %>% group_by(date, daypart) %>% 
     summarize(consumption = mean(consumption)) %>% 
     ungroup() %>% spread(daypart, consumption)
+  loadCurves_columns <- colnames(tmp_spread)[colnames(tmp_spread)!="date"]
   if (transformation == "relative") {
     columns <- names(tmp_spread)
     columns <- columns[!(columns %in% "date")]
@@ -1378,30 +1401,14 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
   } else if(method=="znorm") {
     norm <- normalise_zscore(data = tmp_spread, scalingAttr = scalingAttr$normalise)
   }
-  vars <- list(loadCurves = names(tmp_spread)[!(names(tmp_spread) %in% 
-                            c("isWeekend", "isHolidays", "weekday",
-                              "consumption","temperature",
-                              paste0("ratioConsumptionHdd",balanceOutdoorTemperatures),
-                              paste0("ratioConsumptionCdd",balanceOutdoorTemperatures),
-                              paste0("slopeHdd",balanceOutdoorTemperatures),
-                              paste0("slopeCdd",balanceOutdoorTemperatures),
-                              paste0("slopeHddDyn",balanceOutdoorTemperatures),
-                              paste0("slopeCddDyn",balanceOutdoorTemperatures),
-                              "baseload",
-                              "residualsEnergySignature",
-                              "positiveResidualsEnergySignature",
-                              "negativeResidualsEnergySignature",
-                              paste0("residualsEnergySignature",balanceOutdoorTemperatures),
-                              paste0("positiveResidualsEnergySignature",balanceOutdoorTemperatures),
-                              paste0("negativeResidualsEnergySignature",balanceOutdoorTemperatures),
-                              paste0("baseload",balanceOutdoorTemperatures),
-                              paste0("hdd",balanceOutdoorTemperatures),
-                              paste0("cdd",balanceOutdoorTemperatures)
-                              ))], 
+  vars <- list(loadCurves = loadCurves_columns, 
                daysWeekend = c("isWeekend"), 
                daysHolidays = c("isHolidays"), 
                daysWeek = c("weekday"),
+               residualsGAM = sprintf("residualsGAM%s",qu*100),
                dailyConsumption = c("consumption"), 
+               dailyMinConsumption = c("minConsumption"), 
+               dailyMaxConsumption = c("maxConsumption"), 
                dailyTemperature = c("temperature"),
                ratioDailyConsumptionHdd = paste0("ratioConsumptionHdd",balanceOutdoorTemperatures),
                ratioDailyConsumptionCdd = paste0("ratioConsumptionCdd",balanceOutdoorTemperatures),
@@ -1415,8 +1422,8 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
                dailyBaseloadConsumption = paste0("baseload",balanceOutdoorTemperatures),
                slopeHdd = paste0("slopeHdd",balanceOutdoorTemperatures),
                slopeCdd = paste0("slopeCdd",balanceOutdoorTemperatures),
-               slopeHddDyn = paste0("slopeHddDyn",balanceOutdoorTemperatures),
-               slopeCddDyn = paste0("slopeCddDyn",balanceOutdoorTemperatures),
+               # slopeHddDyn = paste0("slopeHddDyn",balanceOutdoorTemperatures),
+               # slopeCddDyn = paste0("slopeCddDyn",balanceOutdoorTemperatures),
                dailyHdd = paste0("hdd",balanceOutdoorTemperatures),
                dailyCdd = paste0("cdd",balanceOutdoorTemperatures)
     )
