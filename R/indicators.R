@@ -10,6 +10,7 @@ generate_longitudinal_benchmarking_indicators <- function (
   modelBaselineYear = NULL, estimateWhenAggregate = T,
   prevResults = NULL) 
 {
+  
   buildingNamespace <- paste0(strsplit(buildingSubject, "#")[[1]][1], 
                               "#")
   namespaces <- bigg_namespaces

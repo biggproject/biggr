@@ -116,6 +116,9 @@ get_all_device_aggregators <- function(buildingsRdf){
     }')))
   result$measuredProperty <- gsub(paste0(bigg_namespaces,collapse="|"),"",
                                        result$measuredProperty)
+  result$deviceAggregatorFrequency <- ifelse(mapply(function(x)!is.na(x),
+                                                    as.period(result$deviceAggregatorFrequency)),
+                                             result$deviceAggregatorFrequency,NA)
   return(result)
 }
 
@@ -272,6 +275,9 @@ get_sensor_metadata <- function(buildingsRdf, sensorId, tz){
   metadata_df$tz <- tz
   metadata_df$measuredProperty <- gsub(paste0(bigg_namespaces,collapse="|"),"",
                                        metadata_df$measuredProperty)
+  metadata_df$timeSeriesFrequency <- ifelse(mapply(function(x)!is.na(x),
+                                       as.period(metadata_df$timeSeriesFrequency)),
+                                       metadata_df$timeSeriesFrequency,NA)
   metadata_df$sensorId <- sensorId
   return(metadata_df)
 }
@@ -633,19 +639,11 @@ read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId, 
       timeseriesSensor <- timeseriesSensor[is.finite(timeseriesSensor$start),]
     }
     
-    timesteps <- list(
-      "1" = "S",
-      "60" = "T",
-      "3600" = "H",
-      "86400" = "D",
-      "604800" = "W",
-      "2419200" = "M",
-      "2505600" = "M",
-      "2592000" = "M",
-      "2678400" = "M",
-      "31536000" = "Y",
-      "31622400" = "Y"
-    )
+    timesteps <- data.frame(
+      secs = c(1,60,3600,86400,604800,2419200,2505600,2592000,2678400,
+               31536000,31622400),
+      freq = c("PT1S","PT1M","PT1H","PT1D","PT7D","P1M","P1M","P1M","P1M",
+               "P1Y","P1Y"))
     
     # If values are on change, reconsider the start and end timestamps
     if(metadata$timeSeriesIsOnChange){
@@ -660,15 +658,17 @@ read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId, 
               0.1,na.rm=T)))
     } else {
       # Calculate the minimum frequency for series interpolation
-      interpolateFrequency <- lubridate::format_ISO8601(lubridate::as.period(
-        quantile(difftime(timeseriesSensor$end,timeseriesSensor$start,
-                          tz = "UTC",units = "secs"),
-            0.1,na.rm=T)))
+      interpolateFrequency <- 
+        timesteps[timesteps$secs>
+        as.numeric(lubridate::as.period(
+          quantile(difftime(timeseriesSensor$end, timeseriesSensor$start,
+                   tz = "UTC",units = "secs"), 0.1, na.rm=T)
+        )),"freq"][1]
     }
     metadata$timeSeriesFrequency <- interpolateFrequency
     # Detect the subsets with no internal gaps
     timeseriesSensor$gapAfter <- ifelse(
-      difftime(timeseriesSensor$start,lag(timeseriesSensor$end,1),units = "secs") > as.numeric(names(interpolateFrequency)),
+      difftime(timeseriesSensor$start,lag(timeseriesSensor$end,1),units = "secs") > as.numeric(as.period(interpolateFrequency)),
       1,0)
     timeseriesSensor$gapAfter <- cumsum(ifelse(is.na(timeseriesSensor$gapAfter),0,timeseriesSensor$gapAfter))
     # Resample the original irregular series to a regular series, among the detected subsets
@@ -720,7 +720,7 @@ read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId, 
         group_by(time) %>%
         summarise(value = func(value))
     )
-    timeseriesSensor$isReal <- T
+    timeseriesSensor$isReal <- ifelse(!is.na(timeseriesSensor$value),T,F)
   
   # Regular timeseries
   } else {
@@ -737,7 +737,7 @@ read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId, 
     unit = iso8601_period_to_text(metadata$timeSeriesFrequency,only_first = T),
     week_start = getOption("lubridate.week.start", 7)
   )
-  aggFunctions <- if(lubridate::period(outputFrequency)<lubridate::period("P1D")){
+  if(lubridate::period(outputFrequency)<lubridate::period("P1D")){
     aggFunctions <- aggFunctions[!(aggFunctions %in% c("HDD","CDD"))]
   }
   timeseriesSensor <- align_time_grid(
@@ -777,8 +777,6 @@ read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId, 
       frequency = metadata$timeSeriesFrequency,
       energyTimeseriesSensor = timeseriesSensor)
   }
-  
-  timeseriesSensor
   
   return(timeseriesSensor)
 }
