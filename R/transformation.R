@@ -54,7 +54,9 @@ lag_components <- function(data, maxLag, featuresNames=NULL, predictionStep=NULL
           for (l in 1:maxLag) {
             data[, paste0(f,"_l",as.character(l))] <- 
               if(is.numeric(data[,f])){
-                zoo::na.fill(shift(data[,f],l),"extend")
+                tryCatch(zoo::na.fill(shift(data[,f],l),"extend"),
+                  error=function(e){rep(unique(data[is.finite(data[,f]),f])[1],
+                                        nrow(data))})
               } else {
                 shift(data[,f],l)
               }
@@ -477,7 +479,7 @@ degree_days <- function(data, temperatureFeature, localTimeZone, baseTemperature
 #      - heating. Heating dependency detected
 #      - cooling. Cooling dependency detected
 
-get_change_point_temperature <- function(df,consumptionData, weatherData, 
+get_change_point_temperature <- function(consumptionData, weatherData, 
                                          consumptionFeature, 
                                          temperatureFeature,
                                          localTimeZone, plot = F){
@@ -485,6 +487,7 @@ get_change_point_temperature <- function(df,consumptionData, weatherData,
   # temperatureFeature <- "temperature"
   # weatherData <- data[,c("time",temperatureFeature)]
   # consumptionData <- data[,c("time",consumptionFeature)]
+  timestepOriginalData <- detect_time_step(consumptionData$time)
   weatherData <- weatherData[,c("time",temperatureFeature)]
   colnames(weatherData) <- c("time","temperature")
   weatherData$time <- as.Date(weatherData$time, localTimeZone)
@@ -504,7 +507,7 @@ get_change_point_temperature <- function(df,consumptionData, weatherData,
   #                              args=list(
   #                                function(x)sum(x,na.rm=T),"consumption"
   #                              ))
-  n_timesteps <- hourly_timesteps(24,detect_time_step(df$time))
+  n_timesteps <- hourly_timesteps(24,timestepOriginalData)
   consumptionDataD <- consumptionData %>% 
     group_by(time) %>% 
     summarise(across(c(consumption), function(x){mean(x,na.rm=T)*
