@@ -349,10 +349,11 @@ ARX <- function(input_parameters){
                    transformationSentences=NULL, logOutput=T, trainMask=NULL,
                    numericStatusVariable=NULL, characterStatusVariable=NULL) {
       
-      # x <<- x
-      # y <<- y
-      # transformationSentences <<- transformationSentences
-      # formulaTerms <<- formulaTerms
+      x <<- x
+      y <<- y
+      transformationSentences <<- transformationSentences
+      formulaTerms <<- formulaTerms
+      params <<- param
       #param <- as.data.frame(bestParamsQe)
       
       features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
@@ -465,8 +466,8 @@ ARX <- function(input_parameters){
     predict = function(modelFit, newdata, submodels, forceGlobalInputFeatures=NULL, forceInitInputFeatures=NULL,
                        forceInitOutputFeatures=NULL, forceOneStepPrediction=F) {
       
-      # newdata <<- newdata
-      # modelFit <<- modelFit
+      newdata <<- newdata
+      modelFit <<- modelFit
       
       newdata <- as.data.frame(newdata)
       features <- modelFit$meta$features[
@@ -547,10 +548,12 @@ ARX <- function(input_parameters){
       
       # Change the transformed inputs if are specified in forceGlobalInputFeatures
       if (!is.null(forceGlobalInputFeatures)){
-        for (f in names(forceGlobalInputFeatures)){
-          if(!(length(forceGlobalInputFeatures[[f]])==1 || 
+        for (f in names(forceGlobalInputFeatures)[
+            names(forceGlobalInputFeatures) %in% names(modelFit$meta$transformationSentences)]
+            ){
+          if(!(length(forceGlobalInputFeatures[[f]])==1 ||
                length(forceGlobalInputFeatures[[f]])==(nrow(newdata)+maxLag))){
-            stop(sprintf("forceGlobalInputFeatures[[%s]] needs to have a length of 1 
+            stop(sprintf("forceGlobalInputFeatures[[%s]] needs to have a length of 1
                      or equal to the number of rows of newdata argument (%s).",f, nrow(newdata)))
           }
           if(length(forceGlobalInputFeatures[[f]])==1){
@@ -914,7 +917,9 @@ RLS <- function(input_parameters){
       
       # Change the transformed inputs if are specified in forceGlobalInputFeatures
       if (!is.null(forceGlobalInputFeatures)){
-        for (f in names(forceGlobalInputFeatures)){
+        for (f in names(forceGlobalInputFeatures)[
+          names(forceGlobalInputFeatures) %in% names(modelFit$meta$transformationSentences)]
+        ){
           if(!(length(forceGlobalInputFeatures[[f]])==1 || 
                length(forceGlobalInputFeatures[[f]])==(nrow(newdata)+maxLag))){
             stop(sprintf("forceGlobalInputFeatures[[%s]] needs to have a length of 1 
@@ -1224,14 +1229,14 @@ decodeValueFromBin <- function(binary, features) {
           } else {
             1
           }
-        )[orders[[x]] + 1]),
+        )[if(nlevels[[x]]>1){orders[[x]] + 1} else {1}]),
         "float" = seq(min[[x]], max[[x]],
           by = if (nlevels[[x]] > 0) {
             (max[[x]] - min[[x]]) / (nlevels[[x]])
           } else {
             1
           }
-        )[orders[[x]] + 1]
+        )[if(nlevels[[x]]>1){orders[[x]] + 1} else {1}]
       )
     },
     X = 1:length(orders)

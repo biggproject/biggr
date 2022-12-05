@@ -2,7 +2,7 @@ Package: biggr
 Type: Package
 Title: biggr 
 Version: 0.1.4
-Author: Gerard Mor, Aleix Badia, Eloi Gabaldón, Jordi Carbonell, Stoyan Danov, Florencia Lazzari, Gerard Laguna, Marc Girona, Jordi Cipriano, Pierre Lehanneur, Riccardo De Vivo, Romain Hollanders, Thea Gutmacher, Manu Lahariya, David Bouret.
+Author: Gerard Mor, Aleix Badia, Eloi Gabaldón, Jordi Carbonell, Stoyan Danov, Florencia Lazzari, Gerard Laguna, Marc Girona, Jordi Cipriano, Riccardo De Vivo, Manu Lahariya.
 Maintainer: Gerard Mor <gmor@cimne.upc.edu>
 Description: "This is the R implementation of the AI Toolbox functions developed in the framework of BIGG EU-funded project" 
 Encoding: UTF-8
