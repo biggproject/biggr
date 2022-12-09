@@ -14,27 +14,31 @@ get_KPI_timeseries <- function(buildingsRdf, timeseriesObject, buildingSubject,
     paste0(mapply(function(i){
       sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
               bigg_namespaces[i])},
-      1:length(bigg_namespaces)),collapse="/n"),
+      1:length(bigg_namespaces))),
     '
-          SELECT ?buildingSubject ?SingleKPI ?uriTimeSeries ?date
-          WHERE {
-            {
-            SELECT ?buildingSubject ?SingleKPI ?uriTimeSeries
-            WHERE {
-                ?buildingSubject a bigg:Building .
-                FILTER ( ?buildingSubject IN (<',buildingSubject,'>) )
-                ?buildingSubject bigg:assessesSingleKPI ?SingleKPI .
-                FILTER regex(str(?SingleKPI),"',name,'")
-                ?SingleKPI bigg:timeSeriesFrequency "',frequency,'".
-                ?SingleKPI bigg:hasSingleKPIPoint ?uriTimeSeries .
-              }
-            }
-            optional {?SingleKPI bigg:isEstimatedByModel ?est .}
-            FILTER (',if(fromModel){""}else{"!"},'BOUND(?est)).
-            optional {?est bigg:modelTrainedDate ?date}
-          }
-          ORDER BY DESC(?date) LIMIT 1
-          ')))
+    SELECT ?SingleKPI ?uriTimeSeries ?date
+    WHERE {
+      {
+        SELECT ?SingleKPI ?uriTimeSeries
+        WHERE {
+          <',buildingSubject,'> bigg:assessesSingleKPI ?SingleKPI .
+          FILTER regex(str(?SingleKPI),"',name,'") .
+          ?SingleKPI bigg:timeSeriesFrequency "',frequency,'".
+          ?SingleKPI bigg:hasSingleKPIPoint ?uriTimeSeries .
+        }
+      }
+      OPTIONAL {?SingleKPI bigg:isEstimatedByModel ?est .}
+      FILTER (',if(fromModel){""}else{"!"},'BOUND(?est))
+      {
+        OPTIONAL {?est bigg:modelTrainedDate ?date .}
+      } UNION {
+        BIND("1970-01-01T00:00:00.000" as ?date)
+      }
+    }
+    ORDER BY DESC(?date) LIMIT 1
+  ')))
+  
+
   
   if(nrow(KPI_metadata)==0) return(NULL)
   
@@ -83,7 +87,6 @@ get_KPI_by_building <- function(buildingsRdf,timeseriesObject,buildingSubject,
   timeseriesKPI[,buildingSubject] <- timeseriesKPI$value
   timeseriesKPI$localtime <- format(with_tz(timeseriesKPI$time, localTz),
                                     format="%Y-%m-%d %H:%M:%S")
-  timeseriesKPI[,paste0("utctime_",localTz)] <- timeseriesKPI$time
   timeseriesKPI$time <- timeseriesKPI$value <- NULL
   
   return(timeseriesKPI)
@@ -135,6 +138,35 @@ get_all_buildings_list <- function(buildingsRdf){
     }')))
   return( if(length(metadata_df)>0) {as.character(metadata_df$b)} else {NULL} )
 }
+
+get_analytical_groups_by_building_subject <- function(buildingsRdf){
+  analytical_groups_by_building <- 
+    suppressMessages(buildingsRdf %>% rdf_query(paste0(    
+      paste0(mapply(function(i){
+        sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+                bigg_namespaces[i])},
+        1:length(bigg_namespaces))),
+      '
+      SELECT ?buildingSubject ?group
+      WHERE {
+        ?buildingSubject a bigg:Building .
+        ?buildingSubject bigg:groupsForAnalytics ?group
+      }')))
+  if(length(analytical_groups_by_building)>0){
+    analytical_groups_by_building <- dummy_cols(analytical_groups_by_building,select_columns = "group")
+    analytical_groups_by_building$group <- NULL
+    colnames(analytical_groups_by_building) <- gsub("group_","",colnames(analytical_groups_by_building))
+    analytical_groups_by_building <- analytical_groups_by_building %>% 
+      group_by(buildingSubject) %>% 
+      summarise(across(colnames(analytical_groups_by_building)[-1],sum))
+    analytical_groups_by_building[,"NA"] <- NULL
+    return(analytical_groups_by_building)
+  } else {
+    return(NULL)
+  }  
+  return( analytical_groups_by_building )
+}
+
 
 get_tz_building <- function(buildingsRdf, buildingSubjects){
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
@@ -219,27 +251,8 @@ get_buildings_subjects <- function(buildingsRdf, buildingIdsFromOrganization){
 }
 
 get_building_identifiers <- function(buildingSubjects){
-  # metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
-  #   paste0(mapply(function(i){
-  #     sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
-  #             bigg_namespaces[i])},
-  #     1:length(bigg_namespaces))),
-  #   '
-  #   SELECT ?o ?b
-  #   WHERE {
-  #     ?b a bigg:Building .
-  #     FILTER (?b IN (<',paste(buildingSubjects, collapse='>,<'),'>) ) .
-  #     ?b bigg:buildingIDFromOrganization ?o .
-  #   }')))
-  
-  # return( 
-  #   if(length(metadata_df)>0) {
-  #     setNames(as.character(metadata_df$o),nm=as.character(metadata_df$b))
-  #   } else { NULL } 
-  # )
-  
   return(
-    setNames(gsub("http://|https://","",buildingSubjects),nm = buildingSubjects)
+    setNames(gsub("http://|https://||#||\\.","",buildingSubjects),nm = buildingSubjects)
   )
 }
 

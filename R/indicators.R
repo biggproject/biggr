@@ -15,6 +15,7 @@ generate_longitudinal_benchmarking_indicators <- function (
                               "#")
   namespaces <- bigg_namespaces
   namespaces["biggresults"] <- buildingNamespace
+  
   if (is.null(prevResults)) {
     prevResults <- list(results_rdf=rdf(), results_ts=list()) 
   }
