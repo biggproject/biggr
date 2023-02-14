@@ -108,32 +108,23 @@ generate_longitudinal_benchmarking_indicators <- function (
     else {
       NULL
     }
+    # If the HDD or CDD are not available in 'data' object, calculate it based on the outdoor temperature
     if ((indicator %in% c("HeatingDegreeDays", "CoolingDegreeDays")) && 
         !is.null(outdoorTemperatureColumn) && is.null(valueInd)) {
       indDf <- data.frame(time = as.Date(data[, timeColumn], 
                                          tz = localTimeZone), temperature = data[, outdoorTemperatureColumn]) %>% 
         group_by(time) %>% summarise(temperature = mean(temperature)) %>% 
         mutate(degree_days(., "temperature", localTimeZone, 
-                           if (indicator == "HeatingDegreeDays") {
-                             21
-                           }
-                           else {
-                             18
-                           }, if (indicator == "HeatingDegreeDays") {
-                             "heating"
-                           }
-                           else {
-                             "cooling"
-                           }, outputFrequency = "P1D", outputFeaturesName = "ind", 
-                           fixedOutputFeaturesName = T)) %>% select(time, 
-                                                                    ind)
+                           if (indicator == "HeatingDegreeDays") {21} else {18}, 
+                           if (indicator == "HeatingDegreeDays") {"heating"} else {"cooling"}, 
+                           outputFrequency = "P1D", outputFeaturesName = "ind", 
+                           fixedOutputFeaturesName = T)) %>% 
+        select(time,ind)
       frequencies_ <- frequencies[frequencies >= as.period("P1D")]
       originalDataPeriod <- "P1D"
-    }
-    else if (!is.null(valueInd)) {
+    } else if (!is.null(valueInd)) {
       indDf <- data.frame(time = data[, timeColumn], ind = valueInd)
-    }
-    else {
+    } else {
       next
     }
     for (frequency in frequencies_) {
