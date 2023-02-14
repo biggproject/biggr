@@ -1,0 +1,85 @@
+{
+  "PerformanceIndicators": {
+      "Energy": ["EnergyUse","EnergyUseIntensity"],
+      "Cost": ["EnergyCost","EnergyCostIntensity"],
+      "Emissions": ["EnergyEmissions","EnergyEmissionsIntensity"],
+      "Weather": ["HeatingDegreeDays", "CoolingDegreeDays"]
+  },
+  "TrendIndicators": {
+      "Energy": ["EnergyUseIntensity","EnergyUseSavings","EnergyUseSavingsIntensity"],
+      "Cost": ["EnergyCostSavings","EnergyCostSavingsIntensity"],
+      "Emissions": ["EnergyEmissionsSavings","EnergyEmissionsSavingsIntensity"]
+  },
+  "IndicatorsUnitsSubjects": {
+    "EnergyUse": "unit:KiloW-H",
+    "EnergyUseIntensity": "bigg:KiloW-H-M2",
+    "EnergyUseSavings": "unit:KiloW-H",
+    "EnergyUseSavingsIntensity": "bigg:KiloW-H-M2",
+    "EnergyCost": "unit:Euro",
+    "EnergyCostIntensity": "bigg:Euro-M2",
+    "EnergyCostSavings": "unit:Euro",
+    "EnergyCostSavingsIntensity": "bigg:Euro-M2",
+    "EnergyEmissions": "bigg:KiloGM-CO2",
+    "EnergyEmissionsIntensity": "bigg:KiloGM-CO2-M2",
+    "EnergyEmissionsSavings": "bigg:KiloGM-CO2",
+    "EnergyEmissionsSavingsIntensity": "bigg:KiloGM-CO2-M2",
+    "HeatingDegreeDays": "unit:DEG_C",
+    "CoolingDegreeDays": "unit:DEG_C"
+  },
+  "MLFlow":{
+    "ModelTrainingPeriodicity": "P1M",
+    "ForceModelTraining": true,
+    "WorkingDirectory": "PyVenvs/mlflow",
+    "TrackingUri": "http://127.0.0.1:5000"
+  },
+  "InputDataDirectory": "../biggr/data/20_buildings_with_tariff",
+  "OutputDataDirectory": "LongitudinalBenchmarking/output_with_tariff",
+  "EnergyTypes": {
+    "Electricity": "totalElectricityConsumption",
+    "Gas": "totalGasConsumption"
+  },
+  "Frequencies": ["PT15M","PT1H","P1D","P1M","P1Y"],
+  "BaselineYears": [2017,2018,2019],
+  "MinRatioBaseline": 0.75,
+  "DataCleaning": {
+    "OutliersDetection": {
+      "window": {
+        "PT1H": "P1M",
+        "P1D": "P6M",
+        "P1M": "P1Y",
+        "P1Y": null
+      },
+      "calendarFeatures": {
+        "PT1H": ["H","HOL"],
+        "P1D": ["U","HOL"],
+        "P1M": ["m"],
+        "P1Y": ["intercept"]
+      },
+      "mode": "upperAndLower",
+      "upperModelPercentile": 90,
+      "lowerModelPercentile": 10,
+      "upperPercentualThreshold": 75,
+      "lowerPercentualThreshold": 75
+    },
+    "CheckForDisruption": {
+      "minIniDate": "2020-03-14",
+      "maxIniDate": "2020-03-23",
+      "minEndDate": "2020-06-21",
+      "maxEndDate": "2022-08-30",
+      "minInitialMonths": 6,
+      "checkFor": "incrementAndDecrement",
+      "minDecrementPercentualAffectation": 30,
+      "minIncrementPercentualAffectation": 120
+    }
+  },
+  "DailyLoadCurveClustering": {
+    "kMax": 8,
+    "kMin": 2,
+    "inputVars": ["dailyMinConsumption","loadCurves","residualsGAM",
+                  "dailyHdd","dailyCdd"], 
+    "balanceOutdoorTemperatures": null,
+    "loadCurveTransformation": "relative",
+    "nDayParts": 6,
+    "maxTrainingMonths": 12
+  }
+}

@@ -34,12 +34,14 @@ library(htmlwidgets)
 library(carrier)
 library(mlflow)
 library(fs)
+library(jsonlite)
 library(tidyr)
 mlflow_wd = as.character(path_home("PyVenvs/mlflow"))
 Sys.setenv(MLFLOW_PYTHON_BIN=paste0(mlflow_wd,"/bin/python3"))
-Sys.setenv(MLFLOW_TRACKING_URI="http://127.0.0.1:5000")
+Sys.setenv(MLFLOW_TRACKING_URI="http://127.0.0.1:5001")
 Sys.setenv(MLFLOW_VERBOSE=FALSE)
 Sys.setenv(MLFLOW_BIN=paste0(mlflow_wd,"/bin/mlflow"))
+settings <- fromJSON("settings_longitudinal_benchmarking.json")
 #mlflow_client(mlflow_set_tracking_uri("http://127.0.0.1:5000"))
 ```
 
@@ -125,7 +127,7 @@ The 'biggr' library contains functionalities to automatically, join, resample, p
 ![BIGG-harmonised datasets in biggr library](images/harmonisation_biggr.png){width=70% height=70%}
 
 ```{r}
-data_directory <- "../data/20_buildings_new_model"
+data_directory <- "../data/20_buildings_with_tariff"
 if(!dir.exists(data_directory)){
   unzip(paste0(data_directory,".zip"),exdir = data_directory,junkpaths = T)
 }
@@ -138,13 +140,17 @@ get_all_buildings_list(buildingsRdf)
 
 
 ```{r}
-buildingId <- "03563"
-buildings_df <- get_device_aggregators_by_building(
+buildingSubject <- "https://icaen.cat#BUILDING-01438"
+buildingId <- get_building_identifiers(buildingSubject)
+energyType <- "electricity"
+deviceAggregator <- "totalElectricityConsumption"
+modelName <- "HourlyDynamicModel"
+buildingData <- get_device_aggregators_by_building(
   buildingsRdf, timeseriesObject, 
-  allowedBuildingId=buildingId, 
+  allowedBuildingSubjects =buildingSubject, 
   allowedDeviceAggregators=c("totalElectricityConsumption","outdoorTemperature"), 
   useEstimatedValues=F, ratioCorrection=T)
-tz <- get_tz_building(buildingsRdf, buildingId)
+tz <- get_tz_building(buildingsRdf, buildingSubject)
 ```
 
 ## Get the data for a specific building
@@ -153,62 +159,112 @@ Select a specific buildingId and build the dataset used in the analytics process
 
 ```{r}
 df <- data.frame(
-  "time" = buildings_df[[buildingId]]$time,
-  "temperature" = buildings_df[[buildingId]]$outdoorTemperature.AVG,
-  "Qe" = buildings_df[[buildingId]]$totalElectricityConsumption.SUM)
-df <- df[min(which(is.finite(df$Qe))):nrow(df),]
+  "time" = buildingData[[buildingSubject]]$df$time,
+  "temperature" = buildingData[[buildingSubject]]$df[,paste0("outdoorTemperature",".AVG_Temperature")],
+  "Qe" = buildingData[[buildingSubject]]$df[,
+    paste0(deviceAggregator,".SUM_",
+           buildingData[[buildingSubject]]$metadata$measuredProperty[
+             buildingData[[buildingSubject]]$metadata$deviceAggregatorName==deviceAggregator
+           ][1])],
+  "Qe_cost" = buildingData[[buildingSubject]]$df[,
+    paste0(deviceAggregator,".SUM_EnergyCost")],
+  "Qe_emissions" = buildingData[[buildingSubject]]$df[,
+    paste0(deviceAggregator,".SUM_EnergyEmissions")],
+  "Qe_price" = buildingData[[buildingSubject]]$df[,
+    paste0(deviceAggregator,".AVG_",
+          buildingData[[buildingSubject]]$metadata$measuredProperty[
+            buildingData[[buildingSubject]]$metadata$deviceAggregatorName==deviceAggregator
+          ][1],"_EnergyPrice")],
+  "Qe_emissionsFactor" = buildingData[[buildingSubject]]$df[,
+    paste0(deviceAggregator,".AVG_",
+          buildingData[[buildingSubject]]$metadata$measuredProperty[
+            buildingData[[buildingSubject]]$metadata$deviceAggregatorName==deviceAggregator
+          ][1],"_EnergyEmissionsFactor")]
+  )
+df <- df[min(which(is.finite(df$Qe))):(nrow(df)-min(which(is.finite(rev(df$Qe))))),]
 ```
 
 ```{r}
-date_period <- as.duration(as.Date(max(df$time[is.finite(df$Qe)]), tz=tz) - 
-       as.Date(min(df$time[is.finite(df$Qe)]), tz=tz))
+datePeriod <- as.duration(as.Date(max(df$time[is.finite(df$Qe)]), tz=tz) - 
+                                   as.Date(min(df$time[is.finite(df$Qe)]), tz=tz))
 ```
 
 Add the calendar features to the dataset using the timezone contained in the RDF for that building.
 
 ````{r}
+####
+# Calendar features and filtering of holidays and special periods ----
+####
+    
 # Detect the COVID influenced period if data is over COVID lockdown & return-to-normality period
 # with a minimum of one-year period.
-if( ( (as.Date(min(df$time[is.finite(df$Qe)]), tz=tz) <= as.Date("2020-03-14")) &&
-      (date_period >= as.duration("P1Y"))
-    ) ||
-    ( (as.Date(max(df$time[is.finite(df$Qe)]), tz=tz) >= as.Date("2022-06-30")) &&
-      (date_period >= as.duration("P1Y"))
-    )
-){
-  covid_affected_period <- detect_disruptive_period(data=df, consumptionColumn="Qe", 
-    temperatureColumn="temperature", timeColumn = "time", tz=tz, 
-    minIniDate = max(min(as.Date(df$time[is.finite(df$Qe)], tz=tz)),as.Date("2020-03-14")), 
-    maxIniDate = max(min(as.Date(df$time[is.finite(df$Qe)], tz=tz)),as.Date("2020-04-14")),
-    minEndDate = as.Date("2020-06-21"), 
-    maxEndDate = min(as.Date(max(as.Date(df$time[is.finite(df$Qe)], tz=tz))),as.Date("2022-06-30")))
+    
+  if( as.Date(quantile(df$time[is.finite(df$Qe)],0.8), tz=tz) > (
+        ( as.Date(min(df$time[is.finite(df$Qe)]), tz=tz) +
+            months(settings$DataCleaning$CheckForDisruption$minInitialMonths)
+        )
+      ) ||
+      ( as.Date(quantile(df$time[is.finite(df$Qe)],0.8), tz=tz) >= 
+        as.Date(settings$DataCleaning$CheckForDisruption$minIniDate)
+      ) ||
+      ( ( as.Date(min(df$time[is.finite(df$Qe)]), tz=tz) +
+          months(settings$DataCleaning$CheckForDisruption$minInitialMonths) 
+        ) <= as.Date(settings$DataCleaning$CheckForDisruption$maxEndDate) 
+      )
+  ) {
+    
+    write("* Detecting the time period with affectance by SARS-CoV2 lockdowns",stderr())
+    
+    minIniDate = max(min(as.Date(df$time[is.finite(df$Qe)], tz=tz)) +
+                       months(settings$DataCleaning$CheckForDisruption$minInitialMonths) ,
+                     as.Date(settings$DataCleaning$CheckForDisruption$minIniDate))
+    maxIniDate = max(min(as.Date(df$time[is.finite(df$Qe)], tz=tz)) +
+                       months(settings$DataCleaning$CheckForDisruption$minInitialMonths) ,
+                     as.Date(settings$DataCleaning$CheckForDisruption$maxIniDate))
+    minEndDate = max(maxIniDate,
+                     min(as.Date(quantile(df$time[is.finite(df$Qe)],0.8), tz=tz),
+                         as.Date(settings$DataCleaning$CheckForDisruption$minEndDate)))
+    maxEndDate = max(minEndDate,
+                     min(as.Date(quantile(df$time[is.finite(df$Qe)],0.8), tz=tz),
+                         as.Date(settings$DataCleaning$CheckForDisruption$maxEndDate)))
+    covid_affected_period <- suppressWarnings(detect_disruptive_period(
+      data=df, consumptionColumn="Qe",
+      temperatureColumn="temperature", timeColumn = "time", tz=tz,
+      minIniDate = minIniDate, maxIniDate = maxIniDate,
+      minEndDate = minEndDate, maxEndDate = maxEndDate, 
+      checkFor=settings$DataCleaning$CheckForDisruption$checkFor,
+      minDecrementPercentualAffectation = settings$DataCleaning$CheckForDisruption$minDecrementPercentualAffectation,
+      minIncrementPercentualAffectation = settings$DataCleaning$CheckForDisruption$minIncrementPercentualAffectation))
+    
+    covid_affected_period <- tryCatch(
+      seq.Date(covid_affected_period$minDate,covid_affected_period$maxDate,by = "days"),
+      error = function(e)NULL)
+  } else {
+    covid_affected_period <- c()
+  }
   
-  covid_affected_period <- 
-    seq.Date(covid_affected_period$minDate,covid_affected_period$maxDate,by = "days")
-} else {
-  covid_affected_period <- c()
-}
-
-# Detect holidays
-holidays_dates <- detect_holidays_in_tertiary_buildings(
-  data = df, 
-  valueColumn = "Qe", 
-  timeColumn = "time", 
-  tz=tz,
-  ignoreDates = covid_affected_period)
-
-# Add the calendar components
-df <- df %>% calendar_components(
-  localTimeZone = tz, 
-  holidays = holidays_dates,
-  inplace=T
-)
-
-# Plot the holidays
-h <- ggplot(df[df$time>min(df$time[is.finite(df$Qe)],na.rm=T),]) + geom_line(aes(time,Qe)) +
-  geom_point(data=df[df$isHolidays==T,],mapping = aes(time,Qe),col="red")
-saveWidget(ggplotly(h), "holidays.html", selfcontained = T)
-h
+  # Detect holidays
+  write("* Detecting the holidays",stderr())
+  holidaysDates <- detect_holidays_in_tertiary_buildings(
+    data = df, 
+    consumptionColumn = "Qe", 
+    timeColumn = "time",
+    tz=tz,
+    ignoreDates = covid_affected_period,
+    plotDensity = F)
+  
+  # Add the calendar components
+  df <- df %>% calendar_components(
+    localTimeZone = tz,
+    holidays = holidaysDates,
+    inplace=T
+  )
+  
+  h <- ggplot(df[df$time>min(df$time[is.finite(df$Qe)],na.rm=T),]) + geom_line(aes(time,Qe)) +
+    geom_point(data=df[df$isHolidays==T,],mapping = aes(time,Qe),col="red")
+  saveWidget(ggplotly(h),"holidays.html", 
+             selfcontained = T)
+  ggplotly(h)
 ```
 
 ## Plot the data
@@ -216,15 +272,16 @@ h
 In the following chunk, the total electricity consumption and the outdoor temperature signals are plotted over time.
 ```{r}
 ts_p <- ggplot(
-    reshape2::melt( df %>% select(time, Qe, temperature) %>% pad(), 
-                    "time")
-  ) + 
-  geom_line(
-    aes(time,value)
-  ) + 
-  facet_wrap(~variable, scales = "free_y", ncol=1) +
-  theme_bw()
-saveWidget(ggplotly(ts_p), "raw_consumption_temperature.html", selfcontained = T)
+        reshape2::melt( df %>% select(time, Qe, temperature) %>% suppressMessages(pad()), 
+                        "time")
+      ) + 
+        geom_line(
+          aes(time,value)
+        ) + 
+        facet_wrap(~variable, scales = "free_y", ncol=1) +
+        theme_bw()
+saveWidget(ggplotly(ts_p),"raw_consumption_temperature.html",
+           selfcontained = T)
 ```
 
 Then, with the objective of understanding the relation between the electricity consumption and the outdoor temperature, a scatter plot of the electricity consumption and outdoor temperature is depicted.
@@ -265,6 +322,11 @@ ggplot(df) +
 In order to improve the modelling performance, the days with outliers are not considered. The methodology used to detect them is a calendar-based quantile regression model.
 
 ```{r}
+####
+# Outliers detection ----
+####
+
+write("* Detecting the outliers",stderr())
 if(all(c("value","window") %in% colnames(df)))
   df <- df %>% select(-value, -window)
 df <- 
@@ -272,31 +334,37 @@ df <-
   select(!(contains("outliers") | contains("upperPredCalendarModel") | 
              contains("lowerPredCalendarModel"))) %>%
   left_join(
-    detect_ts_calendar_model_outliers(data = ., 
-                                      localTimeColumn = "localtime", 
-                                      valueColumn = "Qe", 
-                                      calendarFeatures = c("HOL","H"),
-                                      mode = "upperAndLower",
-                                      upperModelPercentile = 90,
-                                      lowerModelPercentile = 10,
-                                      upperPercentualThreshold = 75,
-                                      lowerPercentualThreshold = 75,
-                                      window = 31*24*60*60, 
-                                      outputPredictors = T,
-                                      holidaysCalendar = holidays_dates,
-                                      daysThatAreOutliers = covid_affected_period,
-                                      logValueColumn = T,
-                                      autoDetectProfiled = F),
+    detect_ts_calendar_model_outliers(
+      data = .,
+      localTimeColumn = "localtime",
+      valueColumn = "Qe", 
+      calendarFeatures = settings$DataCleaning$OutliersDetection$calendarFeatures$PT1H,
+      mode = settings$DataCleaning$OutliersDetection$mode,
+      upperModelPercentile = settings$DataCleaning$OutliersDetection$upperModelPercentile,
+      lowerModelPercentile = settings$DataCleaning$OutliersDetection$lowerModelPercentile,
+      upperPercentualThreshold = settings$DataCleaning$OutliersDetection$upperPercentualThreshold,
+      lowerPercentualThreshold = settings$DataCleaning$OutliersDetection$lowerPercentualThreshold,
+      window = settings$DataCleaning$OutliersDetection$window$PT1H,
+      outputPredictors = T,
+      holidaysCalendar = holidaysDates,
+      daysThatAreOutliers = covid_affected_period,
+      logValueColumn = T,
+      autoDetectProfiled = T),
     by = "localtime"
   )
+abnormalDays <- sort(df %>% 
+  group_by(date) %>% summarise(out=sum(outliers)) %>%
+  filter(out>0) %>% select(date) %>% unlist(.) %>% as.Date(.))
+df$abnormalDay <- df$date %in% abnormalDays
 
-g <- ggplot(df[,c("localtime","Qe","outliers","upperPredCalendarModel","lowerPredCalendarModel")]) +
-           geom_line(aes(localtime,Qe)) +
-           geom_ribbon(aes(localtime,ymax=upperPredCalendarModel,ymin=lowerPredCalendarModel),
-                       col="blue",alpha=0.5)
-if(!all(df$outliers==F)) g <- g + geom_point(aes(localtime,ifelse(outliers,Qe,NA)),col="yellow")
+g <- ggplot(df[,c("localtime","Qe","outliers",
+                  "upperPredCalendarModel","lowerPredCalendarModel")]) +
+  geom_line(aes(localtime,Qe)) +
+  geom_ribbon(aes(localtime,ymax=upperPredCalendarModel,ymin=lowerPredCalendarModel),
+              col="blue",alpha=0.5)
+if(!all(is.na(df$outliers) | df$outliers==F)) 
+  g <- g + geom_point(aes(localtime,ifelse(outliers,Qe,NA)),col="yellow")
 saveWidget(ggplotly(g), "outliers_plot.html", selfcontained = T)
-g
 ```
 
 # Clustering and classification of the daily load curves
@@ -304,70 +372,99 @@ g
 In order to estimate, and consider during the data modelling, different patterns in daily load curves, such as weekend / weekdays patterns or holidays, a clustering is performed. This process will detect the most common daily load curves and classifies each day to each of the categories detected. How it classifies? Normally, it assigns the cluster with the lowest euclidian distances, but in the case of consumption measures with outliers, a model based on calendar features is used. Therefore, the classification algorithm will predict the daily consumption pattern that would have been followed if no anomalies where detected (e.g. Covid lockdown period).
 
 ```{r}
+####
+# Clustering and classification of daily load curves ----
+####
+
+write("* Detecting the most common daily load curves",stderr())
+if(is.null(settings$DailyLoadCurveClustering$maxTrainingMonths)){
+  maxDateForClustering <- NULL
+} else {
+  ht <- hourly_timesteps(720*settings$DailyLoadCurveClustering$maxTrainingMonths,detect_time_step(df$time))
+  maxDateForClustering <- sort(df$date[df$outliers==F & !is.na(df$outliers)],)[
+    if(ht > length(df$date[df$outliers==F & !is.na(df$outliers)])){
+      length(df$date[df$outliers==F & !is.na(df$outliers)])
+    } else {ht}
+  ]
+}
 clust <- clustering_dlc(
   data = df,
   consumptionFeature = "Qe", 
   outdoorTemperatureFeature = "temperature", 
   localTimeZone = tz,
-  kMax = 8, 
-  kMin = 2,
-  inputVars = c("loadCurves","dailyConsumption","daysHolidays","ratioDailyConsumptionTemperature","dailyHdd","dailyCdd"), 
-  loadCurveTransformation = "relative",
+  kMax = settings$DailyLoadCurveClustering$kMax, 
+  kMin = settings$DailyLoadCurveClustering$kMin,
+  inputVars = settings$DailyLoadCurveClustering$inputVars, 
+  loadCurveTransformation = settings$DailyLoadCurveClustering$loadCurveTransformation,
+  balanceOutdoorTemperatures = settings$DailyLoadCurveClustering$balanceOutdoorTemperatures,
   ignoreDates =
     df %>% group_by(date) %>% summarise(outliers=sum(outliers)>0) %>% filter(
-      outliers==T | date >= (min(df$date)+years(1)) ) %>% select(date) %>% 
-      unlist %>% as.Date,
-  holidaysDates = holidays_dates,
-  nDayParts = 24
+      if(is.null(maxDateForClustering)){
+        outliers==T
+      } else {
+        outliers==T | (date >= maxDateForClustering)
+      }) %>% select(date) %>% 
+    unlist %>% as.Date,
+  holidaysDates = holidaysDates,
+  nDayParts = settings$DailyLoadCurveClustering$nDayParts,
+  normalisationMethod = "range01"
 )
+
 if("s" %in% colnames(df))
   df <- df %>% select(-s)
-df <- df %>% left_join(clust$dailyClassification)
+df <- df %>% left_join(clust$dailyClassification, by="date")
 
 classif <- classification_dlc(
   data = df[is.na(df$s),], 
   consumptionFeature = "Qe",
   outdoorTemperatureFeature = "temperature", 
-  localTimeZone = tz, 
-  holidaysDates = holidays_dates,
+  localTimeZone = tz,
+  holidaysDatesFeature = "holidaysDate",
+  abnormalDaysFeature = "abnormalDay",
   clustering = clust,
   methodNormalDays = "clusteringCentroids",
-  abnormalDays = df %>% filter(is.na(s)) %>% 
-    group_by(date) %>% summarise(out=sum(outliers)) %>%
-    filter(out>0) %>% select(date) %>% unlist(.) %>% as.Date(.),
   methodAbnormalDays = "classificationModel"
 )
-df <- df %>% left_join(classif,by="date")
+df <- df %>% left_join(classif$dailyClassification,by="date")
 df$s <- ifelse(!is.na(df$s.x),df$s.x,df$s.y)
 df$s_origin <- ifelse(!is.na(df$s.x),"clustering","classification")
 df$s.x <- NULL
 df$s.y <- NULL
-df <- df[!is.na(df$s),]
 ```
 
 ```{r}
-p <- ggplot(df %>% filter(outliers==F)) + 
+p_sig <- ggplot(df[df$s_origin=="clustering",] %>%
+                group_by(date) %>%
+                summarise(Qe=sum(Qe),
+                          temperature=mean(temperature,na.rm=T),
+                          s=first(s))) +
+    geom_point(aes(temperature,Qe,col=s)) +
+    xlab(bquote("temperature (ºC)")) + 
+    ylab("consumption (kWh)")+ theme_bw()
+saveWidget(ggplotly(p_sig),"clustering_signature.html", 
+             selfcontained = T)
+p <- ggplot(df) +
     geom_line(
       aes(hour, Qe, group=date, col=s_origin),
       alpha=0.1
-    ) + 
-    xlab("hour of the day") + 
+    ) +
+    xlab("hour of the day") +
     facet_wrap(~s) +
     theme_bw()
-saveWidget(ggplotly(p), "clustering_dlc.html", selfcontained = T)
-p
+saveWidget(ggplotly(p),"clustering_dlc.html", 
+             selfcontained = T)
 p_ts <- ggplot(df %>% group_by(date) %>% 
                  summarise("s"=first(s),
                            "Qe"=sum(Qe),
                            "s_origin"=first(s_origin))) + 
-    geom_point(
-      aes(date, Qe, col=s, shape=s_origin),
-      alpha=0.7
-    ) + 
-    xlab("time") +
-    theme_bw()
-saveWidget(ggplotly(p_ts), "clustering_dlc_ts.html", selfcontained = T)
-p_ts
+  geom_point(
+    aes(date, Qe, col=s, shape=s_origin),
+    alpha=0.7
+  ) + 
+  xlab("time") +
+  theme_bw()
+saveWidget(ggplotly(p_ts),"clustering_dlc_ts.html", 
+             selfcontained = T)
 ```
 
 
@@ -376,14 +473,15 @@ p_ts
 Start or continue an MLFlow experiment using the buildingId as the name of the experiment 
 
 ```{r}
+identifier <- paste(buildingId,deviceAggregator,sep='~')
 experimentId <- tryCatch(
-  mlflow_create_experiment(buildingId, artifact_location = paste0(mlflow_wd,"/mlruns")),
-  error = function(e){
-    experiment <- mlflow_get_experiment(name=buildingId)
-    if (experiment$lifecycle_stage!="active") mlflow_restore_experiment(experiment$experiment_id)
-    experiment$experiment_id
-  }
-)
+    mlflow_create_experiment(identifier, artifact_location = paste0(settings$MLFlow$WorkingDirectory,"/mlruns")),
+    error = function(e){
+      experiment <- mlflow_get_experiment(name=identifier)
+      if (experiment$lifecycle_stage!="active") mlflow_restore_experiment(experiment$experiment_id)
+      experiment$experiment_id
+    }
+  )
 ```
 
 # Configuration of the data transformation processes
@@ -391,26 +489,32 @@ experimentId <- tryCatch(
 Firstly, estimate the change point temperature of the building and check if weather dependence during heating or cooling period exists.
 
 ```{r}
-pdf("clustering_dlc_wdep.pdf")
-wdep_s <- do.call(rbind,lapply(FUN = function(x){
-    data.frame("s"=x,t(unlist(get_change_point_temperature(
-      consumptionData = df[df$s==x & df$outliers==F,c("time","Qe")],
-      weatherData =  df[df$s==x & df$outliers==F,c("time","temperature")],
-      consumptionFeature = "Qe",
-      temperatureFeature = "temperature",
-      localTimeZone = "Europe/Madrid",
-      plot=T
-    ))))
-  }, sort(unique(df$s))))
+###
+# Check weather dependence by group of daily load curves ----
+###
+write("* Detecting if exists any weather dependence in energy consumption",stderr())
+
+pdf("clustering_dlc_wdep.pdf",4,3)
+weatherDependenceByCluster <- suppressWarnings(
+  get_change_point_temperature_v2(
+  consumptionData = df[ df$s_origin=="clustering",c("time","Qe","s")],
+  weatherData =  df[ df$s_origin=="clustering",c("time","temperature")],
+  consumptionFeature = "Qe",
+  temperatureFeature = "temperature",
+  consumptionGroupFeature = "s",
+  localTimeZone = tz,
+  plot=T
+))
 dev.off()
-wdep = as.list(setNames(matrixStats::colMeans2(
-  apply(as.data.frame(wdep_s) %>% select(-s),1:2,as.numeric),
-  na.rm = T),c("tbal","heating","cooling")))
+
+wdep <- as.list(setNames(matrixStats::colMeans2(
+  apply(as.data.frame(weatherDependenceByCluster) %>% select(-s),1:2,as.numeric),
+  na.rm = T),c("tbalh","tbalc","heating","cooling")))
 df$wdeph <- factor(df$s, levels=sort(unique(df$s)))
-levels(df$wdeph) <- wdep_s$heating[order(levels(df$wdeph))]
+levels(df$wdeph) <- weatherDependenceByCluster$heating[order(levels(df$wdeph))]
 df$wdeph <- as.numeric(as.character(df$wdeph))
 df$wdepc <- factor(df$s, levels=sort(unique(df$s)))
-levels(df$wdepc) <- wdep_s$cooling[order(levels(df$wdepc))]
+levels(df$wdepc) <- weatherDependenceByCluster$cooling[order(levels(df$wdepc))]
 df$wdepc <- as.numeric(as.character(df$wdepc))
 wdep$heating <- wdep$heating > 0
 wdep$cooling <- wdep$cooling > 0
@@ -419,203 +523,206 @@ wdep$cooling <- wdep$cooling > 0
 Then, set initial values for the data transformation parameters.
 
 ```{r}
-#    nhar tbalh tbalc maxh maxc alpha   lambda
-# 54    6     9    13   50   50   0.9 0.999558
-general_params <- list(
-      "nhar"=list(
-        "class"="integer",
-        "values"=10#c(5,6)
-      ),
-      "maxh"=list(
-        "class"="float",
-        "values"=c(50)
-      ),
-      "maxc"=list(
-        "class"="float",
-        "values"=c(50)
-      ),
-      "alpha"=list(
-        "class"="float",
-        "values"=c(0.9)
-      ),
-      "lambda"=list(
-        "class"="float",
-        "values"=c(
-          # get_lpf_smoothing_time_scale(data.frame("time"=df$time),3*31*24),
-          # get_lpf_smoothing_time_scale(data.frame("time"=df$time),6*31*24),
-          # get_lpf_smoothing_time_scale(data.frame("time"=df$time),9*31*24),
-          get_lpf_smoothing_time_scale(data.frame("time"=df$time),
-                                       if(wdep$heating && wdep$cooling){
-                                         9*31*24
-                                       } else if (wdep$heating || wdep$cooling) {
-                                         4*31*24
-                                       } else {
-                                         1*31*24
-                                       })
-          #24*30*if(length(unique(df$monthInt))<12){length(unique(df$monthInt))}else{12})
-        )
-      )
+###
+# Setting the model parameters and transformations to be done during the model training ----
+###
+
+write("* Setting model parameters and transformations",stderr())
+generalParams <- list(
+  "nhar"=list(
+    "datatype"="integer",
+    "nlevels"=2,
+    "min"=8,
+    "max"=10
+  ),
+  "maxh"=list(
+    "datatype"="float",
+    "nlevels"=3,
+    "min"=10,
+    "max"=40
+  ),
+  "maxc"=list(
+    "datatype"="float",
+    "nlevels"=3,
+    "min"=10,
+    "max"=40
+  ),
+  "alpha"=list(
+    "datatype"="discrete",
+    "levels"=c(0.6,0.75,0.85,0.9,0.95,0.975,0.985,0.99,0.995)
+  ),
+  "lambda"=list(
+    "datatype"="discrete",
+    "levels"=c(
+      get_lpf_smoothing_time_scale(data.frame("time"=df$time),
+        if(wdep$heating && wdep$cooling){
+         6*31*24
+        } else if (wdep$heating || wdep$cooling) {
+         4*31*24
+        } else {
+         2*31*24
+        })
     )
+  )
+)
 ```
 
 Afterwards, the data transformation operations that need to be done over the initial dataset, either in training or prediction mode, are described. This operations can contain parameters specified in general_params, always refering to them as param\$<variable>, e.g. param\$nhar.
 
 ```{r}
-general_transformationSentences <- list(
-     # Generate a fake dayType variable
-     "dayType" = "vectorial_transformation(
-                   as.factor(
-                    ifelse(isHolidays==T,'holidays',
-                     as.character(weekday))
-                   ), outputFeatureName = 'dayType'
-                 )",
-  
-     # Fourier series components of the hour of the day by weekdays and weekends. 
-     "weekhour" = c(
-       "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
-       "s"
-     ),
-     
-     # Fourier series components of the hour of the day by weekdays and weekends. 
-     "yearday" = c(
-       "fs_components(...,featuresName='dayYear',nHarmonics=4,inplace=F)",
-       "s"
-     ),
-     
-     # Fill some gaps in the outdoor temperature time series.
-     "temperature" = "vectorial_transformation(
-                        na.locf(
+    generalTransformationSentences <- list(
+      # Classify the daily load curves in case it was not predicted
+      "s" = "
+        if(exists('s')){
+          factor(
+            s,
+            levels=rownames(clusteringResults$absoluteLoadCurvesCentroids),
+            labels=rownames(clusteringResults$absoluteLoadCurvesCentroids)
+          )
+        } else {
+          factor(classification_dlc(
+            ..., 
+            consumptionFeature = 'Qe',
+            outdoorTemperatureFeature = 'temperature', 
+            localTimeZone = tz,
+            holidaysDatesFeature = 'holidaysDate',
+            abnormalDaysFeature = 'abnormalDay',
+            clustering = clusteringResults,
+            methodNormalDays = 'clusteringCentroids',
+            methodAbnormalDays = 'classificationModel'
+          )$sRaw,
+          levels=rownames(clusteringResults$absoluteLoadCurvesCentroids),
+          labels=rownames(clusteringResults$absoluteLoadCurvesCentroids))
+        }",
+      
+      "intercept_s" = c("s"),
+      
+      # Avoid errors when there is no holidays detected
+      "isHolidays" = "
+        if(length(unique(as.character(isHolidays)))==1){
+          rep(1,isHolidays)
+        } else {
+          isHolidays
+        }",
+      
+      # Fourier series components of the hour of the day by weekdays and weekends. 
+      "daily_seasonality" = c(
+        "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)"
+        ,"weekday"
+      ),
+      
+      # Fourier series components of the hour of the day by weekdays and weekends. 
+      "weekly_seasonality" = c(
+        "fs_components(...,featuresName='weekdayNum',nHarmonics=2,inplace=F)"#,
+        #"s"
+      ),
+      
+      # Fourier series components of the hour of the day by weekdays and weekends. 
+      "yearly_seasonality" = c(
+        "fs_components(...,featuresName='monthInt',nHarmonics=2,inplace=F)"#,
+        #"s"
+      ),
+      
+      # Fill some gaps in the outdoor temperature time series.
+      "temperature" = "na.locf(
                           na.locf(
                             na.approx(temperature,na.rm = F),
                             fromLast = T,na.rm = T
                           ),
-                          na.rm=T),
-                      outputFeatureName='temperature')",
-     
-     # Low Pass Filtered (LPF) outdoor temperature
-     "tlpf" = "lpf_ts(...,featuresNames='temperature',smoothingTimeScaleParameter=param$alpha,
-                outputFeaturesNames='temperatureLpf')",
-     
-     # Depending the cluster and the weather dependence analysis, define activations of the HVAC system
-     "onOffHeating" = "vectorial_transformation(
-                              as.numeric(
-                                as.character(
-                                  factor(s,levels=wdep_s$s,labels = wdep_s$heating)
-                              )),
-                              outputFeatureName='onOffHeating')",
-     "onOffCooling" = "vectorial_transformation(
-                              as.numeric(
-                                as.character(
-                                  factor(s,levels=wdep_s$s,labels = wdep_s$cooling)
-                              )),
-                              outputFeatureName='onOffCooling')",
-     "temperatureBalance" = "vectorial_transformation(
-                                as.numeric(
-                                  as.character(
-                                    factor(s,levels=wdep_s$s,labels = ifelse(
-                                      is.finite(wdep_s$tbal),wdep_s$tbal,18))
-                                  )
-                                ),
-                                outputFeatureName='temperatureBalance')",
-     
-     # Estimate the heating degrees based on a heating balance temperature 
-     # and the LPF temperature series
-     "heatingLpf" = "degree_raw(...,featuresName='temperatureLpf',
-                      baseTemperature=temperatureBalance,
-                      mode='heating',outputFeaturesName='heatingLpf',maxValue=param$maxh,
-                      inplace=F)",
-     
-     # Estimate the cooling degrees based on a cooling balance temperature 
-     # and the LPF temperature series
-     "coolingLpf" = "degree_raw(...,featuresName='temperatureLpf',
-                      baseTemperature=temperatureBalance,
-                      mode='cooling',outputFeaturesName='coolingLpf',maxValue=param$maxc,
-                      inplace=F)",
-     
-     # Squared versions of the heating and cooling degrees
-     "heatingLpf2" = "vectorial_transformation(heatingLpf^2,outputFeatureName='heatingLpf2')",
-     "coolingLpf2" = "vectorial_transformation(coolingLpf^2,outputFeatureName='coolingLpf2')",
-     
-     # Check if exists heating or cooling degrees at every timestep 
-     "heatingLpfBool" = "vectorial_transformation(ifelse(heatingLpf>0,1,0),
-                          outputFeatureName='heatingLpfBool')",
-     "coolingLpfBool" = "vectorial_transformation(ifelse(coolingLpf>0,1,0),
-                          outputFeatureName='coolingLpfBool')",
-     
-     # Regression components for the heating degrees depending on the hour of the day 
-     #and weekday/weekend
-     "th"=c("heatingLpf",
-            "fs_components(...,featuresName='hour',nHarmonics=ceiling(param$nhar/2),inplace=F)",
-            "onOffHeating",
-            "s"
-            ),
-     
-     # Regression components for the cooling degrees depending on the hour of the day 
-     # and weekday/weekend
-     "tc"=c("coolingLpf",
-            "fs_components(...,featuresName='hour',nHarmonics=ceiling(param$nhar/2),inplace=F)",
-            "onOffCooling",
-            "s"
-            ),
-     
-     # Regression components for the heating degrees depending on the hour of the day 
-     #and weekday/weekend
-     "th2"=c("heatingLpf2",
-            "fs_components(...,featuresName='hour',nHarmonics=ceiling(param$nhar/2),inplace=F)",
-            "onOffHeating",
-            "s"
-            ),
-     
-     # Regression components for the cooling degrees depending on the hour of the day 
-     # and weekday/weekend
-     "tc2"=c("coolingLpf2",
-            "fs_components(...,featuresName='hour',nHarmonics=ceiling(param$nhar/2),inplace=F)",
-            "onOffCooling",
-            "s"
-            ),
-     
-     # Regression components for the heating intercept depending on the hour 
-     # of the day and weekday/weekend
-     "thint"=c("heatingLpfBool",
-            "fs_components(...,featuresName='hour',nHarmonics=ceiling(param$nhar/2),inplace=F)",
-            "onOffHeating",
-            "s"
-            ),
-     
-     # Regression components for the cooling intercept depending on the hour 
-     # of the day and weekday/weekend
-     "tcint"=c("coolingLpfBool",
-            "fs_components(...,featuresName='hour',nHarmonics=ceiling(param$nhar/2),inplace=F)",
-            "onOffCooling",
-            "s"
-           )
+                          na.rm=T)",
+      
+      # Low Pass Filtered (LPF) outdoor temperature
+      "tlpf" = "lpf_ts(...,featuresNames='temperature',smoothingTimeScaleParameter=param$alpha,
+                       inplace=F)",
+      
+      # Depending the cluster and the weather dependence analysis, define activations of the HVAC system
+      "onOffHeating" = "as.numeric(as.character(
+                          factor(s,levels=weatherDependenceByCluster$s,
+                                 labels = weatherDependenceByCluster$heating)
+                        ))",
+      "onOffCooling" = "as.numeric(as.character(
+                          factor(s,levels=weatherDependenceByCluster$s,
+                                 labels = weatherDependenceByCluster$cooling)
+                        ))",
+      "temperatureBalanceHeating" = "as.numeric(as.character(
+                          factor(s,levels=weatherDependenceByCluster$s,
+                                 labels = ifelse(is.finite(weatherDependenceByCluster$tbalh),
+                                                 weatherDependenceByCluster$tbalh,18))
+                          ))",
+      "temperatureBalanceCooling" = "as.numeric(as.character(
+                          factor(s,levels=weatherDependenceByCluster$s,
+                                 labels = ifelse(is.finite(weatherDependenceByCluster$tbalc),
+                                                 weatherDependenceByCluster$tbalc,24))
+                          ))",
+      
+      # Estimate the heating degrees based on a heating balance temperature 
+      # and the LPF temperature series
+      "heatingLpf" = "degree_raw(...,featuresName='tlpf',
+                        baseTemperature=NULL,
+                        baseTemperatureName='temperatureBalanceHeating',
+                        mode='heating',outputFeaturesName='heatingLpf',maxValue=param$maxh,
+                        hysteresisBaseTemperature = 0,
+                        inplace=F)",
+      
+      # Estimate the cooling degrees based on a cooling balance temperature 
+      # and the LPF temperature series
+      "coolingLpf" = "degree_raw(...,featuresName='tlpf',
+                        baseTemperature=NULL,
+                        baseTemperatureName='temperatureBalanceCooling',
+                        mode='cooling',outputFeaturesName='coolingLpf',maxValue=param$maxc,
+                        hysteresisBaseTemperature = 0,
+                        inplace=F)",
+      
+      # Squared versions of the heating and cooling degrees
+      "heatingLpf2" = "heatingLpf^2",
+      "coolingLpf2" = "coolingLpf^2",
+      
+      # Check if exists heating or cooling degrees at every timestep 
+      "heatingLpfBool" = "ifelse(heatingLpf>0,1,0)",
+      "coolingLpfBool" = "ifelse(coolingLpf>0,1,0)",
+      
+      # Regression components for the heating degrees depending on the hour of the day 
+      #and weekday/weekend
+      "th"=c("heatingLpf",
+             "fs_components(...,featuresName='hour',
+                            nHarmonics=ceiling(param$nhar/2),inplace=F)",
+             "s"),
+      
+      # Regression components for the cooling degrees depending on the hour of the day 
+      # and weekday/weekend
+      "tc"=c("coolingLpf",
+             "fs_components(...,featuresName='hour',
+                            nHarmonics=ceiling(param$nhar/2),inplace=F)",
+             
+             "s"),
+      
+      # Regression components for the heating degrees depending on the hour of the day 
+      #and weekday/weekend
+      "th2"=c("heatingLpf2",
+              "fs_components(...,featuresName='hour',
+                             nHarmonics=ceiling(param$nhar/2),inplace=F)",
+              "s"),
+      
+      # Regression components for the cooling degrees depending on the hour of the day 
+      # and weekday/weekend
+      "tc2"=c("coolingLpf2",
+              "fs_components(...,featuresName='hour',
+                             nHarmonics=ceiling(param$nhar/2),inplace=F)",
+              "s"
+      ),
+      
+      # Regression components for the heating intercept depending on the hour 
+      # of the day and weekday/weekend
+      "thint"=c("heatingLpfBool",
+                "s"
+      ),
+      
+      # Regression components for the cooling intercept depending on the hour 
+      # of the day and weekday/weekend
+      "tcint"=c("coolingLpfBool",
+                "s"
+      )
     )
-```
-
-Finally, a training control sentence is defined to specify the validation methology that needs to be used. In this case, a time-slice cross-validation is performed.
-
-```{r}
-trControl <- trainControl(method="none")
-      # if(nrow(df[df$outliers==F,]) >=
-      #     hourly_timesteps(1.9*365*24,detect_time_step(df$time))){
-      #   trainControl(
-      #     method = "timeslice",
-      #     initialWindow = hourly_timesteps(1.5*365*24,detect_time_step(df$time)),
-      #     horizon = hourly_timesteps(2*31*24,detect_time_step(df$time)),
-      #     skip = hourly_timesteps(2*31*24,detect_time_step(df$time))-1,
-      #     fixedWindow = T#,
-      #     # summaryFunction = regression_metrics
-      #   )
-      # } else {
-      #   trainControl(
-      #     method = "timeslice",
-      #     initialWindow = ceiling(0.80*nrow(df)),
-      #     horizon = ceiling(0.1*nrow(df)),
-      #     skip = ceiling(0.1*nrow(df))+1,
-      #     fixedWindow = F#,
-      #     # summaryFunction = regression_metrics
-      #   )
-      # }
 ```
 
 # Data modelling 
@@ -635,192 +742,329 @@ Steps:
 * Load all the information to MLFlow.
 
 ```{r}
-with(mlflow_start_run(experiment_id = experimentId),{
-  
-  if(wdep$heating && wdep$cooling){
-    params <- general_params[c("nhar","maxh","maxc","alpha","lambda")]
-    transformationSentences <- general_transformationSentences[
-      c("dayType","yearday","weekhour","temperature",
-        "tlpf","temperatureBalance",
-        "onOffHeating","onOffCooling","heatingLpf","coolingLpf",
-        "heatingLpf2","coolingLpf2","heatingLpfBool","coolingLpfBool",
-        "th","tc","th2","tc2","tcint","thint")
-    ]
-    mod <- train(
-      Qe ~ weekhour + th + tc,
-      data=df[df$outliers==F & is.finite(df$Qe),],
-      method = RLS(
-       data.frame(parameter = names(params),
-                  class = mapply(params,FUN=function(i)i[["class"]]))
-      ),
-      tuneGrid = do.call(expand.grid,
-                         lapply(params,function(i)i[["values"]])),
-      trControl = trControl,
-      # maxPredictionValue = max(df[df$outliers==F,"Qe"],na.rm=T) * 1.05,
-      logOutput = T,
-      minMonthsTraining = 12,
-      continuousTime = T,
-      transformationSentences = transformationSentences,
-      wdep_s = wdep_s
-    )
-  } else if (wdep$heating){
-    params <- general_params[c("nhar","maxh","alpha","lambda")]
-    transformationSentences <- general_transformationSentences[
-        c("dayType","yearday","weekhour","temperature","tlpf",
-          "temperatureBalance","onOffHeating",
+###
+# Model training ----
+###
+
+write("* Training of the model and loading process to MLFlow",stderr())
+trControl <- trainControl(method="none")    
+suppressWarnings(
+  with(mlflow_start_run(experiment_id = experimentId), {
+    
+    if(wdep$heating && wdep$cooling){
+      write("   Model type: Heating and cooling",stderr())
+      params <- generalParams[c("nhar","maxh","maxc","alpha","lambda")]
+      transformationSentences <- generalTransformationSentences[
+        c("s","intercept_s","daily_seasonality","weekly_seasonality","yearly_seasonality",
+          "temperature","tlpf","temperatureBalanceHeating","temperatureBalanceCooling",
+          "onOffHeating","onOffCooling","heatingLpf","coolingLpf",
+          "heatingLpf2","coolingLpf2","heatingLpfBool","coolingLpfBool",
+          "th","tc","th2","tc2","tcint","thint")]
+      minMonthsTraining <- 9
+    	HC_model <- function(params, df, ...) {
+        args <- list(...)
+        train(
+          Qe ~ daily_seasonality + tc + th + tcint + thint,
+          data=df,
+          method = RLS(
+            data.frame(parameter = names(params),
+                       class = mapply(names(params),FUN=function(i) generalParams[[i]][["datatype"]]))
+          ),
+          tuneGrid = expand.grid(params), 
+          trControl = trControl,
+          maxPredictionValue = max(df$Qe,na.rm=T) * 1.1,
+          logOutput = T,
+          minMonthsTraining = minMonthsTraining,
+          continuousTime = T,
+          transformationSentences = args$transformationSentences,
+          weatherDependenceByCluster = args$weatherDependenceByCluster,
+          clusteringResults = args$clusteringResults
+        )
+      }
+      best_params <- hyperparameters_tuning(
+        opt_criteria = "minimise",
+        opt_function = function(X, df, ...) {
+          mod <- HC_model(X, df, ...)
+          expected <- df$Qe
+          obtained <- biggr::predict.train(
+            object = mod, 
+            newdata = df, 
+            forceGlobalInputFeatures = NULL,
+            modelMinMaxHorizonInHours = 1,
+            modelWindow = NULL,
+            modelSelection = NULL
+          )
+          RMSE(expected, obtained, na.rm = T)
+        },
+        features = params,
+        maxiter = 3,
+        popSize = 8,
+        df = df[df$outliers==F & !is.na(df$outliers),],
+        parallel = F,
+        transformationSentences = transformationSentences,
+        weatherDependenceByCluster = weatherDependenceByCluster,
+        clusteringResults = clust
+      )
+      mod <- HC_model(best_params, df[df$outliers==F & !is.na(df$outliers),],
+        transformationSentences = transformationSentences,
+        weatherDependenceByCluster = weatherDependenceByCluster,
+        clusteringResults = clust
+      )
+    } else if (wdep$heating){
+      write("   Model type: Only heating",stderr())
+      params <- generalParams[c("nhar","maxh","alpha","lambda")]#,"tbalh"
+      transformationSentences <- generalTransformationSentences[
+        c("s","intercept_s","daily_seasonality","weekly_seasonality","yearly_seasonality",
+          "temperature","tlpf","temperatureBalanceHeating","onOffHeating",
           "heatingLpf","heatingLpf2",
-          "heatingLpfBool","th","th2","thint")
+          "heatingLpfBool","th","th2","thint")]
+      minMonthsTraining <- 4
+      H_model <- function(params, df, ...) {
+        args <- list(...)
+        train(
+          Qe ~ daily_seasonality + th + thint,
+          data = df,
+          method = RLS(
+            data.frame(parameter = names(params),
+                       class = mapply(names(params),FUN=function(i) generalParams[[i]][["datatype"]]))
+          ),
+          tuneGrid = expand.grid(params), 
+          trControl = trControl,
+          maxPredictionValue = max(df$Qe,na.rm=T) * 1.1,
+          logOutput = T,
+          minMonthsTraining = minMonthsTraining,
+          continuousTime = T,
+          transformationSentences = args$transformationSentences,
+          weatherDependenceByCluster = args$weatherDependenceByCluster,
+          clusteringResults = args$clusteringResults
+        )
+      }
+      best_params <- hyperparameters_tuning(
+        opt_criteria = "minimise",
+        opt_function = function(X, df, ...) {
+          mod <- H_model(X, df, ...)
+          expected <- df$Qe
+          obtained <- biggr::predict.train(
+            object = mod, 
+            newdata = df, 
+            forceGlobalInputFeatures = NULL,
+            modelMinMaxHorizonInHours = 1,
+            modelWindow = NULL,
+            modelSelection = NULL
+          )
+          RMSE(expected, obtained, na.rm = T)
+        },
+        features = params,
+        maxiter = 3,
+        popSize = 8,
+        parallel = F,
+        df = df[df$outliers==F & !is.na(df$outliers),],
+        transformationSentences = transformationSentences,
+        weatherDependenceByCluster = weatherDependenceByCluster,
+        clusteringResults = clust
+      )
+      mod <- H_model(best_params, df[df$outliers==F & !is.na(df$outliers),],
+        transformationSentences = transformationSentences,
+        weatherDependenceByCluster = weatherDependenceByCluster,
+        clusteringResults = clust
+      )
+    } else if (wdep$cooling){
+      write("   Model type: Only Cooling",stderr())
+      params <- generalParams[c("nhar","maxc","alpha","lambda")]#,"tbalc"
+      transformationSentences <- generalTransformationSentences[
+        c("s","intercept_s","daily_seasonality","weekly_seasonality","yearly_seasonality",
+          "temperature","tlpf","temperatureBalanceCooling","onOffCooling",
+          "coolingLpf","coolingLpf2",
+          "coolingLpfBool","tc","tc2","tcint")]
+      minMonthsTraining <- 4
+      C_model <- function(params, df, ...) {
+        args <- list(...)
+        train(
+          Qe ~ daily_seasonality + tc + tcint,
+          data = df,
+          method = RLS(
+            data.frame(parameter = names(params),
+                       class = mapply(names(params),FUN=function(i) generalParams[[i]][["datatype"]]))
+          ),
+          tuneGrid = expand.grid(params), 
+          trControl = trControl,
+          maxPredictionValue = max(df$Qe,na.rm=T) * 1.1,
+          logOutput = T,
+          minMonthsTraining = minMonthsTraining,
+          continuousTime = T,
+          transformationSentences = args$transformationSentences,
+          weatherDependenceByCluster = args$weatherDependenceByCluster,
+          clusteringResults = args$clusteringResults
+        )
+      }
+      best_params <- hyperparameters_tuning(
+        opt_criteria = "minimise",
+        opt_function = function(X, df, ...) {
+          mod <- C_model(X, df, ...)
+          expected <- df$Qe
+          obtained <- biggr::predict.train(
+            object = mod, 
+            newdata = df, 
+            forceGlobalInputFeatures = NULL,
+            modelMinMaxHorizonInHours = 1,
+            modelWindow = NULL,
+            modelSelection = NULL
+          )
+          RMSE(expected, obtained, na.rm = T)
+        },
+        features = params,
+        maxiter = 3,
+        popSize = 8,
+        parallel = F,
+        df = df[df$outliers==F & !is.na(df$outliers),],
+        transformationSentences = transformationSentences,
+        weatherDependenceByCluster = weatherDependenceByCluster,
+        clusteringResults = clust
+      )
+      mod <- C_model(best_params, df[df$outliers==F & !is.na(df$outliers),],
+        transformationSentences = transformationSentences,
+        weatherDependenceByCluster = weatherDependenceByCluster,
+        clusteringResults = clust
+      )
+    } else {
+      write("   Model type: Not weather dependence",stderr())
+      params <- generalParams[c("nhar","lambda")]
+      transformationSentences <- generalTransformationSentences[
+        c("s","intercept_s","daily_seasonality","weekly_seasonality","yearly_seasonality")
       ]
-    mod <- train(
-      Qe ~ weekhour + th,
-      data=df[df$outliers==F & is.finite(df$Qe),],
-      method = RLS(
-       data.frame(parameter = names(params),
-                  class = mapply(params,FUN=function(i)i[["class"]]))
-      ),
-      tuneGrid = do.call(expand.grid,
-                         lapply(params,function(i)i[["values"]])),
-      trControl = trControl,
-      # maxPredictionValue = max(df[df$outliers==F,"Qe"],na.rm=T) * 1.05,
-      logOutput = T,
-      minMonthsTraining = 12,
-      continuousTime = T,
-      transformationSentences = transformationSentences,
-      wdep_s = wdep_s
-    )
-  } else if (wdep$cooling){
-    params <- general_params[c("nhar","maxc","alpha","lambda")]
-    transformationSentences <- general_transformationSentences[
-      c("dayType","yearday","weekhour","temperature","tlpf",
-        "temperatureBalance","onOffCooling",
-        "coolingLpf","coolingLpf2",
-        "coolingLpfBool","tc","tc2","tcint")
-    ]
-    mod <- train(
-      Qe ~ weekhour + tc,
-      data=df[df$outliers==F & is.finite(df$Qe),],
-      method = RLS(
-       data.frame(parameter = names(params),
-                  class = mapply(params,FUN=function(i)i[["class"]]))
-      ),
-      tuneGrid = do.call(expand.grid,
-                         lapply(params,function(i)i[["values"]])),
-      trControl = trControl,
-      # maxPredictionValue = max(df[df$outliers==F,"Qe"],na.rm=T) * 1.05,
-      logOutput = T,
-      minMonthsTraining = 12,
-      continuousTime = T,
-      transformationSentences = transformationSentences,
-      wdep_s = wdep_s
-    )
-  } else {
-    params <- general_params[c("nhar","lambda")]
-    transformationSentences <- general_transformationSentences[
-      c("dayType","yearday","weekhour")
-    ]
-    mod <- train(
-      Qe ~ weekhour,
-      data=df[df$outliers==F & is.finite(df$Qe),],
-      method = RLS(
-       data.frame(parameter = names(params),
-                  class = mapply(params,FUN=function(i)i[["class"]]))
-      ),
-      tuneGrid = do.call(expand.grid,
-                         lapply(params,function(i)i[["values"]])),
-      trControl = trControl,
-      # maxPredictionValue = max(df[df$outliers==F,"Qe"],na.rm=T) * 1.05,
-      logOutput = T,
-      minMonthsTraining = 12,
-      continuousTime = T,
-      transformationSentences = transformationSentences
-    )
-  }
+      minMonthsTraining <- 1
+      CAL_model <- function(params, df, ...) {
+        args <- list(...)
+        train(
+          Qe ~ intercept_s + daily_seasonality,
+          data=df,
+          method = RLS(
+            data.frame(parameter = names(params),
+                       class = mapply(names(params),FUN=function(i) generalParams[[i]][["datatype"]]))
+          ),
+          tuneGrid = expand.grid(params), 
+          trControl = trControl,
+          maxPredictionValue = max(df[df$outliers==F & !is.na(df$outliers),"Qe"],na.rm=T) * 1.1,
+          logOutput = T,
+          minMonthsTraining = minMonthsTraining,
+          continuousTime = T,
+          transformationSentences = args$transformationSentences,
+          clusteringResults = args$clusteringResults
+        )
+      }
+      best_params <- hyperparameters_tuning(
+        opt_criteria = "minimise",
+        opt_function = function(X, df, ...) {
+          mod <- CAL_model(X, df, ...)
+          expected <- df$Qe
+          obtained <- biggr::predict.train(
+            object = mod, 
+            newdata = df, 
+            forceGlobalInputFeatures = NULL,
+            modelMinMaxHorizonInHours = 1,
+            modelWindow = NULL,
+            modelSelection = NULL
+          )
+          RMSE(expected, obtained, na.rm = T)
+        },
+        features = params,
+        maxiter = 3,
+        popSize = 8,
+        parallel = F,
+        df = df[df$outliers==F & !is.na(df$outliers),],
+        transformationSentences = transformationSentences,
+        clusteringResults = clust
+      )
+      mod <- CAL_model(best_params, df[df$outliers==F & !is.na(df$outliers),],
+        transformationSentences = transformationSentences,
+        clusteringResults = clust
+      )
+    }
+    
+    # Generate the predictor object
+    predictor <- crate(function(x, forceGlobalInputFeatures = NULL,modelMinMaxHorizonInHours=1,
+                                modelWindow="%Y-%m-%d", modelSelection="rmse"){
+      biggr::predict.train(
+        object = !!mod, 
+        newdata = x, 
+        forceGlobalInputFeatures = forceGlobalInputFeatures,
+        modelMinMaxHorizonInHours = modelMinMaxHorizonInHours,
+        modelWindow = modelWindow,
+        modelSelection = modelSelection
+      )
+    })
   
-  # Generate the predictor object
-  predictor <- crate(function(x, forceGlobalInputFeatures = NULL,modelMinMaxHorizonInHours=1,
-                              modelWindow="%Y-%m-%d", modelSelection="rmse"){
-    biggr::predict.train(
-      object = !!mod, 
-      newdata = x, 
-      forceGlobalInputFeatures = forceGlobalInputFeatures,
-      modelMinMaxHorizonInHours = modelMinMaxHorizonInHours,
-      modelWindow = modelWindow,
-      modelSelection = modelSelection
-    )
+    df_result <- df[df$time >= (min(df$time)+months(minMonthsTraining)),]
+    df_result$predicted <- predictor(df_result)
+    
+    # Actual vs. predicted
+    p <- ggplotly(
+      ggplot(df_result) + 
+        geom_line(aes(time,Qe), col="black") + 
+        geom_line(aes(time,predicted),col="red",alpha=0.5))
+    saveWidget(p, "series_comparison.html", 
+               selfcontained = T)
+    
+    # Residuals plot
+    p <- ggplotly(
+      ggplot(df_result) + 
+        geom_line(aes(time,Qe-predicted), col="black"))
+    saveWidget(p, "residuals.html", 
+               selfcontained = T)
+    
+    # Generate the MLflow instance
+    mlflow_log_param("Model",modelName)
+    
+    # Store the params
+    for (i in 1:ncol(mod$bestTune)){
+      mlflow_log_param(colnames(mod$bestTune)[i],as.character(mod$bestTune[1,i]))
+    }
+    # Store the errors
+    mlflow_log_metric("MAE", 
+                      MAE(df_result$Qe[df_result$outliers==F],
+                          df_result$predicted[df_result$outliers==F],na.rm = T))
+    mlflow_log_metric("RMSE", RMSE(df_result$Qe[df_result$outliers==F],
+                                   df_result$predicted[df_result$outliers==F],na.rm = T))
+    mlflow_log_metric("CVRMSE", 
+                      RMSE(df_result$Qe[df_result$outliers==F],
+                           df_result$predicted[df_result$outliers==F],na.rm = T)/
+                        mean(df_result$Qe[df_result$outliers==F],na.rm=T))
+    mlflow_log_metric("r2", cor(df_result$Qe[df_result$outliers==F],
+                                df_result$predicted[df_result$outliers==F],
+                                use = "na.or.complete")^2)
+    # Store the artifacts
+    mlflow_log_artifact("raw_consumption_temperature.html")
+    mlflow_log_artifact("series_comparison.html")
+    mlflow_log_artifact("residuals.html")
+    mlflow_log_artifact("outliers_plot.html")
+    mlflow_log_artifact("clustering_signature.html")
+    mlflow_log_artifact("clustering_dlc.html")
+    mlflow_log_artifact("clustering_dlc_ts.html")
+    mlflow_log_artifact("clustering_dlc_wdep.pdf")
+    
+    # Register the model
+    tryCatch(mlflow_create_registered_model(paste0(identifier,"~",modelName)),error=function(e){})
+    modelId <- mlflow_get_run()$run_uuid[1]
+    modelSubject <- sprintf("runs:/%s/model",modelId)
+    registeredModelName <- paste0(identifier,"~",modelName)
+    mlflow_create_model_version(name = registeredModelName,
+                                run_link = modelSubject)
+    
+    # Store the model
+    mlflow_log_model(predictor,"model")
+    mlflow_log_param("modelId",modelId)
+    mlflow_log_param("modelSubject",modelSubject)
+    mlflow_log_param("registeredModelName",registeredModelName)
+    
   })
-  
-  # Predict with the validation set
-  df_for_pred <- df#[
-    # # if(nrow(df) >= hourly_timesteps(mod$finalModel$meta$minMonthsTraining*2*30*24,
-    # #                                 detect_time_step(df$time))){
-    # #   df$time >= (min(df$time,na.rm=T) + days(mod$finalModel$meta$minMonthsTraining*2*30))
-    # # } else 
-    # if (nrow(df) >= hourly_timesteps(mod$finalModel$meta$minMonthsTraining*30*24,
-    #                                 detect_time_step(df$time))) {
-    #   df$time >= (min(df$time,na.rm=T) + days(mod$finalModel$meta$minMonthsTraining*30))
-    # } else {
-    #   df$time >= quantile(df$time,0.3,na.rm=T)
-    # },]
-  df_for_pred <- df_for_pred[order(df_for_pred$time),]
-  df_for_pred$Qe_pred <- predictor(df_for_pred)
-  
-  # Generate the prediction plot, comparing with the actual data
-  # ggplotly(
-  #   ggplot() +
-  #     geom_line(aes(mod$finalModel$localtime, mod$finalModel$yreal)) +
-  #     geom_line(aes(mod$finalModel$localtime, mod$finalModel$yhat),col="red",alpha=0.5)
-  # )
-  p <- ggplotly(
-    ggplot(df_for_pred) + 
-      geom_line(aes(time,Qe), col="black") + 
-      geom_line(aes(time,Qe_pred),col="red",alpha=0.5))
-  saveWidget(p, "series_comparison.html", selfcontained = T)
-  
-  # Generate the residuals plot
-  p <- ggplotly(
-    ggplot(df_for_pred) + 
-      geom_line(aes(time,Qe-Qe_pred), col="black"))
-  saveWidget(p, "residuals.html", selfcontained = T)
-  
-  # Generate the MLflow instance
-  # Store the params
-  for (i in 1:ncol(mod$bestTune)){
-    mlflow_log_param(colnames(mod$bestTune)[i],as.character(mod$bestTune[1,i]))
-  }
-  # Store the errors
-  mlflow_log_metric("MAE", 
-                    MAE(df_for_pred$Qe[df_for_pred$outliers==F],
-                        df_for_pred$Qe_pred[df_for_pred$outliers==F],na.rm = T))
-  mlflow_log_metric("RMSE", RMSE(df_for_pred$Qe[df_for_pred$outliers==F],
-                                 df_for_pred$Qe_pred[df_for_pred$outliers==F],na.rm = T))
-  mlflow_log_metric("CVRMSE", 
-                    RMSE(df_for_pred$Qe[df_for_pred$outliers==F],
-                         df_for_pred$Qe_pred[df_for_pred$outliers==F],na.rm = T)/
-                      mean(df_for_pred$Qe[df_for_pred$outliers==F],na.rm=T))
-  mlflow_log_metric("r2", cor(df_for_pred$Qe[df_for_pred$outliers==F],
-                              df_for_pred$Qe_pred[df_for_pred$outliers==F],
-                              use = "na.or.complete")^2)
-  # Store the artifacts
-  mlflow_log_artifact("series_comparison.html")
-  mlflow_log_artifact("residuals.html")
-  mlflow_log_artifact("outliers_plot.html")
-  mlflow_log_artifact("clustering_dlc.html")
-  mlflow_log_artifact("clustering_dlc_ts.html")
-  mlflow_log_artifact("clustering_dlc_wdep.pdf")
-  # Store the model
-  mlflow_log_model(predictor,"model")
-  
-  # Register the model as "rls"
-  tryCatch(mlflow_create_registered_model(paste0(buildingId,"~rls")),error=function(e){})
-  mlflow_create_model_version(paste0(buildingId,"~rls"),
-                              run_link = sprintf("runs:/%s/model",
-                                                 mlflow_get_run()$run_uuid[1]),)
-})
+)
 ```
 
 [Results in MLFlow](http://127.0.0.1:5000/)
 
 # Results for longitudinal benchmarking
+
+TO DO Eloi!!!
 
 ## Non-intrusive consumption dissagregation
 
