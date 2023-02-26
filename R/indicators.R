@@ -1,5 +1,5 @@
 generate_longitudinal_benchmarking_indicators <- function (
-  data, indicators, energyType, energyComponent, frequencies, 
+  data, indicators, measuredProperty, measuredPropertyComponent, frequencies, 
   buildingId, buildingSubject, timeColumn, localTimeZone, 
   consumptionColumn, indicatorsUnitsSubjects, baselineConsumptionColumn = NULL, 
   buildingGrossFloorArea = 0, outdoorTemperatureColumn = NULL, 
@@ -8,11 +8,9 @@ generate_longitudinal_benchmarking_indicators <- function (
   modelName = NULL, modelId = NULL, modelLocation = NULL, 
   modelStorageInfrastructureSubject = NULL, modelTypeSubject = NULL, 
   modelBaselineYear = NULL, estimateWhenAggregate = T,
-  prevResults = NULL) 
-{
+  prevResults = NULL) {
   
-  buildingNamespace <- paste0(strsplit(buildingSubject, "#")[[1]][1], 
-                              "#")
+  buildingNamespace <- paste0(strsplit(buildingSubject, "#")[[1]][1], "#")
   namespaces <- bigg_namespaces
   namespaces["biggresults"] <- buildingNamespace
   
@@ -24,49 +22,43 @@ generate_longitudinal_benchmarking_indicators <- function (
   results_ts <- prevResults$results_ts
   
   if (!is.null(modelId)) {
-    modelSubject <- sprintf("biggresults:MODEL-%s-%s", buildingId, 
-                            modelId)
+    modelSubject <- sprintf("biggresults:MODEL-%s-%s", buildingId, modelId)
     if (!exists_analytical_model(obj, modelSubject, namespaces)) {
       obj <- obj %>% add_item_to_rdf(subject = modelSubject, 
-                                     classes = c("bigg:AnalyticalModel"), dataProperties = if (is.null(modelBaselineYear)) {
+                                     classes = c("bigg:AnalyticalModel"), dataProperties = c(
                                        list(`bigg:modelLocation` = modelLocation, 
                                             `bigg:modelTrainedDate` = parsedate::format_iso_8601(lubridate::now("UTC")), 
-                                            `bigg:modelName` = modelName)
-                                     }
-                                     else {
-                                       list(`bigg:modelLocation` = modelLocation, 
-                                            `bigg:modelTrainedDate` = parsedate::format_iso_8601(lubridate::now("UTC")), 
-                                            `bigg:modelBaselineYear` = modelBaselineYear, 
-                                            `bigg:modelName` = modelName)
-                                     }, objectProperties = list(`bigg:hasModelStorageInfrastructure` = modelStorageInfrastructureSubject, 
-                                                                `bigg:hasModelType` = modelTypeSubject), namespaces = namespaces)
+                                            `bigg:modelName` = modelName),
+                                       if (!is.null(modelBaselineYear)) {
+                                         list(`bigg:modelBaselineYear` = modelBaselineYear)
+                                       }), 
+                                     objectProperties = list(
+                                       `bigg:hasModelStorageInfrastructure` = modelStorageInfrastructureSubject, 
+                                       `bigg:hasModelType` = modelTypeSubject), namespaces = namespaces)
       obj <- obj %>% add_item_to_rdf(subject = buildingSubject, 
                                      objectProperties = list(`bigg:hasAnalyticalModel` = modelSubject), 
                                      namespaces = namespaces)
     }
-  }
+  } else { modelSubject <- NA }
   for (indicator in indicators) {
     frequencies_ <- frequencies
     originalDataPeriod <- detect_time_step(data[, timeColumn])
     valueInd <- if (indicator == "EnergyUse") {
       data[, consumptionColumn]
     }
-    else if (indicator == "EnergyUseIntensity" && buildingGrossFloorArea > 
-             0) {
+    else if (indicator == "EnergyUseIntensity" && buildingGrossFloorArea > 0) {
       data[, consumptionColumn]/buildingGrossFloorArea
     }
     else if (indicator == "EnergyUseSavings") {
       data[, consumptionColumn] - data[, baselineConsumptionColumn]
     }
-    else if (indicator == "EnergyUseSavingsIntensity" && 
-             buildingGrossFloorArea > 0) {
-      (data[, consumptionColumn] - data[, baselineConsumptionColumn])/buildingGrossFloorArea
+    else if (indicator == "EnergyUseSavingsIntensity" && buildingGrossFloorArea > 0) {
+      (data[, consumptionColumn] - data[, baselineConsumptionColumn]) / buildingGrossFloorArea
     }
     else if (indicator == "EnergyCost" && !is.null(energyPriceColumn)) {
       (data[, consumptionColumn] * data[, energyPriceColumn])
     }
-    else if (indicator == "EnergyCostIntensity" && !is.null(energyPriceColumn) && 
-             buildingGrossFloorArea > 0) {
+    else if (indicator == "EnergyCostIntensity" && !is.null(energyPriceColumn) && buildingGrossFloorArea > 0) {
       (data[, consumptionColumn] * data[, energyPriceColumn])/buildingGrossFloorArea
     }
     else if (indicator == "EnergyCostSavings" && !is.null(energyPriceColumn)) {
@@ -74,8 +66,7 @@ generate_longitudinal_benchmarking_indicators <- function (
          data[, energyPriceColumn])
     }
     else if (indicator == "EnergyCostSavingsIntensity" && 
-             !is.null(energyPriceColumn) && buildingGrossFloorArea > 
-             0) {
+             !is.null(energyPriceColumn) && buildingGrossFloorArea > 0) {
       ((data[, consumptionColumn] - data[, baselineConsumptionColumn]) * 
          data[, energyPriceColumn])/buildingGrossFloorArea
     }
@@ -83,8 +74,7 @@ generate_longitudinal_benchmarking_indicators <- function (
       (data[, consumptionColumn] * data[, carbonEmissionsColumn])
     }
     else if (indicator == "EnergyEmissionsIntensity" && 
-             !is.null(carbonEmissionsColumn) && buildingGrossFloorArea > 
-             0) {
+             !is.null(carbonEmissionsColumn) && buildingGrossFloorArea > 0) {
       (data[, consumptionColumn] * data[, carbonEmissionsColumn])/buildingGrossFloorArea
     }
     else if (indicator == "EnergyEmissionsSavings" && !is.null(carbonEmissionsColumn)) {
@@ -92,18 +82,15 @@ generate_longitudinal_benchmarking_indicators <- function (
          data[, carbonEmissionsColumn])
     }
     else if (indicator == "EnergyEmissionsSavingsIntensity" && 
-             !is.null(carbonEmissionsColumn) && buildingGrossFloorArea > 
-             0) {
+             !is.null(carbonEmissionsColumn) && buildingGrossFloorArea > 0) {
       ((data[, consumptionColumn] - data[, baselineConsumptionColumn]) * 
          data[, carbonEmissionsColumn])/buildingGrossFloorArea
     }
     else if (indicator == "HeatingDegreeDays" && !is.null(heatingDegreeDays18Column)) {
-      ifelse(data[, heatingDegreeDays18Column] > 3, data[, 
-                                                         heatingDegreeDays18Column], 0)
+      ifelse(data[, heatingDegreeDays18Column] > 3, data[, heatingDegreeDays18Column], 0)
     }
     else if (indicator == "CoolingDegreeDays" && !is.null(coolingDegreeDays21Column)) {
-      ifelse(data[, coolingDegreeDays21Column] > 3, data[, 
-                                                         coolingDegreeDays21Column], 0)
+      ifelse(data[, coolingDegreeDays21Column] > 3, data[, coolingDegreeDays21Column], 0)
     }
     else {
       NULL
@@ -153,51 +140,63 @@ generate_longitudinal_benchmarking_indicators <- function (
         indDfAux$end <- indDfAux$start + iso8601_period_to_timedelta(frequency) - 
           seconds(1)
       }
-      keyPerformanceIndicatorName <- if (indicator %in% 
-                                         c("HeatingDegreeDays", "CoolingDegreeDays")) {
-        indicator
-      }
-      else {
-        paste(indicator, energyComponent, energyType, 
-              sep = ".")
-      }
-      keyPerformanceIndicatorSubject <- paste("bigg:KPI", 
-                                              keyPerformanceIndicatorName, sep = "-")
-      singleKPISubject <- paste("biggresults:SingleKPI", 
-                                buildingId, keyPerformanceIndicatorName, modelName, 
-                                modelId, frequency, sep = "-")
-      singleKPISubjectHash <- digest(namespace_integrator(singleKPISubject, 
-                                                          namespaces), "sha256", serialize = T)
-      singleKPIPointSubject <- paste0("biggresults:", 
-                                      singleKPISubjectHash)
+      keyPerformanceIndicatorSubject <- paste("bigg:KPI", indicator, sep = "-")
+      singleKPISubject <- paste("biggresults:SingleKPI", buildingId, 
+        if (indicator %in% c("HeatingDegreeDays", "CoolingDegreeDays")) { indicator
+        } else { paste(indicator, measuredPropertyComponent, measuredProperty, sep = "-") }, 
+        modelName, modelId, frequency, sep = "-")
+      singleKPISubjectHash <- digest(namespace_integrator(singleKPISubject, namespaces), "sha256", serialize = T)
+      singleKPIPointSubject <- paste0("biggresults:", singleKPISubjectHash)
       obj %>% add_item_to_rdf(subject = singleKPISubject, 
                               classes = c("bigg:SingleKPIAssessment", "bigg:KPIAssessment", 
                                           "bigg:TimeSeriesList"), 
-                              dataProperties = list(`bigg:timeSeriesIsRegular` = T, 
-                                                    `bigg:timeSeriesIsOnChange` = F, 
-                                                    `bigg:timeSeriesIsCumulative` = F, 
-                                                    `bigg:timeSeriesStart` = min(indDfAux$start, na.rm = T), 
-                                                    `bigg:timeSeriesEnd` = max(indDfAux$end,  na.rm = T), 
-                                                    `bigg:timeSeriesFrequency` = frequency, 
-                                                    `bigg:timeSeriesTimeAggregationFunction` = "SUM"), 
-                              objectProperties = if (is.null(modelId)) {
-                                list(`bigg:hasKPIUnit` = indicatorsUnitsSubjects[[indicator]], 
-                                     `bigg:hasSingleKPIPoint` = singleKPIPointSubject, 
-                                     `bigg:quantifiesKPI` = keyPerformanceIndicatorSubject)
-                              }
-                              else {
-                                list(`bigg:hasKPIUnit` = indicatorsUnitsSubjects[[indicator]], 
-                                     `bigg:hasSingleKPIPoint` = singleKPIPointSubject, 
-                                     `bigg:quantifiesKPI` = keyPerformanceIndicatorSubject, 
-                                     `bigg:isEstimatedByModel` = modelSubject)
-                              }, namespaces = namespaces)
+                              dataProperties = c(list(
+                                `bigg:timeSeriesIsRegular` = T, 
+                                `bigg:timeSeriesIsOnChange` = F, 
+                                `bigg:timeSeriesIsCumulative` = F, 
+                                `bigg:timeSeriesStart` = min(indDfAux$start, na.rm = T), 
+                                `bigg:timeSeriesEnd` = max(indDfAux$end,  na.rm = T), 
+                                `bigg:timeSeriesFrequency` = frequency, 
+                                `bigg:timeSeriesTimeAggregationFunction` = "SUM"),
+                                if (!(indicator %in% c("HeatingDegreeDays", "CoolingDegreeDays"))) { list(
+                                  `bigg:measuredPropertyComponent` = measuredPropertyComponent) }), 
+                              objectProperties = c(list(
+                                `bigg:hasKPIUnit` = indicatorsUnitsSubjects[[indicator]], 
+                                `bigg:hasSingleKPIPoint` = singleKPIPointSubject, 
+                                `bigg:quantifiesKPI` = keyPerformanceIndicatorSubject),
+                                if (!is.null(modelId)) { list(
+                                  `bigg:isEstimatedByModel` = modelSubject)
+                                },
+                                if (!(indicator %in% c("HeatingDegreeDays", "CoolingDegreeDays"))) { list(
+                                  `bigg:hasMeasuredProperty` = if(startsWith(measuredProperty,"bigg:")){ measuredProperty
+                                  } else {paste0("bigg:",measuredProperty)}) }
+                              ), namespaces = namespaces)
       obj %>% add_item_to_rdf(subject = buildingSubject, 
                               objectProperties = list(`bigg:assessesSingleKPI` = singleKPISubject), 
                               namespaces = namespaces)
       indDfAux$start <- parsedate::format_iso_8601(indDfAux$start)
       indDfAux$end <- parsedate::format_iso_8601(indDfAux$end)
       
-      results_ts[[singleKPISubjectHash]]<-indDfAux
+      results_ts[[singleKPISubjectHash]] <- list()
+      results_ts[[singleKPISubjectHash]]$basic <- indDfAux
+      if(as.period(frequency)>=as.period("P1M")){
+        indDfAuxMeta <- data.frame(
+          `individualSubject` = namespace_integrator(buildingSubject, namespaces),
+          `keyPerformanceIndicator` = indicator,
+          `measuredProperty` = measuredProperty,
+          `measuredPropertyComponent` = measuredPropertyComponent,
+          `unit` = namespace_integrator(indicatorsUnitsSubjects[[indicator]], namespaces),
+          `frequency` = frequency,
+          `modelSubject` = modelSubject
+        )
+        results_ts[[singleKPISubjectHash]]$full <- cbind(indDfAux,indDfAuxMeta)
+        results_ts[[singleKPISubjectHash]]$full <- 
+          results_ts[[singleKPISubjectHash]]$full %>% filter(is.finite(value)) %>%
+          mutate(
+            year = year(lubridate::with_tz(parsedate::parse_iso_8601(start), localTimeZone)),
+            month = month(lubridate::with_tz(parsedate::parse_iso_8601(start), localTimeZone))
+          )
+      }
     }
   }
   return(list(results_rdf=obj, results_ts=results_ts))

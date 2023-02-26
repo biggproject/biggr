@@ -31,6 +31,7 @@ Depends:
     caret,
     penalized,
     onlineforecast (== 1.0.0),
+    qgam,
     GA,
     parallel,
     R (>= 4.1)

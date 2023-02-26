@@ -872,7 +872,7 @@ parse_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
 
 get_device_aggregators_by_building <- function(
   buildingsRdf, timeseriesObject=NULL, allowedBuildingSubjects=NULL, 
-  allowedDeviceAggregators=NULL, useEstimatedValues=F, ratioCorrection=T){
+  allowedMeasuredProperties=NULL, useEstimatedValues=F, ratioCorrection=T){
   
   # Get formulas and associated metadata for each building and device aggregator
   devagg_buildings <- get_all_device_aggregators(buildingsRdf)
@@ -885,9 +885,9 @@ get_device_aggregators_by_building <- function(
   }
   
   # Filter by the allowed device aggregator names
-  if(!is.null(allowedDeviceAggregators)){
+  if(!is.null(allowedMeasuredProperties)){
     devagg_buildings <- devagg_buildings[
-      devagg_buildings$deviceAggregatorName %in% allowedDeviceAggregators,
+      devagg_buildings$measuredProperty %in% allowedMeasuredProperties,
     ]
   }
   
@@ -963,15 +963,17 @@ add_item_to_rdf <- function(object, subject, classes = NULL, dataProperties = NU
   if(!is.null(dataProperties)){
     for(i in 1:length(dataProperties)){
       value <- dataProperties[[i]]
-      datetimeDetected <- class(value)[1]=="POSIXct"
-      object %>% rdf_add(
-        subject = subject,
-        predicate = namespace_integrator(names(dataProperties)[i],namespaces),
-        object = if(datetimeDetected){parsedate::format_iso_8601(value)} else {value},
-        subjectType = "uri",objectType = "literal",
-        datatype_uri = if(datetimeDetected){"xsd:dateTime"
-        } else {NA}
-      )
+      if(!is.null(value)){
+        datetimeDetected <- class(value)[1]=="POSIXct"
+        object %>% rdf_add(
+          subject = subject,
+          predicate = namespace_integrator(names(dataProperties)[i],namespaces),
+          object = if(datetimeDetected){parsedate::format_iso_8601(value)} else {value},
+          subjectType = "uri",objectType = "literal",
+          datatype_uri = if(datetimeDetected){"xsd:dateTime"
+          } else {as.character(NA)}
+        )
+      }
     }
   }
   if(!is.null(objectProperties)){

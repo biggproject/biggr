@@ -782,9 +782,9 @@ get_change_point_temperature_v2 <- function(consumptionData, weatherData,
     if(group_var){
       #newdata$group <- as.factor(newdata$group)
       form <- if(hdd_slope && cdd_slope){
-        as.formula("consumption ~ 1 + hdd:group + cdd:group + heating_intercept:group + cooling_intercept*group")
-      } else if (hdd_slope) { as.formula("consumption ~ 1 + hdd:group + heating_intercept*group")
-      } else if (cdd_slope) { as.formula("consumption ~ 1 + cdd:group + cooling_intercept*group")
+        as.formula("consumption ~ 0 + hdd:group + cdd:group + heating_intercept:group + cooling_intercept:group")
+      } else if (hdd_slope) { as.formula("consumption ~ 0 + hdd:group + heating_intercept:group")
+      } else if (cdd_slope) { as.formula("consumption ~ 0 + cdd:group + cooling_intercept:group")
       } else {consumption ~ group}
     } else {
       form <- if(hdd_slope && cdd_slope){
@@ -828,7 +828,7 @@ get_change_point_temperature_v2 <- function(consumptionData, weatherData,
   tbals <- seq(ceiling(quantile(weatherData$temperature,0.1,na.rm=T)),
                floor(quantile(weatherData$temperature,0.9,na.rm=T)),
                by=1)
-  hysteresis <- seq(1,3,by=1)
+  hysteresis <- seq(1,6,by=1)
   pars <- expand.grid(tbals,hysteresis)
   pars <- data.frame(
     "tbalh"=pars$Var1-pars$Var2,
@@ -1859,7 +1859,6 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
     transformationSentences <- list()
   }
   for (feature in unique(c(names(transformationSentences), features))){
-      #print(feature)
       #feature <- unique(c(names(transformationSentences), features))[3]
       trFields <- list()
       trData <- NULL
@@ -1874,12 +1873,16 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
             trFunc <- gsub("clustering_wrapper\\(","clustering_wrapper\\(results=transformationResults[[feature]],",trFunc,perl = T)
           }
           trDataElem <- eval(parse(text=trFunc))
+          trOriginal <- NULL
           if(grepl("clustering_wrapper\\(",trFunc)){
             transformationResults[[feature]] <- trDataElem
             trDataElem <- setNames(trDataElem$labels,feature)
           } else if(any(class(trDataElem) %in% c("factor","character","logical"))){
-            trDataElem <- fastDummies::dummy_cols(as.factor(trDataElem),remove_selected_columns = T)
+            trDataElem <- fastDummies::dummy_cols(as.factor(trDataElem),remove_selected_columns = F)
             colnames(trDataElem) <- gsub(".data",trFuncName,colnames(trDataElem))
+            trOriginal <- data.frame(trDataElem[,1])
+            colnames(trOriginal)[1] <- colnames(trDataElem)[1]
+            trDataElem[,1] <- NULL
           } else if(any(class(trDataElem) %in% c("numeric","integer"))){
             trDataElem <- data.frame(trDataElem)
             colnames(trDataElem) <- trFuncName
@@ -1887,7 +1890,13 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
             colnames(trDataElem) <- trFuncName
           }
           
-          trData <- if(!is.null(trData)){cbind(trData,trDataElem)} else {trDataElem}
+          trData <- 
+            if(!is.null(trData)){
+              cbind(trData,trDataElem)
+            } else {trDataElem}
+          if(!is.null(trOriginal)){ 
+            trData <- cbind(trOriginal,trData)
+          }
           if(feature %in% features){
             trFields[[length(trFields)+1]] <- colnames(trDataElem)
           }
@@ -1896,14 +1905,18 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
       } else {
         trData <- tryCatch({
           aux <- eval(parse(text=feature))
+          orig <- NULL
           aux <- if(is.list(aux)){
             as.data.frame(aux)
           } else {
             data.frame(aux)
           }
           if(ncol(aux)==1 && any(class(aux[,1]) %in% c("factor","character"))){
-            aux <- fastDummies::dummy_cols(as.factor(aux[,1]),remove_selected_columns = T)
+            aux <- fastDummies::dummy_cols(as.factor(aux[,1]),remove_selected_columns = F)
             colnames(aux) <- gsub(".data",feature,colnames(aux))
+            orig <- data.frame(aux[,1])
+            colnames(orig)[1] <- colnames(aux)[1]
+            aux[,1] <- NULL
           } else if(ncol(aux)==1){
             aux <- setNames(aux,feature)
           }
@@ -1926,6 +1939,9 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
               )
             }
           })
+        if(!is.null(orig)){ 
+          trData <- cbind(orig,trData)
+        }
         trFields[[length(trFields)+1]] <- if(ncol(aux)==1){feature}else{
           colnames(aux)}
       }
