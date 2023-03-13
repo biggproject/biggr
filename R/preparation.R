@@ -358,7 +358,8 @@ detect_profiled_data <- function(data){
                                tz = attr(localtime[1],"tzone"))
       ) %>%
       group_by(hourly_lt) %>%
-      summarise(Qe=sum(Qe),date=first(date),hour=first(hour)) %>%
+      summarise(Qe=sum(Qe),QeMin=min(Qe,na.rm=T),QeMax=max(Qe,na.rm=T),date=first(date),hour=first(hour)) %>%
+      filter((QeMax-QeMax)>1) %>%
       pivot_wider(id_cols=date,names_from=hour,values_from = Qe,names_sort = T)
     # Find duplicated days having same daily pattern. Same
     # consumption in each hour of the day

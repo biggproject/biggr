@@ -872,7 +872,8 @@ parse_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
 
 get_device_aggregators_by_building <- function(
   buildingsRdf, timeseriesObject=NULL, allowedBuildingSubjects=NULL, 
-  allowedMeasuredProperties=NULL, useEstimatedValues=F, ratioCorrection=T){
+  allowedMeasuredProperties=NULL, useEstimatedValues=F, ratioCorrection=T,
+  containsEEMs=F){
   
   # Get formulas and associated metadata for each building and device aggregator
   devagg_buildings <- get_all_device_aggregators(buildingsRdf)
@@ -888,6 +889,13 @@ get_device_aggregators_by_building <- function(
   if(!is.null(allowedMeasuredProperties)){
     devagg_buildings <- devagg_buildings[
       devagg_buildings$measuredProperty %in% allowedMeasuredProperties,
+    ]
+  }
+  
+  # Filter only buildings that contains EEMs
+  if(containsEEMs==T){
+    devagg_buildings <- devagg_buildings[
+      devagg_buildings$hasEEMs %in% allowedMeasuredProperties,
     ]
   }
   

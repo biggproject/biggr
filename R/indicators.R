@@ -183,11 +183,11 @@ generate_longitudinal_benchmarking_indicators <- function (
         indDfAuxMeta <- data.frame(
           `individualSubject` = namespace_integrator(buildingSubject, namespaces),
           `keyPerformanceIndicator` = indicator,
-          `measuredProperty` = measuredProperty,
-          `measuredPropertyComponent` = measuredPropertyComponent,
+          `measuredProperty` = namespace_integrator(paste0("bigg:",measuredProperty), namespaces),
+          `measuredPropertyComponent` = namespace_integrator(paste0("bigg:",measuredPropertyComponent), namespaces),
           `unit` = namespace_integrator(indicatorsUnitsSubjects[[indicator]], namespaces),
           `frequency` = frequency,
-          `modelSubject` = modelSubject
+          `modelSubject` = namespace_integrator(modelSubject, namespaces)
         )
         results_ts[[singleKPISubjectHash]]$full <- cbind(indDfAux,indDfAuxMeta)
         results_ts[[singleKPISubjectHash]]$full <- 

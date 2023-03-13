@@ -782,15 +782,15 @@ get_change_point_temperature_v2 <- function(consumptionData, weatherData,
     if(group_var){
       #newdata$group <- as.factor(newdata$group)
       form <- if(hdd_slope && cdd_slope){
-        as.formula("consumption ~ 0 + hdd:group + cdd:group + heating_intercept:group + cooling_intercept:group")
-      } else if (hdd_slope) { as.formula("consumption ~ 0 + hdd:group + heating_intercept:group")
-      } else if (cdd_slope) { as.formula("consumption ~ 0 + cdd:group + cooling_intercept:group")
+        as.formula("consumption ~ group + hdd:group + cdd:group")# + heating_intercept:group + cooling_intercept:group")
+      } else if (hdd_slope) { as.formula("consumption ~ group + hdd:group")# + heating_intercept:group")
+      } else if (cdd_slope) { as.formula("consumption ~ group + cdd:group")# + cooling_intercept:group")
       } else {consumption ~ group}
     } else {
       form <- if(hdd_slope && cdd_slope){
-        as.formula("consumption ~ 0 + hdd + cdd")
-      } else if (hdd_slope) { as.formula("consumption ~ 0 + hdd")
-      } else if (cdd_slope) { as.formula("consumption ~ 0 + cdd")
+        as.formula("consumption ~ 1 + hdd + cdd")
+      } else if (hdd_slope) { as.formula("consumption ~ 1 + hdd")
+      } else if (cdd_slope) { as.formula("consumption ~ 1 + cdd")
       } else {consumption ~ 1}
     }
     mod <- lm(formula = form, data = newdata)
@@ -1416,7 +1416,7 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
                ratioDailyConsumptionHdd = paste0("ratioConsumptionHdd",balanceOutdoorTemperatures),
                ratioDailyConsumptionCdd = paste0("ratioConsumptionCdd",balanceOutdoorTemperatures),
                dailyBaseloadConsumptionGAM = "baseload",
-               residualsEnergySignature = "residualsEnergySignature",
+               residualsEnergySignatureGAM = "residualsEnergySignature",
                positiveResidualsEnergySignatureGAM = "positiveResidualsEnergySignature",
                negativeResidualsEnergySignatureGAM = "negativeResidualsEnergySignature",
                residualsEnergySignature = paste0("residualsEnergySignature",balanceOutdoorTemperatures),
@@ -1481,6 +1481,7 @@ make.affinity <- function(S, n.neighboors = 2) {
 #' @return Distance between vectors
 similarity <- function(x1, x2, alpha = 1) {
   exp(-alpha * norm(as.matrix(x1 - x2), type = "F"))
+  #norm(as.matrix(x1 - x2), type = "F")
 }
 
 #' Calculate similarity matrix
@@ -1565,8 +1566,8 @@ make.similarity <- function(my.data, similarity) {
 
 clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature, 
                             localTimeZone, kMax, kMin, inputVars, loadCurveTransformation, 
-                            nDayParts, balanceOutdoorTemperatures, ignoreDates = c(), holidaysDates = c(),
-                            normalisationMethod = "range01") {
+                            nDayParts, balanceOutdoorTemperatures, nNeighboursAffinity = 7,
+                            ignoreDates = c(), holidaysDates = c(), normalisationMethod = "range01") {
   # data = df
   # consumptionFeature = "Qe"
   # outdoorTemperatureFeature = "temperature"
@@ -1602,41 +1603,52 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
     select(time, all_of(consumptionFeature), all_of(outdoorTemperatureFeature)) %>% 
     filter(!(lubridate::date(time) %in% ignoreDates)) %>% 
     rename(consumption = consumptionFeature, temperature = outdoorTemperatureFeature)
+  # inputVars <- c("dailyMinConsumption","loadCurves","dailyHdd",
+  #                "dailyCdd","daysWeekend")
   tmp_norm <- normalise_dlc(data = tmp, localTimeZone, transformation = loadCurveTransformation, 
                             inputVars, nDayParts, balanceOutdoorTemperatures = balanceOutdoorTemperatures, 
                             holidays = holidaysDates, scalingAttr = NULL, 
                             method = normalisationMethod)
   inputVars <- tmp_norm$inputVars
   S <- make.similarity(apply(tmp_norm$values,1:2,as.numeric), similarity)
-  A <- make.affinity(S, 3)
+  A <- make.affinity(S, nNeighboursAffinity)
   D <- diag(apply(A, 1, sum))
   U <- D - A
+  "%^%" <- function(M, power){
+    with(eigen(M), vectors %*% (values^power * solve(vectors)))}
+  L <- (D %^% (-1/2)) %*% A %*% (D %^% (-1/2))
   evL <- eigen(U, symmetric = TRUE)
-  evSpectrum <- log(rev(evL$values)[1:kMax] + 1e-12)
-  evSpectrum <- evSpectrum - lag(evSpectrum, 1)
-  evSpectrum[1] <- 0
+  evSpectrum <- log(rev(evL$values)[1:(kMax+1)] - min(rev(evL$values)[1:(kMax+1)]) + 1e-12)
+  evSpectrum <- (evSpectrum - lag(evSpectrum, 1))[-1]
+   
   # if ((which.max(evSpectrum) - 1) <= 3) {
   #   evSpectrum[1:which.max(evSpectrum)] <- NA
   # }
   k <- max(kMin,which.max(evSpectrum))
-  spectral_clust <- lapply(1:20,function(i)tryCatch({
-    # kernlab::specc(apply(tmp_norm$values,1:2,as.numeric), centers = k,
-    #                iterations = 400, mod.sample = 0.75, na.action = na.omit)
-    kernlab::specc(apply(tmp_norm$values,1:2,as.numeric), centers = k, 
-                   kpar="local",kernel="polydot",
-                   #nystrom.red = T, nystrom.sample = nrow(tmp_norm$values)[1]/6,
-          iterations = 80000, na.action = na.omit)
-  }, error = function(e) {
-    kernlab::specc(apply(tmp_norm$values,1:2,as.numeric), centers = k,
-                   iterations = 8000, na.action = na.omit)
-  }))
-  spectral_clust <- spectral_clust[[
-    which.min(mapply(spectral_clust,FUN=function(x)if(class(spectral_clust[[1]])=="specc"){sum(x@withinss,na.rm=T)}else{Inf}))
-  ]]
+  if(k>1){
+    spectral_clust <- lapply(1:20,function(i)tryCatch({
+      # kernlab::specc(apply(tmp_norm$values,1:2,as.numeric), centers = k,
+      #                iterations = 400, mod.sample = 0.75, na.action = na.omit)
+      kernlab::specc(apply(tmp_norm$values,1:2,as.numeric), centers = k, 
+                     kpar="local",kernel="polydot",
+                     #nystrom.red = T, nystrom.sample = nrow(tmp_norm$values)[1]/6,
+            iterations = 80000, na.action = na.omit)
+    }, error = function(e) {
+      kernlab::specc(apply(tmp_norm$values,1:2,as.numeric), centers = k,
+                     iterations = 8000, na.action = na.omit)
+    }))
+    spectral_clust <- spectral_clust[[
+      which.min(mapply(spectral_clust,FUN=function(x)if(class(spectral_clust[[1]])=="specc"){sum(x@withinss,na.rm=T)}else{Inf}))
+    ]]
+  } else {
+    spectral_clust <- 1
+  }
   spectral_clust_valid <- (!(class(spectral_clust)[1] == "numeric"))
-  s <- sprintf("%02i",as.numeric(as.character(spectral_clust)))
-  if (spectral_clust_valid == TRUE) 
+  if (spectral_clust_valid == TRUE){
     s <- sprintf("%02i",as.numeric(as.character(spectral_clust@.Data)))
+  } else {
+    s <- sprintf("%02i",as.numeric(as.character(spectral_clust)))
+  }
   cluster_results <- data.frame(date = tmp_norm$dates[complete.cases(tmp_norm$values)], s = s)
   tmp <- tmp %>% 
     mutate(localtime = with_tz(time, localTimeZone), 
@@ -1652,7 +1664,7 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
       summarise(across(.fns=mean)) %>% as.data.frame(.)
   } else {
     cluster_centroids <- tmp_norm$values %>% summarize_all(mean, na.rm = T)
-    cluster_centroids <- data.frame(s = "01", t(cluster_centroids))
+    cluster_centroids$s <- "01"
   }
   cluster_centroids <- cluster_centroids %>% 
     tibble::remove_rownames() %>% 
