@@ -1684,7 +1684,7 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
                "s"=cluster_results$s), 
     localTimeZone, holidaysDates, inplace = T)
   cluster_results_df$s <- as.factor(cluster_results_df$s)
-  mod <- ranger::ranger(s~.,data = cluster_results_df[,c("s","dayYear","weekday")])
+  mod <- ranger::ranger(s~.,data = cluster_results_df[,c("s","month","dayYear","weekday")])
   # plot(as.numeric(cluster_results$s))
   # points(as.numeric(as.character(mod$predictions)),col="red")  
   

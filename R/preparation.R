@@ -864,7 +864,7 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
       data = data,
       temperatureFeature = temperatureColumn,
       localTimeZone = tz,
-      baseTemperature = seq(14,20,by=1),
+      baseTemperature = seq(14,20,by=2),
       mode = "heating",
       hysteresisBaseTemperature = 0,
       outputFrequency = "P1D",
@@ -873,7 +873,7 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
       data = data,
       temperatureFeature = temperatureColumn,
       localTimeZone = tz,
-      baseTemperature = seq(20,26,by=1),#seq(16,28,by=3),
+      baseTemperature = seq(20,26,by=2),#seq(16,28,by=3),
       mode = "cooling",
       hysteresisBaseTemperature = 0,
       outputFrequency = "P1D",
@@ -933,7 +933,6 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
         dataM$HDD <- unlist(dataM[cases$HDD[i]])
         dataM$CDD <- unlist(dataM[cases$CDD[i]])
         dataM$time_ <- as.numeric(dataM$time - dataM$time[1])
-        dataM$time_2 <- (dataM$time_)^2
         if(mean(dataM$HDD)==0 || mean(dataM$CDD)==0) return(NA)
         if(nrow(dataM)>=(36*30)){
           mod <- lm(consumption ~ 0 + weekday:disruptive_f + HDD:disruptive_f + CDD:disruptive_f, data=dataM)
@@ -1025,7 +1024,7 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
     opt_function = opt_function,
     features = params,
     maxiter = 6,
-    popSize = 32,
+    popSize = 24,
     dataM = data_daily,
     checkFor = checkFor,
     minIniDate = minIniDate,

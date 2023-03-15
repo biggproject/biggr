@@ -92,6 +92,59 @@ get_KPI_by_building <- function(buildingsRdf,timeseriesObject,buildingSubject,
   return(timeseriesKPI)
 }
 
+get_building_eems <- function(buildingsRdf, buildingSubjects=NULL){
+  result <- suppressMessages(buildingsRdf %>% rdf_query(paste0(
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
+    SELECT ?buildingSubject ?buildingElement ?eemSubject
+    WHERE {
+      {
+        SELECT ?buildingSubject ?buildingElement ?eemSubject
+        WHERE {
+          ?buildingSubject a bigg:Building .',
+          ifelse(!is.null(buildingSubjects),paste0('
+            FILTER ( ?buildingSubject IN (<',paste(buildingSubjects,collapse='>,<'),'>) ) .'),
+                 ''),
+          '?buildingSubject bigg:hasSpace ?bs .
+          ?bs bigg:isAssociatedWithElement ?buildingElement .
+        }
+      }
+      optional {?buildingElement bigg:isAffectedByMeasure ?eemSubject .}
+    }')))
+  return(if(length(result)>0) {
+    result
+  } else {NULL})
+}
+
+get_eem_details <- function(buildingsRdf, eemSubjects=NULL){
+  result <- suppressMessages(buildingsRdf %>% rdf_query(paste0(
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
+    SELECT ?eemSubject ?ExchangeRate ?Description ?Investment ?Date ?Currency ?Type ?AffectationShare
+    WHERE {
+      ?eemSubject a bigg:EnergyEfficiencyMeasure .',
+      ifelse(!is.null(eemSubjects),paste0('
+            FILTER ( ?eemSubject IN (<',paste(eemSubjects,collapse='>,<'),'>) ) .'),'
+            '),
+      'optional { ?eemSubject bigg:energyEfficiencyMeasureCurrencyExchangeRate ?ExchangeRate .}
+       optional { ?eemSubject bigg:energyEfficiencyMeasureDescription ?Description .}
+       optional { ?eemSubject bigg:energyEfficiencyMeasureInvestment ?Investment .}
+       optional { ?eemSubject bigg:energyEfficiencyMeasureOperationalDate ?Date .}
+       optional { ?eemSubject bigg:hasEnergyEfficiencyMeasureInvestmentCurrency ?Currency .}
+       optional { ?eemSubject bigg:hasEnergyEfficiencyMeasureType ?Type .}
+       optional { ?eemSubject bigg:shareOfAffectedElement ?AffectationShare .}
+    }')))
+  return(if(length(result)>0) {
+    result
+  } else {NULL})
+}
+
 get_all_device_aggregators <- function(buildingsRdf){
   result <- suppressMessages(buildingsRdf %>% rdf_query(paste0(
     paste0(mapply(function(i){
@@ -104,7 +157,7 @@ get_all_device_aggregators <- function(buildingsRdf){
       ?measuredProperty
     WHERE {
       {
-        SELECT ?buildingSubject ?s 
+        SELECT ?buildingSubject ?s
         WHERE {
           ?buildingSubject a bigg:Building .
           ?buildingSubject bigg:hasSpace ?bs .
@@ -118,7 +171,7 @@ get_all_device_aggregators <- function(buildingsRdf){
       optional {?s bigg:hasDeviceAggregatorProperty ?measuredProperty .}
     }')))
   result$measuredProperty <- gsub(paste0(bigg_namespaces,collapse="|"),"",
-                                       result$measuredProperty)
+                                  result$measuredProperty)
   result$deviceAggregatorFrequency <- ifelse(mapply(function(x)!is.na(x),
                                                     as.period(result$deviceAggregatorFrequency)),
                                              result$deviceAggregatorFrequency,NA)
@@ -873,7 +926,7 @@ parse_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
 get_device_aggregators_by_building <- function(
   buildingsRdf, timeseriesObject=NULL, allowedBuildingSubjects=NULL, 
   allowedMeasuredProperties=NULL, useEstimatedValues=F, ratioCorrection=T,
-  containsEEMs=F){
+  containsEEMs=F, alignGreaterThanHourlyFrequencyToYearly=F){
   
   # Get formulas and associated metadata for each building and device aggregator
   devagg_buildings <- get_all_device_aggregators(buildingsRdf)
@@ -893,10 +946,13 @@ get_device_aggregators_by_building <- function(
   }
   
   # Filter only buildings that contains EEMs
-  if(containsEEMs==T){
-    devagg_buildings <- devagg_buildings[
-      devagg_buildings$hasEEMs %in% allowedMeasuredProperties,
-    ]
+  if(containsEEMs==T & nrow(devagg_buildings)>0){
+    eems_buildings <- get_building_eems(buildingsRdf, unique(devagg_buildings$buildingSubject))
+    eems_buildings <- eems_buildings %>% group_by(buildingSubject) %>% summarise(
+      EEMexists = sum(is.character(eemSubject))>0
+    ) %>% ungroup()
+    devagg_buildings <- devagg_buildings %>% left_join(eems_buildings, by = "buildingSubject") %>% 
+      filter(EEMexists)
   }
   
   all_buildings_timeseries <- 
@@ -906,8 +962,12 @@ get_device_aggregators_by_building <- function(
        aux$deviceAggregatorFrequency <- ifelse(
          is.na(aux$deviceAggregatorFrequency), 
          "P1Y", aux$deviceAggregatorFrequency)
-       largerFrequency <- aux$deviceAggregatorFrequency[
-         which.max(lubridate::seconds(lubridate::period(aux$deviceAggregatorFrequency)))]
+       largerFrequency <-
+         aux$deviceAggregatorFrequency[
+          which.max(lubridate::seconds(lubridate::period(aux$deviceAggregatorFrequency)))]
+       if(alignGreaterThanHourlyFrequencyToYearly && as.period(largerFrequency)>as.period("PT1H")){
+         largerFrequency <- "P1Y"
+       }
        dfs <- setNames(lapply(unique(aux$deviceAggregatorName),
          function(devAggName){
            #devAggName = "totalGasConsumption"
