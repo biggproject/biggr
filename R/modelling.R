@@ -347,13 +347,15 @@ ARX <- function(input_parameters){
     loop = NULL,
     fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, 
                    transformationSentences=NULL, logOutput=T, trainMask=NULL,
-                   numericStatusVariable=NULL, characterStatusVariable=NULL) {
+                   numericStatusVariable=NULL, characterStatusVariable=NULL,
+                   maxPredictionValue=NULL, weatherDependenceByCluster=NULL, 
+                   clusteringResults=NULL, ...) {
       
-      x <<- x
-      y <<- y
-      transformationSentences <<- transformationSentences
-      formulaTerms <<- formulaTerms
-      params <<- param
+      # x <<- x
+      # y <<- y
+      # transformationSentences <<- transformationSentences
+      # formulaTerms <<- formulaTerms
+      # params <<- param
       #param <- as.data.frame(bestParamsQe)
       
       features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
@@ -370,10 +372,9 @@ ARX <- function(input_parameters){
       
       # Transform input data if it is needed
       transformation <- data_transformation_wrapper(
-        data=data, 
-        features=features, 
-        transformationSentences = transformationSentences, 
-        param = param)
+        data=data, features=features, transformationSentences = transformationSentences, 
+        param = param, weatherDependenceByCluster = weatherDependenceByCluster,
+        clusteringResults = clusteringResults)
       data <- transformation$data
       features <- transformation$features
       featuresAll <- transformation$featuresAll
@@ -447,6 +448,7 @@ ARX <- function(input_parameters){
         features = features,
         outputName = outputName,
         logOutput = logOutput,
+        maxPredictionValue = maxPredictionValue,
         outputInit = setNames(
           list(data[min(nrow(data),nrow(data)-maxLag+1):nrow(data),outputName]),
           outputName
@@ -458,16 +460,17 @@ ARX <- function(input_parameters){
         param = param,
         maxLag = maxLag,
         transformationSentences = transformationSentences,
-        transformationResults = transformationResults
+        transformationResults = transformationResults,
+        weatherDependenceByCluster = weatherDependenceByCluster,
+        clusteringResults = clusteringResults
       )
       mod
       
     },
     predict = function(modelFit, newdata, submodels, forceGlobalInputFeatures=NULL, forceInitInputFeatures=NULL,
                        forceInitOutputFeatures=NULL, forceOneStepPrediction=F) {
-      
-      newdata <<- newdata
-      modelFit <<- modelFit
+      # newdata <<- newdata
+      # modelFit <<- modelFit
       
       newdata <- as.data.frame(newdata)
       features <- modelFit$meta$features[
@@ -476,6 +479,9 @@ ARX <- function(input_parameters){
       maxLag <- modelFit$meta$maxLag
       logOutput <- modelFit$meta$logOutput
       outputName <- modelFit$meta$outputName
+      maxPredictionValue <- modelFit$meta$maxPredictionValue
+      weatherDependenceByCluster <- modelFit$meta$weatherDependenceByCluster
+      clusteringResults <- modelFit$meta$clusteringResults
       
       # Initialize the global input features if needed
       # Change the inputs if are specified in forceGlobalInputFeatures
@@ -541,7 +547,9 @@ ARX <- function(input_parameters){
       # Transform input data if it is needed
       transformation <- data_transformation_wrapper(
         data=newdata, features=features, transformationSentences = transformationSentences, 
-        transformationResults = transformationResults, param = param)
+        transformationResults = transformationResults, param = param, 
+        weatherDependenceByCluster = weatherDependenceByCluster,
+        clusteringResults = clusteringResults)
       newdata <- transformation$data
       features <- transformation$features
       featuresAll <- transformation$featuresAll
@@ -591,11 +599,17 @@ ARX <- function(input_parameters){
       } else {
         newdata[,outputName] <- predict(modelFit,newdata)
       }
-      if(logOutput) { 
+      result <- if(logOutput) { 
         exp(newdata[,outputName])
       } else {
         newdata[,outputName]
       }
+      if (!is.null(maxPredictionValue)){
+        ifelse(result > maxPredictionValue, maxPredictionValue, result)
+      } else {
+        result
+      }
+      
       
     },
     prob = NULL,
