@@ -348,8 +348,9 @@ ARX <- function(input_parameters){
     fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, 
                    transformationSentences=NULL, logOutput=T, trainMask=NULL,
                    numericStatusVariable=NULL, characterStatusVariable=NULL,
-                   maxPredictionValue=NULL, weatherDependenceByCluster=NULL, 
-                   clusteringResults=NULL, ...) {
+                   maxPredictionValue=NULL, minPredictionValue=NULL,
+                   weatherDependenceByCluster=NULL, clusteringResults=NULL, 
+                   ...) {
       
       # x <<- x
       # y <<- y
@@ -449,6 +450,7 @@ ARX <- function(input_parameters){
         outputName = outputName,
         logOutput = logOutput,
         maxPredictionValue = maxPredictionValue,
+        minPredictionValue = minPredictionValue,
         outputInit = setNames(
           list(data[min(nrow(data),nrow(data)-maxLag+1):nrow(data),outputName]),
           outputName
@@ -468,7 +470,7 @@ ARX <- function(input_parameters){
       
     },
     predict = function(modelFit, newdata, submodels, forceGlobalInputFeatures=NULL, forceInitInputFeatures=NULL,
-                       forceInitOutputFeatures=NULL, forceOneStepPrediction=F) {
+                       forceInitOutputFeatures=NULL, forceOneStepPrediction=F, predictionIntervals=F) {
       # newdata <<- newdata
       # modelFit <<- modelFit
       
@@ -480,6 +482,7 @@ ARX <- function(input_parameters){
       logOutput <- modelFit$meta$logOutput
       outputName <- modelFit$meta$outputName
       maxPredictionValue <- modelFit$meta$maxPredictionValue
+      minPredictionValue <- modelFit$meta$minPredictionValue
       weatherDependenceByCluster <- modelFit$meta$weatherDependenceByCluster
       clusteringResults <- modelFit$meta$clusteringResults
       
@@ -594,23 +597,64 @@ ARX <- function(input_parameters){
                                     # forceInitInputFeatures = forceInitInputFeatures,
                                     # forceInitOutputFeatures = forceInitOutputFeatures
                                     )
-          newdata[i,outputName] <- predict(modelFit,newdata[i,])
+          if(predictionIntervals){
+            prediction_results <- as.data.frame(
+              predict(object = modelFit, newdata = newdata[i,], interval = "prediction",
+                      level = 0.93-0.07)) %>%
+              rename("average"="fit")
+            prediction_results$sigma <- (prediction_results$upr - prediction_results$lwr)/
+              (qnorm(0.93)-qnorm(0.07))
+            newdata[i,paste0(outputName,"_",colnames(prediction_results))] <- prediction_results
+          } else {
+            newdata[i,outputName] <- predict(modelFit,newdata[i,])
+          }
         }
       } else {
-        newdata[,outputName] <- predict(modelFit,newdata)
+        if(predictionIntervals){
+          prediction_results <- as.data.frame(
+            predict(object = modelFit, newdata = newdata, interval = "prediction",
+                    level = 0.93-0.07)) %>%
+            rename("average"="fit")
+          prediction_results$sigma <- (prediction_results$upr - prediction_results$lwr)/
+            (qnorm(0.93)-qnorm(0.07))
+          newdata[,paste0(outputName,"_",colnames(prediction_results))] <- prediction_results
+        } else {
+          newdata[,outputName] <- predict(modelFit,newdata)
+        }
       }
-      result <- if(logOutput) { 
-        exp(newdata[,outputName])
-      } else {
-        newdata[,outputName]
-      }
+      result <- 
+        if(logOutput) { 
+          if(predictionIntervals){
+            exp(newdata[,paste0(outputName,"_",colnames(prediction_results))])
+          } else {
+            exp(newdata[,outputName])
+          }
+        } else {
+          if(predictionIntervals){
+            newdata[,paste0(outputName,"_",colnames(prediction_results))]
+          } else {
+            newdata[,outputName]
+          }
+        }
       if (!is.null(maxPredictionValue)){
-        ifelse(result > maxPredictionValue, maxPredictionValue, result)
-      } else {
-        result
+        if(predictionIntervals){
+          mapply(function(r){
+              ifelse(result[,r] > maxPredictionValue, maxPredictionValue, result[,r])},
+            colnames(result))
+        } else {
+          ifelse(result > maxPredictionValue, maxPredictionValue, result)
+        }
       }
-      
-      
+      if (!is.null(minPredictionValue)){
+        if(predictionIntervals){
+          mapply(function(r){
+              ifelse(result[,r] < minPredictionValue, minPredictionValue, result[,r])},
+            colnames(result))
+        } else {
+          ifelse(result < minPredictionValue, minPredictionValue, result)
+        }
+      }
+      result
     },
     prob = NULL,
     varImp = NULL,
@@ -1448,6 +1492,79 @@ optimize <- function(opt_criteria, opt_function, features, suggestions = NULL,
 #' Hyperparameter tuning via model fitting optimization. See optimize
 #' documentation for more details
 hyperparameters_tuning <- optimize
+
+###
+### Misc functions ----
+###
+
+# Simulate the prediction intervals based on the average estimated
+#  value and standard deviation for each predicted timestep 
+#  and aggregate them to a certain output frequency
+
+simulate_prediction_intervals <- function(predictionResults, outputFrequency, 
+                                          timeColumn="time", funAggregation="SUM", 
+                                          minPredictionValue=NULL, nSim=1000, estimate=F){
+  
+  results <- data.frame(
+    "time"=rep(predictionResults[,timeColumn],each=nSim),
+    "sim"=1:nSim,
+    "value"=unlist(lapply(FUN=function(i){
+      suppressWarnings(rnorm(nSim,predictionResults[i,"mean"],predictionResults[i,"sigma"]))},
+      1:nrow(predictionResults))))
+  if(!is.null(minPredictionValue)){
+    results$value <- ifelse(results$value > minPredictionValue, results$value, minPredictionValue)
+  }
+  results <- results %>% {
+    if(is.null(outputFrequency)){
+      group_by(.,
+               time = first(time), sim
+      )
+    } else {
+      group_by(.,
+               time = lubridate::floor_date(time, lubridate::period(outputFrequency),
+                                            week_start = getOption("lubridate.week.start", 1)), sim
+      )
+    }} %>% 
+    summarise(
+      value = if(all(is.na(value))){NA}else{
+        if(funAggregation=="SUM"){
+          if(estimate){
+            mean(value,na.rm=T)*length(value)
+          } else {
+            sum(value,na.rm=T)
+          }
+        } else if(funAggregation=="MEAN"){
+          mean(value,na.rm=T)
+        }
+      }
+    ) %>% 
+    ungroup() %>% {
+      if(is.null(outputFrequency)){
+        group_by(.,
+                 time = first(time)
+        )
+      } else {
+        group_by(.,
+                 time = lubridate::floor_date(time, lubridate::period(outputFrequency),
+                                              week_start = getOption("lubridate.week.start", 1))
+        )
+      }} %>%
+    summarise(
+      "q2.5" = quantile(value,0.025,na.rm=T),
+      "q5" = quantile(value,0.05,na.rm=T),
+      "q10" = quantile(value,0.10,na.rm=T),
+      "q25" = quantile(value,0.10,na.rm=T),
+      "q50" = quantile(value,0.5,na.rm=T),
+      "q90" = quantile(value,0.9,na.rm=T),
+      "q95" = quantile(value,0.95,na.rm=T),
+      "q97.5" = quantile(value,0.975,na.rm=T),
+      "mean" = mean(value,na.rm=T),
+      "sd" = sd(value,na.rm=T)
+    ) %>% 
+    ungroup()
+  return(as.data.frame(results))
+}
+
 
 ###
 ### Reformulation of Caret package functions ----
