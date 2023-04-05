@@ -230,11 +230,38 @@ generate_longitudinal_benchmarking_indicators <- function (
 
 generate_eem_assessment_indicators <- function(
     data, indicators, measuredProperty, measuredPropertyComponent, frequencies, 
-    buildingId, buildingSubject, eemData, eemProjectSubject, timeColumn, localTimeZone, 
+    buildingId, buildingSubject, timeColumn, localTimeZone, eemProjectDf,
     consumptionColumn, indicatorsTimeAggregationFunctions, indicatorsUnitsSubjects, baselineConsumptionColumn = NULL, 
     buildingGrossFloorArea = 0, carbonEmissionsColumn = NULL, energyPriceColumn = NULL, 
     modelName = NULL, modelId = NULL, modelLocation = NULL, modelStorageInfrastructureSubject = NULL, 
     modelTypeSubject = NULL, estimateWhenAggregate = T, prevResults = NULL) {
+  
+  # data = results
+  # indicators = unlist(settings$Indicators)
+  # measuredProperty = measuredProperty
+  # measuredPropertyComponent = measuredPropertyComponent
+  # frequencies = settings$Frequencies
+  # buildingId = buildingId
+  # buildingSubject = buildingSubject
+  # timeColumn = "time"
+  # localTimeZone = tz
+  # consumptionColumn = 
+  #   paste0(measuredPropertyComponentsMapping[["after_eem"]][measuredPropertyComponent],".after_eem")
+  # indicatorsUnitsSubjects = settings$IndicatorsUnitsSubjects
+  # indicatorsTimeAggregationFunctions = settings$IndicatorsTimeAggregationFunctions
+  # baselineConsumptionColumn = 
+  #   paste0(measuredPropertyComponentsMapping[["counterfactual"]][measuredPropertyComponent],".counterfactual")
+  # buildingGrossFloorArea = buildingGrossFloorArea
+  # eemProjectDf = eems[eems$eemProjectId==strsplit(eemProject,"\\.")[[1]][2],]
+  # carbonEmissionsColumn = "Qe_emissionsFactor"
+  # energyPriceColumn = "Qe_price"
+  # modelName = modelName
+  # modelId = modelId
+  # modelLocation = modelSubject
+  # modelTypeSubject = "bigg:MODELTYPE-BaselineModel"
+  # modelStorageInfrastructureSubject = "bigg:MODELINFRA-MLFlow"
+  # estimateWhenAggregate = T
+  # prevResults = NULL
   
   buildingNamespace <- paste0(strsplit(buildingSubject, "#")[[1]][1], "#")
   namespaces <- bigg_namespaces
@@ -263,6 +290,8 @@ generate_eem_assessment_indicators <- function(
                                      namespaces = namespaces)
     }
   } else { modelSubject <- NA }
+  if(
+  eemProjectDf <- 
   for (indicator in indicators) {
     frequencies_ <- frequencies
     originalDataPeriod <- detect_time_step(data[, timeColumn])
