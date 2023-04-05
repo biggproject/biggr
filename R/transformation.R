@@ -828,7 +828,7 @@ get_change_point_temperature_v2 <- function(consumptionData, weatherData,
   tbals <- seq(ceiling(quantile(weatherData$temperature,0.1,na.rm=T)),
                floor(quantile(weatherData$temperature,0.9,na.rm=T)),
                by=1)
-  hysteresis <- seq(1,6,by=1)
+  hysteresis <- seq(1,4,by=1)
   pars <- expand.grid(tbals,hysteresis)
   pars <- data.frame(
     "tbalh"=pars$Var1-pars$Var2,
@@ -928,6 +928,31 @@ get_local_min_from_density <- function(values,onlyPosition=NULL,minNumberValleys
   if(!is.null(onlyPosition)){
     return(mins[onlyPosition])
   } else { return(mins) }
+}
+
+opt_boxcox_lambda <- function(x){
+  b <- MASS::boxcox(lm(x ~ 1))
+  return(b$x[which.max(b$y)])
+}
+
+boxcox_transformation <- function(x, lambda){
+  return(
+    if(lambda == 0){ 
+      log(x)
+    } else {
+      ((x ^ lambda) - 1) / lambda
+    }
+  )
+}
+
+inverse_boxcox_transformation <- function(x, lambda){
+  return(
+    if(lambda == 0){
+      exp(x)
+    } else {
+      exp(log(lambda*x+1)/lambda)
+    }
+  )
 }
 
 ### ---
@@ -1094,8 +1119,9 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
     mutate(
       weekday = lubridate::wday(date, week_start = getOption("lubridate.week.start",1)),
       isWeekend = weekday %in% c(6, 7), 
-      isHolidays = date %in% holidays) %>% 
-    group_by(date, weekday, isWeekend, isHolidays) %>% 
+      isHolidays = date %in% holidays,
+      month = month(date)) %>% 
+    group_by(date, weekday, isWeekend, isHolidays, month) %>% 
     summarize(
       consumption = mean(consumption, na.rm=T) * n_timesteps, 
       temperature = mean(temperature, na.rm = TRUE),
@@ -1146,11 +1172,11 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
   #           method = "fixed", breaks = levels_consumption[[d]], labels=F),
   #         sep="_"))
   #     )})), by="date")
-  qu = c(0.05,0.25,0.5,0.75,0.95)
+  qu = c(0.05,0.1,0.2,0.3,0.4,0.5,0.6,0.8,0.9,0.95)
   if(is.null(scalingAttr$gam)){
     gam_temperature <-
       qgam::mqgam(
-        consumption ~ 1 + s(temperature,bs="cs"),
+        consumption ~ 1 + s(temperature, bs="cs"),#weekday_f + s(temperature,bs="cs",by=weekday_f),
         data=tmp_daily,
         qu=qu
       )
@@ -1410,6 +1436,7 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
                daysWeek = c("weekday"),
                residualsGAM = sprintf("residualsGAM%s",qu*100),
                dailyConsumption = c("consumption"), 
+               month = c("month"), 
                dailyMinConsumption = c("minConsumption"), 
                dailyMaxConsumption = c("maxConsumption"), 
                dailyTemperature = c("temperature"),

@@ -155,7 +155,11 @@ PenalisedLM <- function(input_parameters){
       },
     loop = NULL,
     fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, 
-                   transformationSentences=NULL, forcePositiveTerms=NULL, logOutput=F) {
+                   transformationSentences=NULL, forcePositiveTerms=NULL, logOutput=F,
+                   trainMask=NULL, numericStatusVariable=NULL, characterStatusVariable=NULL,
+                   maxPredictionValue=NULL, minPredictionValue=NULL,
+                   weatherDependenceByCluster=NULL, clusteringResults=NULL, 
+                   ...) {
       # x<<-x
       # y<<-y
       # params <<- param
@@ -223,6 +227,11 @@ PenalisedLM <- function(input_parameters){
           }
         )
       )
+      
+      # Train the model
+      if(!is.null(trainMask)){
+        data <- data[trainMask,]
+      }
       
       # Train the model
       y <- model.frame(form,data)[,1]
@@ -357,7 +366,7 @@ ARX <- function(input_parameters){
       # transformationSentences <<- transformationSentences
       # formulaTerms <<- formulaTerms
       # params <<- param
-      #param <- as.data.frame(bestParamsQe)
+      # param <- as.data.frame(bestParamsQe)
       
       features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
       outputName <- all.vars(formulaTerms)[1]
@@ -369,7 +378,10 @@ ARX <- function(input_parameters){
       }
       # Join x and y in a single data.frame
       data <- if(is.data.frame(x)) x else as.data.frame(x)
-      if(logOutput) {data[,outputName] <- log(y)} else {data[,outputName] <- y}
+      if(logOutput) {
+        boxCoxLambda <- opt_boxcox_lambda(y+0.001)
+        data[,outputName] <- boxcox_transformation(y+0.001, boxCoxLambda)
+      } else {data[,outputName] <- y}
       
       # Transform input data if it is needed
       transformation <- data_transformation_wrapper(
@@ -439,8 +451,7 @@ ARX <- function(input_parameters){
         data <- data[trainMask,]
       }
       mod <- lm(
-        ARX_form,
-        data
+        formula=ARX_form, data=data 
       )
       
       # Store the meta variables
@@ -464,15 +475,16 @@ ARX <- function(input_parameters){
         transformationSentences = transformationSentences,
         transformationResults = transformationResults,
         weatherDependenceByCluster = weatherDependenceByCluster,
-        clusteringResults = clusteringResults
+        clusteringResults = clusteringResults,
+        boxCoxLambda = if(exists("boxCoxLambda")){boxCoxLambda}else{NULL} 
       )
       mod
       
     },
     predict = function(modelFit, newdata, submodels, forceGlobalInputFeatures=NULL, forceInitInputFeatures=NULL,
                        forceInitOutputFeatures=NULL, forceOneStepPrediction=F, predictionIntervals=F) {
-      # newdata <<- newdata
-      # modelFit <<- modelFit
+      newdata <<- newdata
+      modelFit <<- modelFit
       
       newdata <- as.data.frame(newdata)
       features <- modelFit$meta$features[
@@ -485,6 +497,7 @@ ARX <- function(input_parameters){
       minPredictionValue <- modelFit$meta$minPredictionValue
       weatherDependenceByCluster <- modelFit$meta$weatherDependenceByCluster
       clusteringResults <- modelFit$meta$clusteringResults
+      boxCoxLambda <- modelFit$meta$boxCoxLambda
       
       # Initialize the global input features if needed
       # Change the inputs if are specified in forceGlobalInputFeatures
@@ -625,9 +638,10 @@ ARX <- function(input_parameters){
       result <- 
         if(logOutput) { 
           if(predictionIntervals){
-            exp(newdata[,paste0(outputName,"_",colnames(prediction_results))])
+            inverse_boxcox_transformation(newdata[,paste0(outputName,"_",colnames(prediction_results))],
+                                          boxCoxLambda)-0.001
           } else {
-            exp(newdata[,outputName])
+            inverse_boxcox_transformation(newdata[,outputName],boxCoxLambda)-0.001
           }
         } else {
           if(predictionIntervals){
@@ -649,6 +663,338 @@ ARX <- function(input_parameters){
         if(predictionIntervals){
           mapply(function(r){
               ifelse(result[,r] < minPredictionValue, minPredictionValue, result[,r])},
+            colnames(result))
+        } else {
+          ifelse(result < minPredictionValue, minPredictionValue, result)
+        }
+      }
+      result
+    },
+    prob = NULL,
+    varImp = NULL,
+    predictors = function(x, ...) predictors(x$terms),
+    levels = NULL,
+    sort = function(x) x)
+  
+  return(modelFramework)
+}
+
+GLM <- function(input_parameters){
+  input_parameters$label <- input_parameters$parameter
+  modelFramework <- list(
+    label = "GLM",
+    library = NULL,
+    type = "Regression",
+    ## Define the ARX parameters
+    parameters = input_parameters,
+    grid = 
+      function(x, y, len = NULL, search = "grid") {
+        p <- ncol(x)
+        r <- nrow(x)
+        if(search == "grid") {
+          grid <- expand.grid(mapply(function(k)1:len,1:r))
+          colnames(grid) <- colnames(x)
+        } else {
+          grid <- expand.grid(mapply(function(k)sample(1:p, size = len),1:r))
+          colnames(grid) <- colnames(x)
+        }
+      },
+    loop = NULL,
+    fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, familyGLM,
+                   transformationSentences=NULL, trainMask=NULL,
+                   numericStatusVariable=NULL, characterStatusVariable=NULL,
+                   maxPredictionValue=NULL, minPredictionValue=NULL,
+                   weatherDependenceByCluster=NULL, clusteringResults=NULL,
+                   ...) {
+      
+      x2 <<- x
+      y2 <<- y
+      transformationSentences <<- transformationSentences
+      formulaTerms <<- formulaTerms
+      params <<- param
+      # x <- x2
+      # y <- y2
+      # param <- params
+      
+      features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
+      outputName <- all.vars(formulaTerms)[1]
+      if(paste0("AR_",outputName) %in% colnames(param)){
+        if(as.logical(param[paste0("AR_",outputName)]==0)){
+          param <- param[,-which(colnames(param) %in% paste0("AR_",outputName))]
+        }
+        features <- c(outputName, features)
+      }
+      # Join x and y in a single data.frame
+      data <- if(is.data.frame(x)) x else as.data.frame(x)
+      data[,outputName] <- y
+      
+      # Transform input data if it is needed
+      transformation <- data_transformation_wrapper(
+        data=data, features=features, transformationSentences = transformationSentences, 
+        param = param, weatherDependenceByCluster = weatherDependenceByCluster,
+        clusteringResults = clusteringResults)
+      data <- transformation$data
+      features <- transformation$features
+      featuresAll <- transformation$featuresAll
+      transformationItems <- transformation$items
+      transformationResults <- transformation$results
+      
+      # Generate the lags, if needed
+      if(any(grepl("^AR_",names(param)))){
+        maxLag <- max(param[grepl("^AR_",names(param))])
+      } else {
+        maxLag <- 0
+      }
+      data <- lag_components(data,maxLag,featuresAll)
+      data <- data[complete.cases(data[,featuresAll]),]
+      
+      # Generate the lagged formula for the ARX
+      ARX_form <- as.formula(
+        sprintf("%s ~ %s",
+                outputName,
+                paste(if (!is.null(numericStatusVariable)){
+                  paste0("0 + as.factor(as.character(",numericStatusVariable,"))")
+                } else if (!is.null(characterStatusVariable)) {
+                  "0"#paste0("0 + ",factorStatusVariable)
+                } else {
+                  "0"
+                },
+                paste0(do.call(
+                  c,
+                  lapply(
+                    features,
+                    function(f){
+                      f_ <- f
+                      if(f %in% names(transformationItems)){
+                        f <- transformationItems[[f]]$formula
+                      }
+                      AR_term(features = f, 
+                              if(!(paste0("AR_",f_) %in% colnames(param))){
+                                0
+                              } else if(f[1]==outputName){
+                                1:param[,paste0("AR_",f_)]
+                              } else {
+                                0:param[,paste0("AR_",f_)]
+                              },
+                              suffix = if(!is.null(numericStatusVariable)){
+                                paste0(":",numericStatusVariable)
+                              } else if (!is.null(characterStatusVariable)) {
+                                paste0(":",characterStatusVariable)
+                              } else {
+                                NULL
+                              })
+                    }
+                  )
+                ),
+                collapse="+"),
+                sep=" + ")
+        )
+      )
+      
+      # Train the model
+      if(!is.null(trainMask)){
+        data <- data[trainMask,]
+      }
+      mod <- glm(
+        formula=ARX_form, data=data, family=familyGLM
+      )
+      
+      # Store the meta variables
+      mod$meta <- list(
+        formula = ARX_form,
+        features = features,
+        outputName = outputName,
+        maxPredictionValue = maxPredictionValue,
+        minPredictionValue = minPredictionValue,
+        outputInit = setNames(
+          list(data[min(nrow(data),nrow(data)-maxLag+1):nrow(data),outputName]),
+          outputName
+        ),
+        inputInit = setNames(
+          lapply(features[!(features %in% outputName)],function(f){data[min(nrow(data),nrow(data)-maxLag+1):nrow(data),f]}),
+          features[!(features %in% outputName)]
+        ),
+        param = param,
+        maxLag = maxLag,
+        transformationSentences = transformationSentences,
+        transformationResults = transformationResults,
+        weatherDependenceByCluster = weatherDependenceByCluster,
+        clusteringResults = clusteringResults
+      )
+      mod
+      
+    },
+    predict = function(modelFit, newdata, submodels, forceGlobalInputFeatures=NULL, forceInitInputFeatures=NULL,
+                       forceInitOutputFeatures=NULL, forceOneStepPrediction=F, predictionIntervals=F) {
+      # newdata <<- newdata
+      # modelFit <<- modelFit
+      
+      newdata <- as.data.frame(newdata)
+      features <- modelFit$meta$features[
+        !(modelFit$meta$features %in% modelFit$meta$outputName)]
+      param <- modelFit$meta$param
+      maxLag <- modelFit$meta$maxLag
+      outputName <- modelFit$meta$outputName
+      maxPredictionValue <- modelFit$meta$maxPredictionValue
+      minPredictionValue <- modelFit$meta$minPredictionValue
+      weatherDependenceByCluster <- modelFit$meta$weatherDependenceByCluster
+      clusteringResults <- modelFit$meta$clusteringResults
+      boxCoxLambda <- modelFit$meta$boxCoxLambda
+      
+      # Initialize the global input features if needed
+      # Change the inputs if are specified in forceGlobalInputFeatures
+      if (!is.null(forceGlobalInputFeatures)){
+        for (f in names(forceGlobalInputFeatures)){
+          if(!(length(forceGlobalInputFeatures[[f]])==1 || 
+               length(forceGlobalInputFeatures[[f]])==nrow(newdata))){
+            stop(sprintf("forceGlobalInputFeatures[[%s]] needs to have a length of 1 
+                     or equal to the number of rows of newdata argument (%s).",f, nrow(newdata)))
+          }
+          newdata[,f] <- forceGlobalInputFeatures[[f]]
+        }
+      }
+      
+      # Load the model input and output initialisation features directly from the model
+      forceInitInputFeatures <- if(is.null(forceInitInputFeatures)){modelFit$meta$inputInit}else{forceInitInputFeatures}
+      forceInitOutputFeatures <- if(is.null(forceInitOutputFeatures)){modelFit$meta$outputInit}else{forceInitOutputFeatures}
+      transformationSentences <- modelFit$meta$transformationSentences
+      transformationResults <- modelFit$meta$transformationResults
+      
+      newdata <- if(any(!(names(forceInitOutputFeatures) %in% colnames(newdata)))){
+        cbind(newdata,do.call(cbind,lapply(FUN = function(i){
+          rep(NA,nrow(newdata))
+        }, names(forceInitOutputFeatures)[
+          names(forceInitOutputFeatures) %in% colnames(newdata)])))
+      } else {newdata}
+      
+      if(maxLag>0){
+        newdata <- 
+          rbind(
+            setNames(data.frame(lapply(FUN = function(f){
+              initItem <- if(f %in% names(forceInitInputFeatures)) {
+                forceInitInputFeatures[[f]]
+              } else if(f %in% names(forceInitOutputFeatures)) {
+                forceInitOutputFeatures[[f]]
+              } else {
+                rep(newdata[1,f],maxLag)
+              }
+              c(rep(initItem[1],max(0,maxLag-length(initItem))),tail(initItem,maxLag))
+            },unique(c(colnames(newdata),names(forceInitOutputFeatures))))),
+            nm=unique(c(colnames(newdata),names(forceInitOutputFeatures))))[,colnames(newdata)],
+            newdata)
+      }
+      # if(!is.null(forceInitInputFeatures)){
+      #   factor_char_features <- names(forceInitInputFeatures)[
+      #     mapply(FUN=function(i)class(i),forceInitInputFeatures) %in% c("factor","character")]
+      #   for(fcf in factor_char_features){
+      #     aux <- fastDummies::dummy_cols(as.factor(forceInitInputFeatures[[fcf]]),remove_selected_columns = T)
+      #     colnames(aux) <- gsub(".data",fcf,colnames(aux))
+      #     forceInitInputFeatures <- c(forceInitInputFeatures, as.list(aux))
+      #   }
+      # }
+      # if(!is.null(forceInitOutputFeatures)){
+      #   factor_char_features <- names(forceInitOutputFeatures)[
+      #     mapply(FUN=function(i)class(i),forceInitOutputFeatures) %in% c("factor","character")]
+      #   for(fcf in factor_char_features){
+      #     aux <- fastDummies::dummy_cols(as.factor(forceInitOutputFeatures[[fcf]]),remove_selected_columns = T)
+      #     colnames(aux) <- gsub(".data",fcf,colnames(aux))
+      #     forceInitOutputFeatures <- c(forceInitOutputFeatures, as.list(aux))
+      #   }
+      # }
+      
+      # Transform input data if it is needed
+      transformation <- data_transformation_wrapper(
+        data=newdata, features=features, transformationSentences = transformationSentences, 
+        transformationResults = transformationResults, param = param, 
+        weatherDependenceByCluster = weatherDependenceByCluster,
+        clusteringResults = clusteringResults)
+      newdata <- transformation$data
+      features <- transformation$features
+      featuresAll <- transformation$featuresAll
+      
+      # Change the transformed inputs if are specified in forceGlobalInputFeatures
+      if (!is.null(forceGlobalInputFeatures)){
+        for (f in names(forceGlobalInputFeatures)[
+          names(forceGlobalInputFeatures) %in% names(modelFit$meta$transformationSentences)]
+        ){
+          if(!(length(forceGlobalInputFeatures[[f]])==1 ||
+               length(forceGlobalInputFeatures[[f]])==(nrow(newdata)+maxLag))){
+            stop(sprintf("forceGlobalInputFeatures[[%s]] needs to have a length of 1
+                     or equal to the number of rows of newdata argument (%s).",f, nrow(newdata)))
+          }
+          if(length(forceGlobalInputFeatures[[f]])==1){
+            newdata[,f] <- c(rep(NA,maxLag),rep(forceGlobalInputFeatures[[f]],
+                                                nrow(newdata)-maxLag))
+          } else {
+            newdata[,f] <- c(rep(NA,maxLag),forceGlobalInputFeatures[[f]])
+          }
+        }
+      }
+      
+      # Lag the components that has been initialised
+      newdata <- lag_components(data = newdata, 
+                                maxLag = maxLag, 
+                                featuresNames = c(outputName,featuresAll)#modelFit$meta$features, 
+                                # forceGlobalInputFeatures = forceGlobalInputFeatures,
+                                # forceInitInputFeatures = forceInitInputFeatures,
+                                # forceInitOutputFeatures = forceInitOutputFeatures
+      )
+      newdata <- newdata[(maxLag+1):nrow(newdata),]
+      
+      # Predict at multi-step ahead or one-step ahead prediction, 
+      # depending if some AR input is considered using the output variable
+      if(forceOneStepPrediction==F && paste("AR",outputName,sep="_") %in% colnames(param)){
+        for (i in 1:nrow(newdata)){
+          newdata <- lag_components(data = newdata,
+                                    maxLag = maxLag,
+                                    featuresNames = outputName,
+                                    predictionStep = i-1#,
+                                    # forceInitInputFeatures = forceInitInputFeatures,
+                                    # forceInitOutputFeatures = forceInitOutputFeatures
+          )
+          if(predictionIntervals){
+            prediction_results <- as.data.frame(
+              predict(object = modelFit, newdata = newdata[i,], interval = "prediction",
+                      level = 0.93-0.07)) %>%
+              rename("average"="fit")
+            prediction_results$sigma <- (prediction_results$upr - prediction_results$lwr)/
+              (qnorm(0.93)-qnorm(0.07))
+            newdata[i,paste0(outputName,"_",colnames(prediction_results))] <- prediction_results
+          } else {
+            newdata[i,outputName] <- predict(modelFit,newdata[i,],type="response")
+          }
+        }
+      } else {
+        if(predictionIntervals){
+          prediction_results <- as.data.frame(
+            predict(object = modelFit, newdata = newdata, interval = "prediction",
+                    level = 0.93-0.07)) %>%
+            rename("average"="fit")
+          prediction_results$sigma <- (prediction_results$upr - prediction_results$lwr)/
+            (qnorm(0.93)-qnorm(0.07))
+          newdata[,paste0(outputName,"_",colnames(prediction_results))] <- prediction_results
+        } else {
+          newdata[,outputName] <- predict(modelFit,newdata,type="response")
+        }
+      }
+      result <- if(predictionIntervals){
+            newdata[,paste0(outputName,"_",colnames(prediction_results))]
+          } else {
+            newdata[,outputName]
+          }
+      if (!is.null(maxPredictionValue)){
+        if(predictionIntervals){
+          mapply(function(r){
+            ifelse(result[,r] > maxPredictionValue, maxPredictionValue, result[,r])},
+            colnames(result))
+        } else {
+          ifelse(result > maxPredictionValue, maxPredictionValue, result)
+        }
+      }
+      if (!is.null(minPredictionValue)){
+        if(predictionIntervals){
+          mapply(function(r){
+            ifelse(result[,r] < minPredictionValue, minPredictionValue, result[,r])},
             colnames(result))
         } else {
           ifelse(result < minPredictionValue, minPredictionValue, result)
@@ -1497,6 +1843,71 @@ hyperparameters_tuning <- optimize
 ### Misc functions ----
 ###
 
+weather_dependence_disaggregator <- function(predictor, df, forceNoCooling, forceNoHeating, ...){
+  
+  # Forcing only heating and only cooling dependency
+  baseload_and_cooling <- predictor( df, forceGlobalInputFeatures = forceNoHeating, ...)
+  baseload_and_heating <- predictor( df, forceGlobalInputFeatures = forceNoCooling, ...)
+  
+  # Estimate the baseload consumption along the period
+  baseload <- predictor( df, forceGlobalInputFeatures = c(forceNoCooling,forceNoHeating), ...)
+  
+  # Disaggregated predicted components and actual consumption
+  disaggregated_df <- data.frame(
+    "time"=df$time,
+    "temperature"=df$temperature,
+    "real"=df$Qe,
+    "baseload"=baseload,
+    "heating"=baseload_and_heating-baseload, 
+    "cooling"=baseload_and_cooling-baseload
+  )
+  disaggregated_df$baseload <- disaggregated_df$baseload + 
+    ifelse(disaggregated_df$heating>0,0,disaggregated_df$heating)
+  disaggregated_df$baseload <- disaggregated_df$baseload + 
+    ifelse(disaggregated_df$cooling>0,0,disaggregated_df$cooling)
+  disaggregated_df$baseload <- ifelse(disaggregated_df$baseload<0,0,disaggregated_df$baseload)
+  disaggregated_df$heating <- ifelse(disaggregated_df$heating<0,0,disaggregated_df$heating)
+  disaggregated_df$cooling <- ifelse(disaggregated_df$cooling<0,0,disaggregated_df$cooling)
+  disaggregated_df$predicted <- disaggregated_df$cooling + disaggregated_df$heating + disaggregated_df$baseload
+  
+  disaggregated_df$heatingSmooth <- #ifelse(disaggregated_df$heating>0,
+    #       disaggregated_df$heating,0)
+    rollmean(ifelse(disaggregated_df$heating>0,
+                    disaggregated_df$heating,0), k = 3,
+             align = "center", partial = T, fill = c(0,0,0))
+  disaggregated_df$coolingSmooth <- #ifelse(disaggregated_df$cooling>0,
+    #       disaggregated_df$cooling,0)
+    rollmean(ifelse(disaggregated_df$cooling>0,
+                    disaggregated_df$cooling,0), k = 3,
+             align = "center", partial = T, fill = c(0,0,0))
+  disaggregated_df$real_ <- ifelse(is.finite(disaggregated_df$real),disaggregated_df$real,
+                                   disaggregated_df$predicted)
+  disaggregated_df$baseloadR <- ifelse(disaggregated_df$baseload > disaggregated_df$real_,
+                                       disaggregated_df$real_, disaggregated_df$baseload)
+  disaggregated_df$heatingR <- ifelse(
+    disaggregated_df$heatingSmooth > 0.1,
+    ifelse(
+      disaggregated_df$heatingSmooth > 0.1 & disaggregated_df$coolingSmooth > 0.1,
+      # Heating and cooling at the same time
+      (disaggregated_df$real_ - disaggregated_df$baseloadR) *
+        (disaggregated_df$heatingSmooth/
+           (disaggregated_df$heatingSmooth+disaggregated_df$coolingSmooth)),
+      # Only heating
+      disaggregated_df$real_ - disaggregated_df$baseloadR),
+    0
+  )
+  disaggregated_df$coolingR <- ifelse(
+    disaggregated_df$coolingSmooth > 0.1,
+    disaggregated_df$real_ - (disaggregated_df$baseloadR + disaggregated_df$heatingR),
+    0)
+  disaggregated_df$baseloadR <- disaggregated_df$real_ - (disaggregated_df$coolingR + disaggregated_df$heatingR)
+  
+  disaggregated_df$real_ <- NULL
+  
+  return(disaggregated_df)
+}
+
+
 # Simulate the prediction intervals based on the average estimated
 #  value and standard deviation for each predicted timestep 
 #  and aggregate them to a certain output frequency
@@ -1515,7 +1926,7 @@ simulate_prediction_intervals <- function(predictionResults, outputFrequency,
     results$value <- ifelse(results$value > minPredictionValue, results$value, minPredictionValue)
   }
   results <- results %>% {
-    if(is.null(outputFrequency)){
+    if(is.na(outputFrequency)){
       group_by(.,
                time = first(time), sim
       )
@@ -1539,7 +1950,7 @@ simulate_prediction_intervals <- function(predictionResults, outputFrequency,
       }
     ) %>% 
     ungroup() %>% {
-      if(is.null(outputFrequency)){
+      if(is.na(outputFrequency)){
         group_by(.,
                  time = first(time)
         )
