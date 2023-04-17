@@ -140,6 +140,13 @@ get_eem_details <- function(buildingsRdf, eemSubjects=NULL){
        optional { ?eemSubject bigg:hasEnergyEfficiencyMeasureType ?Type .}
        optional { ?eemSubject bigg:shareOfAffectedElement ?AffectationShare .}
     }')))
+  result$Investment <- ifelse(is.finite(result$ExchangeRate),
+                              result$Investment * result$ExchangeRate,
+                              result$Investment)
+  result$Currency <- ifelse(is.finite(result$ExchangeRate),
+                            "http://qudt.org/vocab/unit/Euro",
+                            result$Currency)
+  
   return(if(length(result)>0) {
     result
   } else {NULL})
@@ -257,9 +264,11 @@ get_area_building <- function(buildingsRdf, buildingSubjects){
       FILTER regex(str(?types),"GrossFloorArea$") .
       ?a bigg:areaValue ?area .
     }')))
-  return( if(length(metadata_df)>0) {
-    setNames(as.numeric(metadata_df$area),nm=as.character(metadata_df$b))
-    } else {NULL} )
+  if(length(metadata_df)>0) {
+    metadata_df$area <- as.numeric(metadata_df$area)
+    r <- setNames(ifelse(metadata_df$area>0,metadata_df$area,NA),nm=as.character(metadata_df$b))
+  } else { r <- NULL }
+  return(r)
 }
 
 get_building_namespaces <- function(buildingsRdf, buildingSubjects){
@@ -375,6 +384,21 @@ exists_analytical_model <- function(buildingsRdf, modelSubject, namespaces){
     }'))))>0)
   }
 
+exists_project_model <- function(buildingsRdf, projectSubject, namespaces){
+  projectSubject <- namespace_integrator(projectSubject, namespaces)
+  return(nrow(suppressMessages(buildingsRdf %>% rdf_query(paste0(    
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
+    SELECT ?m
+    WHERE {
+      ?m a bigg:Project .
+      FILTER (?m = <',projectSubject,'>) .
+    }'))))>0)
+}
+
 get_tariff_metadata <- function(buildingsRdf, sensorId){
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
     paste0(mapply(function(i){
@@ -477,7 +501,8 @@ append_cost_to_sensor <- function(buildingsRdf, timeseriesObject, tariffSubject,
       timeColumn = "start",
       outputFrequency = frequency,
       aggregationFunctions = "AVG",
-      aggregationFunctionsSuffix = paste0(measuredProperty,"_EnergyPrice"))
+      aggregationFunctionsSuffix = paste0(measuredProperty,"_EnergyPrice"),
+      tz = lubridate::tz(energyTimeseriesSensor$time))
     prices <- prices %>% select(
       "time",
       paste0("AVG_",measuredProperty,"_EnergyPrice"))
@@ -548,7 +573,8 @@ append_emissions_to_sensor <- function(buildingsRdf, timeseriesObject, emissions
       timeColumn = "start",
       outputFrequency = frequency,
       aggregationFunctions = "AVG",
-      aggregationFunctionsSuffix = paste0(measuredProperty,"_EnergyEmissionsFactor"))
+      aggregationFunctionsSuffix = paste0(measuredProperty,"_EnergyEmissionsFactor"),
+      tz = lubridate::tz(energyTimeseriesSensor$time))
     emissions <- emissions %>% select(
       "time",
       paste0("AVG_",measuredProperty,"_EnergyEmissionsFactor"))

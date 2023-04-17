@@ -34,6 +34,7 @@ Depends:
     qgam,
     GA,
     parallel,
+    FinCal,
     R (>= 4.1)
 License: "" 
 RoxygenNote: 7.1.2

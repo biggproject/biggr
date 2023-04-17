@@ -828,7 +828,7 @@ get_change_point_temperature_v2 <- function(consumptionData, weatherData,
   tbals <- seq(ceiling(quantile(weatherData$temperature,0.1,na.rm=T)),
                floor(quantile(weatherData$temperature,0.9,na.rm=T)),
                by=1)
-  hysteresis <- seq(1,4,by=1)
+  hysteresis <- seq(1,8,by=1)
   pars <- expand.grid(tbals,hysteresis)
   pars <- data.frame(
     "tbalh"=pars$Var1-pars$Var2,
