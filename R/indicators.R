@@ -343,7 +343,6 @@ generate_eem_assessment_indicators <- function(
   obj <- obj %>% add_item_to_rdf(subject = buildingSubject, 
                                  objectProperties = list(`bigg:hasProject` = projectSubject), 
                                  namespaces = namespaces)
-  print("B")
   if (!exists_project_model(obj, projectSubject, namespaces)) {
     obj <- obj %>% add_item_to_rdf(subject = projectSubject, 
                                    classes = c("bigg:Project"),
