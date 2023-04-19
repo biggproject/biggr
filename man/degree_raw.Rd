@@ -2,38 +2,51 @@
 % Please edit documentation in R/transformation.R
 \name{degree_raw}
 \alias{degree_raw}
-\title{Calculate the difference between outdoor temperature and a base temperature,
-without considering the frequency of the original data.}
+\title{Degree days without time aggregation}
 \usage{
 degree_raw(
   data,
   featuresName,
-  baseTemperature,
+  baseTemperature = 18,
   outputFeaturesName = NULL,
   mode = "heating",
+  maxValue = NULL,
+  baseTemperatureName = NULL,
+  hysteresisBaseTemperature = 2,
   inplace = T
 )
 }
 \arguments{
-\item{data}{<timeSeries> containing the series to transform.}
+\item{data}{<data.frame> containing the series with data. The time zone
+of the datetimes must be UTC. The other variables describing the series are
+directly bypassed to the output.}
+
+\item{featuresName}{<string> giving the column name of the outdoor
+temperature feature.}
 
 \item{baseTemperature}{<float> describing the Balance Point Temperature (BPT)
 used in the calculation. Below BPT in heating mode, heat would be required by
 the building. The contrary in the case of cooling, over BPT in cooling mode.}
 
-\item{featuresNames}{<string> giving the column name of the outdoor temperature feature.}
+\item{outputFeaturesName}{optional, <string> giving the column name used as output of
+the transformation. By default, "heating" or "cooling" depending the mode
+used in the transformation.}
 
-\item{outputFeaturesNames}{<string> giving the column name used as output of the transformation.
-By default, "heating" or "cooling" depending the mode used in the transformation.}
+\item{mode}{<string> describing the calculation mode, which could be
+"cooling" or "heating". By default, "heating" is configured.}
 
-\item{mode:}{<string> describing the calculation mode, which could be "cooling"
-or "heating". By default, "heating" is configured.}
+\item{maxValue}{<float> defining the maximum degree days allowed as output.}
 
-\item{inplace:}{<boolean> indicating if the output should be the original data argument, 
-plus the transformed objects -True- , or only the transformed series -False.}
+\item{baseTemperatureName}{<string> giving the column name of the
+baseTemperature if it's available in data. In this case baseTemperature
+parameter is ignored.}
+
+\item{inplace}{<boolean> indicating if the output should be the original
+data argument, plus the transformed objects -True- , or only the transformed
+series -False.}
 }
 \value{
-<timeSeries< of the difference between the temperature argument
+<data.frame> of the difference between the temperature argument
 and the selected base temperature, mantaining the original frequency of
 temperature.
 }

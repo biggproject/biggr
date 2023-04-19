@@ -2,21 +2,21 @@
 % Please edit documentation in R/transformation.R
 \name{get_lpf_smoothing_time_scale}
 \alias{get_lpf_smoothing_time_scale}
-\title{Physical transformation of the smoothing time scale parameter to consider
-no affectance to the output variable after a known number of hours}
+\title{Obtain alpha value for low pass filter}
 \usage{
 get_lpf_smoothing_time_scale(data, timeConstantInHours)
 }
 \arguments{
-\item{data}{<timeSeries> to filter}
+\item{data}{<data.frame> to filter}
 
-\item{timeConstantInHours}{<float> It means the number of hours that are
-affected by a certain change in the input time series (data argument).
-For instance, when outdoor temperature is considered, this time constant
-in hours correspond to the thermal inertia of the building.}
+\item{timeConstantInHours}{<float> defining the number of hours that the a system
+is affected by a certain change in the input time series (data argument).
+For instance, when there's a need to model the affectance of the outdoor temperature 
+to a building, this time constant in hours correspond to the 
+thermal inertia of the building.}
 }
 \value{
-smoothingTimeScaleParameter <float> of the smoothing time scale
+<float> of the smoothing time scale
 parameter. It corresponds to the so-called alpha parameter of low pass
 filter. It ranges from 0 to 1.
 }

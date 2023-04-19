@@ -2,25 +2,19 @@
 % Please edit documentation in R/transformation.R
 \name{normalise_daily}
 \alias{normalise_daily}
-\title{Daily normalization method}
+\title{Normalize time serie using hourly over daily relative consumption (%) normalization method}
 \usage{
 normalise_daily(data, method = "relative", localTimeZone)
 }
 \arguments{
-\item{data}{<timeSeries> containing serie to normalise}
+\item{data}{<data.frame> containing serie to normalise}
 
 \item{method}{<string> Normalization method. Supported methods
 relative}
-
-\item{localTimeZone}{<string> specifying the local time zone related to
-the building in analysis. The format of this time zones are defined by
-the IANA Time Zone Database (https://www.iana.org/time-zones). This
-argument is optional, by default no transformation to local time zone is
-done.}
 }
 \value{
 daily normalised timeserie
 }
 \description{
-Daily normalization method
+Normalize time serie using hourly over daily relative consumption (%) normalization method
 }

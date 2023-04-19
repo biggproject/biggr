@@ -31,6 +31,8 @@ window is considered.}
 aggregation function of the Zscore is the mean (true), or median(false).
 The first one makes the Z-score sensitive to extreme values, and the
 second no. Default is true.}
+
+\item{na.rm}{<boolean> Remove NAN values in mean, medin and sd functions}
 }
 \value{
 outliers boolean timeSeries object using the original time period

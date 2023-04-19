@@ -2,22 +2,27 @@
 % Please edit documentation in R/transformation.R
 \name{degree_days}
 \alias{degree_days}
-\title{Calculate the degree-days with a desired output frequency and considering
-cooling or heating mode.}
+\title{Degree days with time aggregation}
 \usage{
 degree_days(
   data,
-  featuresName,
+  temperatureFeature,
   localTimeZone,
   baseTemperature,
-  outputFeaturesName = NULL,
   mode = "heating",
-  outputTimeStep = "D"
+  outputFrequency = "P1D",
+  hysteresisBaseTemperature = 2,
+  outputFeaturesName = "HDD",
+  fixedOutputFeaturesName = F
 )
 }
 \arguments{
-\item{data}{<timeSeries> containing the series to transform.
-Maximum input frequency is daily ("D") or higher ("H","15T",...).}
+\item{data}{<data.frame> containing the series with data. The time zone
+of the datetimes must be UTC. The other variables describing the series are
+directly bypassed to the output.}
+
+\item{temperatureFeature}{<string> giving the column name of the outdoor
+temperature feature.}
 
 \item{localTimeZone}{<string> specifying the local time zone related to
 the building in analysis. The format of this time zones are defined by
@@ -33,18 +38,20 @@ cooling, over BPT in cooling mode}
 \item{mode}{<string> describing the calculation mode, which could be
 "cooling" or "heating". By default, "heating" is configured.}
 
-\item{outputTimeStep}{<string> The frequency used to resample the daily
+\item{outputFrequency}{<string> The frequency used to resample the daily
 degree days. It must be a string in ISO 8601 format representing the
 time step. Only yearly ("Y"), monthly ("M"), daily ("D") output time
 steps are allowed.}
 
-\item{featuresNames}{<string> giving the column name of the outdoor temperature feature.}
+\item{outputFeaturesName}{<string> giving the column name used as output of
+the degreedays result. By default, "HDD" is configured}
 
-\item{outputFeaturesNames}{<string> giving the column name used as output of the transformation.
-By default, "heating" or "cooling" depending the mode used in the transformation.}
+\item{fixedOutputFeaturesName}{<boolean> enable fixed column name used as
+output of the degreedays results. Otherwise baseTemperature is added 
+as suffix in the output column name}
 }
 \value{
-degreeDays <timeSeries> in the outputTimeStep of the heating or
+<data.frame> in the outputTimeStep of the heating or
 cooling degree days.
 }
 \description{

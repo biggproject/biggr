@@ -2,6 +2,12 @@
 ### Model candidates auxiliar functions ----
 ###
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 estimate_occupancy <- function(real=NULL, predicted, minOccupancy, timestep){
   
@@ -48,6 +54,14 @@ estimate_occupancy <- function(real=NULL, predicted, minOccupancy, timestep){
   return(theoretical_occupancy)
 }
 
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 regression_metrics <- function(data, lev=NULL, model=NULL){
   c(
     CVRMSE = -(RMSE(data$obs,data$pred,na.rm = T)/mean(data$obs,na.rm=T)),
@@ -55,6 +69,14 @@ regression_metrics <- function(data, lev=NULL, model=NULL){
     R2 = cor(data$obs,data$pred,use = "na.or.complete")^2
   ) 
 }
+
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 AR_term <- function(features,orders,suffix=NULL){
   paste(
@@ -89,6 +111,7 @@ AR_term <- function(features,orders,suffix=NULL){
     collapse=" + "
   )
 }
+
 
 #' Check the ratio of the periodogram out of the boundaries
 #'
@@ -132,6 +155,13 @@ relative_out_of_boundaries_in_periodogram <- function(ts, taper = 0.1){
 ###
 ### Model candidates definition ----
 ###
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 PenalisedLM <- function(input_parameters){
   input_parameters$label <- input_parameters$parameter
@@ -332,6 +362,13 @@ PenalisedLM <- function(input_parameters){
   
   return(modelFramework)
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 ARX <- function(input_parameters){
   input_parameters$label <- input_parameters$parameter
@@ -679,6 +716,13 @@ ARX <- function(input_parameters){
   return(modelFramework)
 }
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 GLM <- function(input_parameters){
   input_parameters$label <- input_parameters$parameter
   modelFramework <- list(
@@ -1010,6 +1054,13 @@ GLM <- function(input_parameters){
   
   return(modelFramework)
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 RLS <- function(input_parameters){
   input_parameters$label <- input_parameters$parameter
@@ -1843,6 +1894,13 @@ hyperparameters_tuning <- optimize
 ### Misc functions ----
 ###
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 weather_dependence_disaggregator <- function(predictor, df, forceNoCooling, forceNoHeating, ...){
   
   # Forcing only heating and only cooling dependency
@@ -1911,6 +1969,13 @@ weather_dependence_disaggregator <- function(predictor, df, forceNoCooling, forc
 # Simulate the prediction intervals based on the average estimated
 #  value and standard deviation for each predicted timestep 
 #  and aggregate them to a certain output frequency
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 simulate_prediction_intervals <- function(predictionResults, outputFrequency, 
                                           timeColumn="time", funAggregation="SUM", 

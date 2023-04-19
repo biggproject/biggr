@@ -2,8 +2,7 @@
 % Please edit documentation in R/transformation.R
 \name{lpf_ts}
 \alias{lpf_ts}
-\title{This function computes the first-order low pass filter for smoothing
-a time series}
+\title{Low pass filter}
 \usage{
 lpf_ts(
   data,
@@ -15,24 +14,30 @@ lpf_ts(
 )
 }
 \arguments{
-\item{data}{<timeSeries> containing the series to transform. Optionally,
+\item{data}{<data.frame> containing the series to transform. Optionally,
 other variables that are not declared in featuresNames can be bypassed to
 the output}
 
-\item{featuresNames}{<string> selecting the series to transform}
+\item{featuresNames}{<array> of strings selecting the series to transform}
 
 \item{smoothingTimeScaleParameter}{<float> of the smoothing time scale
 parameter. It corresponds to the so-called alpha parameter of low pass
 filter. It ranges from 0 to 1.}
 
-\item{inplace:}{<boolean> indicating if the output should be the original data argument, 
-plus the transformed objects -True- , or only the transformed series -False.}
+\item{outputFeaturesName}{optional, <array> giving the series names used as the output of
+the transformation. It must have the same length as featuresNames.
+By default, suffix "_lpf" is added to featuresNames.}
 
-\item{autoUnbox:}{<boolean> indicating if the output timeSeries should be unboxed of the 
-resultant data.frame, obtaining a numeric vector. Only is usable when inplace is True.}
+\item{inplace:}{<boolean> indicating if the output should be the original
+data argument, plus the transformed objects -True- , or only the transformed
+series -False.}
+
+\item{autoUnbox:}{<boolean> indicating if the output data.frame should be
+unboxed of the resultant data.frame, obtaining a numeric vector. Only is
+usable when inplace is True.}
 }
 \value{
-data <timeSeries> containing the same initial information of the
+<data.frame> containing the same initial information of the
 data input argument, but updating the featuresNames variables to the
 low-pass filtered version
 }

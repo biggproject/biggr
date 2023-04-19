@@ -2,35 +2,51 @@
 % Please edit documentation in R/transformation.R
 \name{normalise_dlc}
 \alias{normalise_dlc}
-\title{normalise load}
+\title{Normalise time serie applying pre processing transformations
+and considering multiple input variables. Ignoring specific dates if required
+and supporting multiple normalization methods}
 \usage{
 normalise_dlc(
   data,
   localTimeZone,
   transformation = "relative",
-  inputVars = c("load_curves"),
+  inputVars = c("loadCurves"),
   nDayParts = 24,
-  holidays = NULL
+  holidays = c(),
+  method = "range01",
+  scalingAttr = NULL,
+  balanceOutdoorTemperatures = NULL
 )
 }
 \arguments{
+\item{data}{<timeserie>}
+
 \item{localTimeZone}{<string> timezone}
 
-\item{transformation}{<string>  data transformation required.
-Both "relative" and "absolute" supported. By default "absolute"}
+\item{transformation}{<string> absolute or relative}
 
-\item{inputVars}{<list of strings> Select a number of features as
-output for further steps}
+\item{inputVars}{<list of strings> Possible values: loadCurves, daysWeekend,
+daysHolidays, daysWeek, dailyTemperature, dailyConsumption, dailyHdd, dailyCdd,
+ratioDailyConsumptionHdd, ratioDailyConsumptionCdd}
 
-\item{nDayParts}{<int> number of part days}
+\item{nDayParts}{<int> number of part days. Clustering considering
+parts of the day as "aggregation" of multiple hours. Default value 24 so
+each hour is considered a single part of the day}
 
-\item{holidays}{<list date> holidays dates}
+\item{holidays}{<list date> holidays dates ignored in clustering}
 
-\item{<timeserie>}{data}
+\item{method}{<string> Normalization methods supported:
+- range01. Min-max normalization method
+- znorm. Z-score normalization method}
+
+\item{scalingAttr}{<data.frame> it includes the scaling attributes for each
+variable}
 }
 \value{
-normalised load
+normalised load <data.frame>
 }
 \description{
-normalise load
+Normalise time serie applying pre processing transformations
+and considering multiple input variables. Ignoring specific dates if required
+and supporting multiple normalization methods
 }

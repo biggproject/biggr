@@ -1,11 +1,25 @@
 bigg_namespaces <- c("bigg" = "http://bigg-project.eu/ontology#",
                      "unit" = "http://qudt.org/vocab/unit/")
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 write_rdf <- function(object, file){
   rdf_serialize(object, file,
                 namespace = bigg_namespaces,
                 format = "turtle")
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 get_KPI_timeseries <- function(buildingsRdf, timeseriesObject, buildingSubject, 
                                name, fromModel, frequency){
@@ -92,6 +106,13 @@ get_KPI_by_building <- function(buildingsRdf,timeseriesObject,buildingSubject,
   return(timeseriesKPI)
 }
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 get_building_eems <- function(buildingsRdf, buildingSubjects=NULL){
   result <- suppressMessages(buildingsRdf %>% rdf_query(paste0(
     paste0(mapply(function(i){
@@ -118,6 +139,13 @@ get_building_eems <- function(buildingsRdf, buildingSubjects=NULL){
     result
   } else {NULL})
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 get_eem_details <- function(buildingsRdf, eemSubjects=NULL){
   result <- suppressMessages(buildingsRdf %>% rdf_query(paste0(
@@ -152,6 +180,13 @@ get_eem_details <- function(buildingsRdf, eemSubjects=NULL){
   } else {NULL})
 }
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 get_all_device_aggregators <- function(buildingsRdf){
   result <- suppressMessages(buildingsRdf %>% rdf_query(paste0(
     paste0(mapply(function(i){
@@ -185,6 +220,13 @@ get_all_device_aggregators <- function(buildingsRdf){
   return(result)
 }
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 get_all_buildings_list <- function(buildingsRdf){
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
     paste0(mapply(function(i){
@@ -198,6 +240,13 @@ get_all_buildings_list <- function(buildingsRdf){
     }')))
   return( if(length(metadata_df)>0) {as.character(metadata_df$b)} else {NULL} )
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 get_analytical_groups_by_building_subject <- function(buildingsRdf){
   analytical_groups_by_building <- 
@@ -227,6 +276,12 @@ get_analytical_groups_by_building_subject <- function(buildingsRdf){
   return( analytical_groups_by_building )
 }
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 get_tz_building <- function(buildingsRdf, buildingSubjects){
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
@@ -246,6 +301,13 @@ get_tz_building <- function(buildingsRdf, buildingSubjects){
     setNames(as.character(metadata_df$tz),nm=as.character(metadata_df$b))
     } else {NULL} )
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 get_area_building <- function(buildingsRdf, buildingSubjects){
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
@@ -271,6 +333,13 @@ get_area_building <- function(buildingsRdf, buildingSubjects){
   return(r)
 }
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 get_building_namespaces <- function(buildingsRdf, buildingSubjects){
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
     paste0(mapply(function(i){
@@ -290,6 +359,13 @@ get_building_namespaces <- function(buildingsRdf, buildingSubjects){
     } else { NULL } 
   )
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 get_buildings_subjects <- function(buildingsRdf, buildingIdsFromOrganization){
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
@@ -312,12 +388,25 @@ get_buildings_subjects <- function(buildingsRdf, buildingIdsFromOrganization){
   )
 }
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 get_building_identifiers <- function(buildingSubjects){
   return(
     setNames(gsub("http://|https://||#||\\.","",buildingSubjects),nm = buildingSubjects)
   )
 }
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 get_sensor_metadata <- function(buildingsRdf, sensorId, tz){
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
@@ -357,6 +446,13 @@ get_sensor_metadata <- function(buildingsRdf, sensorId, tz){
   return(metadata_df)
 }
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 read_timeseries_object <- function(timeseriesObject,sensorId){
   if(is.character(timeseriesObject)){
     jsonFiles <- list.files(timeseriesObject,"json",full.names=T)
@@ -368,6 +464,13 @@ read_timeseries_object <- function(timeseriesObject,sensorId){
   }
   return(timeseriesObject_)
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 exists_analytical_model <- function(buildingsRdf, modelSubject, namespaces){
   modelSubject <- namespace_integrator(modelSubject, namespaces)
@@ -384,6 +487,13 @@ exists_analytical_model <- function(buildingsRdf, modelSubject, namespaces){
     }'))))>0)
   }
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 exists_project_model <- function(buildingsRdf, projectSubject, namespaces){
   projectSubject <- namespace_integrator(projectSubject, namespaces)
   return(nrow(suppressMessages(buildingsRdf %>% rdf_query(paste0(    
@@ -398,6 +508,13 @@ exists_project_model <- function(buildingsRdf, projectSubject, namespaces){
       FILTER (?m = <',projectSubject,'>) .
     }'))))>0)
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 get_tariff_metadata <- function(buildingsRdf, sensorId){
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
@@ -419,6 +536,13 @@ get_tariff_metadata <- function(buildingsRdf, sensorId){
   return(metadata_df)
 }
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 get_emissions_metadata <- function(buildingsRdf, sensorId){
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
     paste0(mapply(function(i){
@@ -438,6 +562,13 @@ get_emissions_metadata <- function(buildingsRdf, sensorId){
   metadata_df$sensorId <- sensorId
   return(metadata_df)
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 append_cost_to_sensor <- function(buildingsRdf, timeseriesObject, tariffSubject, measuredProperty,
                                 frequency, energyTimeseriesSensor){
@@ -522,6 +653,13 @@ append_cost_to_sensor <- function(buildingsRdf, timeseriesObject, tariffSubject,
   }
 }
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 append_emissions_to_sensor <- function(buildingsRdf, timeseriesObject, emissionsSubject, 
                                        measuredProperty, frequency, energyTimeseriesSensor){
   emissionsSubject <- namespace_integrator(emissionsSubject,bigg_namespaces)
@@ -593,6 +731,13 @@ append_emissions_to_sensor <- function(buildingsRdf, timeseriesObject, emissions
     return(energyTimeseriesSensor)
   }
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 get_matrix_building_space_use_types <- function(buildingsRdf, splitSublevels=T){
   types_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
@@ -672,6 +817,13 @@ get_matrix_building_space_use_types <- function(buildingsRdf, splitSublevels=T){
 # head(pad_df)
 # lines(pad_df$time,pad_df$value,col="red")
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 iso8601_period_to_text <- function(x,only_first=F){
   x <- lubridate::period(x)
   items <- c("year"=x@year,"month"=x@month,"day"=x@day,
@@ -689,11 +841,25 @@ iso8601_period_to_text <- function(x,only_first=F){
   return(do.call(function(...) paste(..., sep=", "), text_items))
 }
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 iso8601_period_to_timedelta <- function(x){
   x <- lubridate::period(x)
   return(years(x@year) + months(x@month) + days(x@day) +
            hours(x@hour) + minutes(x@minute) + seconds(lubridate::second(x)))
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz,
                                       outputFrequency, aggFunctions,
@@ -873,6 +1039,13 @@ read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId, 
   return(timeseriesSensor)
 }
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 parse_device_aggregator_formula <- function(buildingsRdf, timeseriesObject, 
                                             buildingSubject, formula, inputFrequency, 
                                             outputFrequency, aggFunctions,
@@ -948,6 +1121,13 @@ parse_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
   }
   return(result)
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 get_device_aggregators_by_building <- function(
   buildingsRdf, timeseriesObject=NULL, allowedBuildingSubjects=NULL, 
@@ -1032,6 +1212,13 @@ get_device_aggregators_by_building <- function(
   return(all_buildings_timeseries)
 }
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 namespace_integrator <- function(items, namespaces=NULL){
   if(is.null(namespaces)){
     return(items)
@@ -1042,6 +1229,13 @@ namespace_integrator <- function(items, namespaces=NULL){
     },items))
   }
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 add_item_to_rdf <- function(object, subject, classes = NULL, dataProperties = NULL, 
                             objectProperties = NULL, namespaces=NULL){

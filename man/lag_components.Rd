@@ -2,10 +2,7 @@
 % Please edit documentation in R/transformation.R
 \name{lag_components}
 \alias{lag_components}
-\title{This function shift in time a set of features in order to be used in
-the training and prediction of the models. It is an important step
-for the multi-step prediction of Autoregressive models, where the estimated
-output is directly used in the subsequent predictions.}
+\title{Lag components}
 \usage{
 lag_components(
   data,
@@ -19,33 +16,39 @@ lag_components(
 )
 }
 \arguments{
-\item{data}{<timeSeries> Containing the multiple series to transform. Optionally,
-other variables that are not declared in featuresNames can be bypassed
-to the output}
+\item{data}{<data.frame> containing the multiple series to transform.
+All the series that are not declared in featuresNames are
+bypassed to the output}
 
-\item{maxLag}{<integer> Describing the maximum lags to be considered. One
-feature will be generated for each lag}
+\item{maxLag}{<integer> describing the maximum lags to be considered. One
+feature will be generated for each lag.}
 
-\item{featuresNames}{<list> selecting the series to transform.}
+\item{featuresNames}{<array> selecting the series names to transform 
+(names of the columns in data).}
 
-\item{forceGlobalInputFeatures}{<dict>}
+\item{predictionStep}{optional, <integer> informing of the timestep considered in the
+prediction. Only used in prediction mode, when training it doesn't need to
+be described}
 
-\item{forceInitInputFeatures}{<dict>}
+\item{forceGlobalInputFeatures}{<list> of values to be considered instead 
+of the original values defined in data.}
 
-\item{forceInitOutputFeatures}{<dict>}
+\item{forceInitInputFeatures}{<list> of the initial values to consider 
+before the first value defined in data.}
 
-\item{fillInitNAs}{<boolean> indicating if the unknown lags should be filled with their last known value.}
+\item{forceInitOutputFeatures}{<list> of the initial values to consider 
+before the first value defined in data.}
 
-\item{predictStep}{<integer> informing of the timestep considered in the prediction. 
-Only used in prediction mode, when training it doesn't need to be described}
+\item{fillInitNAs}{<boolean> indicating if the unknown lags should be filled
+with their last known value.}
 }
 \value{
-data <timeSeries> containing the same initial information of the data
+<data.frame> containing the same initial information of the data
 input argument, plus the lagged components as new columns.
 }
 \description{
 This function shift in time a set of features in order to be used in
 the training and prediction of the models. It is an important step
-for the multi-step prediction of Autoregressive models, where the estimated
+for the multi-step prediction of autoregressive models, where the estimated
 output is directly used in the subsequent predictions.
 }

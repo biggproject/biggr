@@ -14,7 +14,9 @@ metric, in which the value can increase or decrease and measures a specific
 instant in time.}
 
 \item{measurementReadingType}{<enumeration> An argument used to define the
-measurement reading type}
+measurement reading type. Supported readiny types are:
+    - onChange. Delta reading type
+    - cumulative. Counter reading type}
 }
 \value{
 data <timeSeries> The cumulative or onChange time series with

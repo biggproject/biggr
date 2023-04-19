@@ -8,7 +8,7 @@ on linear model of the calendar variables (month, weekday, hour).}
 detect_ts_calendar_model_outliers(
   data,
   localTimeColumn = "localtime",
-  valueColumn = "value",
+  valueColumn = outputName,
   calendarFeatures = c("HOL", "H"),
   mode = "upperAndLower",
   upperModelPercentile = 90,
@@ -16,9 +16,11 @@ detect_ts_calendar_model_outliers(
   upperPercentualThreshold = 30,
   lowerPercentualThreshold = 30,
   holidaysCalendar = c(),
+  daysThatAreOutliers = c(),
   window = NULL,
   outputPredictors = F,
-  logValueColumn = F
+  logValueColumn = F,
+  autoDetectProfiled = T
 )
 }
 \arguments{
@@ -29,9 +31,15 @@ the outliers need to be detected.}
 where local or national holidays related to the location of the data
 argument. Default is empty list.}
 
+\item{daysThatAreOutliers}{list of outlier dates}
+
 \item{window}{string. A string in ISO 8601 format representing the
 window (e.g. "2m","4m","14D",...). This is an optional argument setting
 the width of the window where the model is trained and evaluated}
+
+\item{localTimeColumn:}{string Local time column name}
+
+\item{valueColumn:}{string Value column name}
 
 \item{calendarFeatures:}{list of strings An optional argument set the
 calendar features of the model. Default values are: ["HOL*intercept","H"]}
@@ -55,14 +63,18 @@ of difference added to the upper model predition itself. Default is 30.}
 \item{lowerPercentualThreshold:}{float It sets the dynamic lower threshold
 to detect outliers. An optional argument to define the percentage of
 difference substracted to the predition of the model. () Default is 30.}
+
+\item{outputPredictor:}{boolean. Include calendar regression model prediction
+results as output}
+
+\item{logValueColumn:}{boolean. Transform value column (log-transformation)}
+
+\item{autoDetectProfiled:}{boolean. Detect and ignore profiled days from
+timeserie}
 }
 \value{
-outliers boolean timeSeries object using the original time period
-and frequency, only assigning true values when an element should be
-considered as an outlier.
-
-predicted timeSeries of the predicted values of the original
-timeSeries based on the calendar regression model.
+timeSeries with time index outliers mask and optional calendar
+regression model prediction
 }
 \description{
 Detect elements of the time series out of a confidence threshold based

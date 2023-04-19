@@ -2,16 +2,23 @@
 % Please edit documentation in R/transformation.R
 \name{normalise_zscore}
 \alias{normalise_zscore}
-\title{Zscore normalization method}
+\title{Normalize time serie using Zscore normalization method}
 \usage{
-normalise_zscore(data)
+normalise_zscore(data, scalingAttr = NULL)
 }
 \arguments{
-\item{data}{<timeSeries> containing serie to normalise}
+\item{data}{<data.frame> containing serie to normalise}
 }
 \value{
-normalised timeseries
+Normalized input data using Z-score normalization method.
+Output data properties is different depending on input data properties
+If input data class is not in "matrix", "data.frame" or "tbl_df" then
+output data provides struct with normalized vector in "values" attribute
+and scaling "mean" and "sd" in "scalingAttr" attribute
+If input data class is in "matrix", "data.frame" or "tbl_df" then
+output data provides struct with normalization in "values" attribute and
+scaling "mean" and "sd" in "scalingAttr" attribute
 }
 \description{
-Zscore normalization method
+Normalize time serie using Zscore normalization method
 }

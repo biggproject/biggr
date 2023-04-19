@@ -2,13 +2,12 @@
 % Please edit documentation in R/transformation.R
 \name{calendar_components}
 \alias{calendar_components}
-\title{Decompose the time in date, day of the year, day of the week, day of the
-weekend, working day, non-working day, season, month, hour, minute, ...}
+\title{Time decomposition}
 \usage{
-calendar_components(data, localTimeZone = NULL, holidays = NULL, inplace = T)
+calendar_components(data, localTimeZone = NULL, holidays = c(), inplace = T)
 }
 \arguments{
-\item{data}{<timeSeries> containing the series to transform. The time zone
+\item{data}{<data.frame> containing the series to transform. The time zone
 of the datetimes must be UTC. The other variables describing the series are
 directly bypassed to the output.}
 
@@ -17,11 +16,14 @@ building in analysis. The format of this time zones are defined by the IANA
 Time Zone Database (https://www.iana.org/time-zones). This argument is
 optional, by default no transformation to local time zone is done.}
 
-\item{inplace:}{<boolean> indicating if the output should be the original data argument, 
-plus the transformed objects -True- , or only the transformed series -False.}
+\item{holidays}{<array> of dates classified as holidays}
+
+\item{inplace}{<boolean> indicating if the output should be the original
+data argument, plus the transformed objects -True- , or only the transformed
+series -False.}
 }
 \value{
-data <timeSeries> containing the same initial information of data
+<data.frame> containing the same initial information of data
 input argument, plus the calendar components as new columns.
 }
 \description{

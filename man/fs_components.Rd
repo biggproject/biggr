@@ -2,14 +2,7 @@
 % Please edit documentation in R/transformation.R
 \name{fs_components}
 \alias{fs_components}
-\title{Obtain the components of the Fourier Series, in sine-cosine form.
-It is useful for linearising the relationship of a seasonal input
-time series (e.g. solar azimuth, solar elevation, calendar
-features, ...) to some output (energy consumption, indoor
-temperatures, ...). It basically decomposes a cyclic time series
-into a set of sine-cosine components that are used as inputs for
-the modelling of some output, each of the components linearly depends
-to the output.}
+\title{Fourier series components decomposition}
 \usage{
 fs_components(
   data,
@@ -21,13 +14,13 @@ fs_components(
 )
 }
 \arguments{
-\item{data}{<timeSeries> containing the series to transform.
+\item{data}{<data.frame> containing the series to transform.
 This series must have a cyclic behaviour (e.g. hour of the day, day of
 the week, solar azimuth, day of the year, ...) in order to be correctly
 transformed. Optionally, other variables that are not declared in
 featuresNames can be bypassed to the output.}
 
-\item{featuresNames}{<list string> selecting the series to transform.}
+\item{featuresNames}{<array> of strings selecting the series to transform.}
 
 \item{nHarmonics}{<integer> defines the number of harmonics considered
 in the Fourier Series. A high number allows to model more precisely
@@ -35,16 +28,25 @@ the relation, but it considerably increase the cost of computation.
 The number of harmonics is related with the number of features in
 the output matrix}
 
-\item{mask}{<boolean serie> containing the timestamps that should be
+\item{mask}{<array> of booleans containing the timestamps that should be
 accounted for the transformation. The timestamps set to false will
 consider 0's for all their related sine-cosine components. By default,
 all elements of the time series are considered.}
 
-\item{inplace:}{<boolean> indicating if the output should be the original data argument, 
-plus the transformed objects -True- , or only the transformed series -False.}
+\item{normMode}{<string> normalization method to be used in features
+preprocessing. Supported scaling methods
+    - divided_by_max_plus_one: Max+1 normalization method 
+    - min_max_range: Min-max normalization method
+    - NULL: No normalization applied}
+
+\item{inplace:}{<array> of booleans indicating if the output should be the original
+data argument, plus the transformed objects -True- , or only the transformed
+series -False.}
 }
 \value{
-data <timeSeries> containing the same initial information of data input argument, plus the sine-cosine components of the Fourier Series as new columns.
+<data.frame> containing the same initial information of data
+input argument, plus the sine-cosine components of the Fourier Series as new
+columns.
 }
 \description{
 Obtain the components of the Fourier Series, in sine-cosine form.

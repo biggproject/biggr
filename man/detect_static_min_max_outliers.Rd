@@ -23,9 +23,12 @@ detect_static_min_max_outliers(
 minimum value should be included as valid value (true), or not (false).
 Default is true.}
 
-\item{<includedMax>}{boolean An optional argument setting if the maximum
+\item{includedMax}{<boolean> An optional argument setting if the maximum
 value should be included as valid value (true), or not (false).
 Default is true.}
+}
+\value{
+Mask of timeserie entries matching criteria
 }
 \description{
 Detect which numerical elements are outside the min-max range.

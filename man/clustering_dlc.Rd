@@ -11,26 +11,35 @@ clustering_dlc(
   outdoorTemperatureFeature,
   localTimeZone,
   kMax,
+  kMin,
   inputVars,
   loadCurveTransformation,
   nDayParts,
-  ignoreDates = c()
+  balanceOutdoorTemperatures,
+  nNeighboursAffinity = 7,
+  ignoreDates = c(),
+  holidaysDates = c(),
+  normalisationMethod = "range01"
 )
 }
 \arguments{
-\item{data}{<timeSeries> containing the time series for total energy consumption
-of a building, the outdoor temperature, or whatever input is needed for clustering.}
+\item{data}{<data.frame> containing the time series for total energy
+consumption of a building, the outdoor temperature, or whatever input is
+needed for clustering.}
 
-\item{consumptionFeature}{<string> containing the column name the consumption feature 
-in the data argument.}
+\item{consumptionFeature}{<string> containing the column name the consumption
+feature  in the data argument.}
 
-\item{outdoorTemperatureFeature}{<string> containing the column name of the outdoor temperature feature
-in the data argument.}
+\item{outdoorTemperatureFeature}{<string> containing the column name of the
+outdoor temperature feature in the data argument.}
 
 \item{localTimeZone}{<string> specifying the local time zone related
 to the building in analysis}
 
 \item{kMax}{<integer> defining the maximum number of allowed groups in
+the clustering proceed.}
+
+\item{kMin}{<integer> defining the minimum number of allowed groups in
 the clustering proceed.}
 
 \item{inputVars}{<list of strings> Select a number of features as an input
@@ -41,7 +50,7 @@ of the clustering.
   dailyConsumption: use the total daily consumption
   daysOfTheWeek: use a discrete value to represent the days of the week
   daysWeekend: use a boolean representing whether is weekend or not
-  holidays: use a boolean representing whether is holiday or not.}
+  dailyHolidays: use a boolean representing whether is holiday or not.}
 
 \item{loadCurveTransformation}{<string> that defines the transformation
 procedure over the consumption load curves. Possible values are:
@@ -53,11 +62,12 @@ procedure over the consumption load curves. Possible values are:
 \item{nDayParts}{<integer> defining the parts of day used to. Possible
 values: 24, 12, 8, 6, 4, 3, 2.}
 
-\item{ignoreDate}{<list of dates> list of dates to ignore (holidays, weather, ..)}
+\item{ignoreDates}{<list of dates> list of dates to ignore (holidays,
+weather, ..)}
 }
 \value{
 <dict>
-    dailyClassification <timeSeries> in daily frequency, containing
+    dailyClassification <data.frame> in daily frequency, containing
 the classification of each daily load curve.
     absoluteLoadCurvesCentroids <matrix> with row names as the
 identifier of the cluster, and column names as the day hours. This matrix

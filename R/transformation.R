@@ -1,26 +1,30 @@
+#' Lag components
+#' 
 #' This function shift in time a set of features in order to be used in
 #' the training and prediction of the models. It is an important step
-#' for the multi-step prediction of Autoregressive models, where the estimated
+#' for the multi-step prediction of autoregressive models, where the estimated
 #' output is directly used in the subsequent predictions.
 #'
-#' @param data <timeSeries> Containing the multiple series to transform.
-#' Optionally, other variables that are not declared in featuresNames can be
+#' @param data <data.frame> containing the multiple series to transform.
+#' All the series that are not declared in featuresNames are
 #' bypassed to the output
-#' @param maxLag <integer> Describing the maximum lags to be considered. One
-#' feature will be generated for each lag
-#' @param featuresNames <list> selecting the series to transform.
-#' @param predictionStep <integer> informing of the timestep considered in the
+#' @param maxLag <integer> describing the maximum lags to be considered. One
+#' feature will be generated for each lag.
+#' @param featuresNames <array> selecting the series names to transform 
+#' (names of the columns in data).
+#' @param predictionStep optional, <integer> informing of the timestep considered in the
 #' prediction. Only used in prediction mode, when training it doesn't need to
 #' be described
-#' @param forceGlobalInputFeatures <list> List of features to be replaced by
-#' forceInitInputFeatures values. Ignore original values and use
-#' forceInitInputFeatures values
-#' @param forceInitInputFeatures <series> Series to be used instead of original
-#' data. Features to be replaced must be list in forceGlobalInputFeatures param
-#' @param forceInitOutputFeatures <dict>
+#' @param forceGlobalInputFeatures <list> of values to be considered instead 
+#' of the original values defined in data.
+#' @param forceInitInputFeatures <list> of the initial values to consider 
+#' before the first value defined in data.
+#' @param forceInitOutputFeatures <list> of the initial values to consider 
+#' before the first value defined in data.
 #' @param fillInitNAs <boolean> indicating if the unknown lags should be filled
 #' with their last known value.
-#' @return data <timeSeries> containing the same initial information of the data
+#' 
+#' @return <data.frame> containing the same initial information of the data
 #' input argument, plus the lagged components as new columns.
 lag_components <- function(data, maxLag, featuresNames=NULL, predictionStep=NULL, 
                            forceGlobalInputFeatures=NULL, forceInitInputFeatures=NULL, 
@@ -122,25 +126,29 @@ lag_components <- function(data, maxLag, featuresNames=NULL, predictionStep=NULL
   return(data)
 }
 
+#' Low pass filter
+#' 
 #' This function computes the first-order low pass filter for smoothing
 #' a time series
 #'
-#' @param data <timeSeries> containing the series to transform. Optionally,
+#' @param data <data.frame> containing the series to transform. Optionally,
 #' other variables that are not declared in featuresNames can be bypassed to
 #' the output
-#' @param featuresNames <string> selecting the series to transform
+#' @param featuresNames <array> of strings selecting the series to transform
 #' @param smoothingTimeScaleParameter <float> of the smoothing time scale
 #' parameter. It corresponds to the so-called alpha parameter of low pass
 #' filter. It ranges from 0 to 1.
-#' @param outputFeaturesName <string> giving the column name used as output of
-#' the transformation.By default, suffix "_lpf" is added to featuresNames
+#' @param outputFeaturesName optional, <array> giving the series names used as the output of
+#' the transformation. It must have the same length as featuresNames.
+#' By default, suffix "_lpf" is added to featuresNames.
 #' @param inplace: <boolean> indicating if the output should be the original
 #' data argument, plus the transformed objects -True- , or only the transformed
 #' series -False.
-#' @param autoUnbox: <boolean> indicating if the output timeSeries should be
+#' @param autoUnbox: <boolean> indicating if the output data.frame should be
 #' unboxed of the resultant data.frame, obtaining a numeric vector. Only is
 #' usable when inplace is True.
-#' @return data <timeSeries> containing the same initial information of the
+#' 
+#' @return <data.frame> containing the same initial information of the
 #' data input argument, but updating the featuresNames variables to the
 #' low-pass filtered version
 lpf_ts <- function (data, featuresNames, smoothingTimeScaleParameter, outputFeaturesNames=NULL, inplace=T, autoUnbox=F){
@@ -179,40 +187,52 @@ lpf_ts <- function (data, featuresNames, smoothingTimeScaleParameter, outputFeat
   }
 }
 
+#' Obtain alpha value for low pass filter
+#' 
 #' Physical transformation of the smoothing time scale parameter to consider
 #' no affectance to the output variable after a known number of hours
 #'
-#' @param data <timeSeries> to filter
-#' @param timeConstantInHours <float> It means the number of hours that are
-#' affected by a certain change in the input time series (data argument).
-#' For instance, when outdoor temperature is considered, this time constant
-#' in hours correspond to the thermal inertia of the building.
-#' @return smoothingTimeScaleParameter <float> of the smoothing time scale
+#' @param data <data.frame> to filter
+#' @param timeConstantInHours <float> defining the number of hours that the a system
+#' is affected by a certain change in the input time series (data argument).
+#' For instance, when there's a need to model the affectance of the outdoor temperature 
+#' to a building, this time constant in hours correspond to the 
+#' thermal inertia of the building.
+#' 
+#' @return <float> of the smoothing time scale
 #' parameter. It corresponds to the so-called alpha parameter of low pass
 #' filter. It ranges from 0 to 1.
+
 get_lpf_smoothing_time_scale <- function (data, timeConstantInHours) {
   timestep <- detect_time_step(data)
   return( (exp(1)^(-(3600/as.numeric(lubridate::as.period(timestep)))/
   ((2 * pi) * timeConstantInHours/24))) )
 }
 
+#' Time decomposition
+#' 
 #' Decompose the time in date, day of the year, day of the week, day of the
 #' weekend, working day, non-working day, season, month, hour, minute, ...
 #'
-#' @param data <timeSeries> containing the series to transform. The time zone
+#' @param data <data.frame> containing the series to transform. The time zone
 #' of the datetimes must be UTC. The other variables describing the series are
 #' directly bypassed to the output.
 #' @param localTimeZone <string> specifying the local time zone related to the
 #' building in analysis. The format of this time zones are defined by the IANA
 #' Time Zone Database (https://www.iana.org/time-zones). This argument is
 #' optional, by default no transformation to local time zone is done.
-#' @param holidays <list> of dates classified as holidays
+#' @param holidays <array> of dates classified as holidays
 #' @param inplace <boolean> indicating if the output should be the original
 #' data argument, plus the transformed objects -True- , or only the transformed
 #' series -False.
-#' @return data <timeSeries> containing the same initial information of data
+#' 
+#' @return <data.frame> containing the same initial information of data
 #' input argument, plus the calendar components as new columns.
 calendar_components <- function (data, localTimeZone = NULL, holidays = c(), inplace=T){
+  data_ini <- data
+  data <- data.frame("time"=lubridate::with_tz(
+    data[,which(mapply(function(x)class(data[,x])[1],colnames(data))=="POSIXct")[1]],
+    "UTC"))
   getSeason <- function(dates){
     WS <- as.Date("2012-12-15", format = "%Y-%m-%d")
     SE <- as.Date("2012-3-15", format = "%Y-%m-%d")
@@ -250,12 +270,18 @@ calendar_components <- function (data, localTimeZone = NULL, holidays = c(), inp
     second = second(localtime))# %>% 
   # select(-localtime)
   if(inplace==T){
-    return(cbind(data[,!(colnames(data) %in% colnames(result))],result))
+    if(ncol(data_ini)==1){
+      return(cbind(data_ini,result))
+    } else {
+      return(cbind(data_ini[,!(colnames(data_ini) %in% colnames(result))],result))
+    }
   } else {
     return(result)
   }
 }
 
+#' Fourier series components decomposition
+#'
 #' Obtain the components of the Fourier Series, in sine-cosine form.
 #' It is useful for linearising the relationship of a seasonal input
 #' time series (e.g. solar azimuth, solar elevation, calendar
@@ -265,22 +291,22 @@ calendar_components <- function (data, localTimeZone = NULL, holidays = c(), inp
 #' the modelling of some output, each of the components linearly depends
 #' to the output.
 #'
-#' @param data <timeSeries> containing the series to transform.
+#' @param data <data.frame> containing the series to transform.
 #' This series must have a cyclic behaviour (e.g. hour of the day, day of
 #' the week, solar azimuth, day of the year, ...) in order to be correctly
 #' transformed. Optionally, other variables that are not declared in
 #' featuresNames can be bypassed to the output.
-#' @param featuresNames <list string> selecting the series to transform.
+#' @param featuresNames <array> of strings selecting the series to transform.
 #' @param nHarmonics <integer> defines the number of harmonics considered
 #' in the Fourier Series. A high number allows to model more precisely
 #' the relation, but it considerably increase the cost of computation.
 #' The number of harmonics is related with the number of features in
 #' the output matrix
-#' @param mask <boolean serie> containing the timestamps that should be
+#' @param mask <array> of booleans containing the timestamps that should be
 #' accounted for the transformation. The timestamps set to false will
 #' consider 0's for all their related sine-cosine components. By default,
 #' all elements of the time series are considered.
-#' @param inplace: <boolean> indicating if the output should be the original
+#' @param inplace: <array> of booleans indicating if the output should be the original
 #' data argument, plus the transformed objects -True- , or only the transformed
 #' series -False.
 #' @param normMode <string> normalization method to be used in features
@@ -288,9 +314,11 @@ calendar_components <- function (data, localTimeZone = NULL, holidays = c(), inp
 #'     - divided_by_max_plus_one: Max+1 normalization method 
 #'     - min_max_range: Min-max normalization method
 #'     - NULL: No normalization applied
-#' @return data <timeSeries> containing the same initial information of data
+#'     
+#' @return <data.frame> containing the same initial information of data
 #' input argument, plus the sine-cosine components of the Fourier Series as new
 #' columns.
+
 fs_components <- function (data, featuresNames, nHarmonics, mask=NULL, inplace=T, normMode="divided_by_max_plus_one") {
   data_ <- data
   fs_multiple <- NULL
@@ -313,10 +341,12 @@ fs_components <- function (data, featuresNames, nHarmonics, mask=NULL, inplace=T
   }
 }
 
+#' Degree days without time aggregation
+#' 
 #' Calculate the difference between outdoor temperature and a base temperature,
 #' without considering the frequency of the original data.
 #'
-#' @param data <timeSeries> containing the series with data. The time zone
+#' @param data <data.frame> containing the series with data. The time zone
 #' of the datetimes must be UTC. The other variables describing the series are
 #' directly bypassed to the output.
 #' @param featuresName <string> giving the column name of the outdoor
@@ -324,19 +354,19 @@ fs_components <- function (data, featuresNames, nHarmonics, mask=NULL, inplace=T
 #' @param baseTemperature <float> describing the Balance Point Temperature (BPT)
 #' used in the calculation. Below BPT in heating mode, heat would be required by
 #' the building. The contrary in the case of cooling, over BPT in cooling mode.
-#' @param outputFeaturesName <string> giving the column name used as output of
-#' the transformation.By default, "heating" or "cooling" depending the mode
+#' @param baseTemperatureName <string> giving the column name of the
+#' baseTemperature if it's available in data. In this case baseTemperature
+#' parameter is ignored.
+#' @param outputFeaturesName optional, <string> giving the column name used as output of
+#' the transformation. By default, "heating" or "cooling" depending the mode
 #' used in the transformation.
 #' @param mode <string> describing the calculation mode, which could be
 #' "cooling" or "heating". By default, "heating" is configured.
-#' @param maxValue <float> differente threshold. Low pass filter threshold
-#' @param baseTemperatureName <string> giving the column name of the
-#' baseTemperature if it is available in data. In this case baseTemperature
-#' parameter is ignored
+#' @param maxValue <float> defining the maximum degree days allowed as output.
 #' @param inplace <boolean> indicating if the output should be the original
 #' data argument, plus the transformed objects -True- , or only the transformed
 #' series -False.
-#' @return <timeSeries< of the difference between the temperature argument
+#' @return <data.frame> of the difference between the temperature argument
 #' and the selected base temperature, mantaining the original frequency of
 #' temperature.
 degree_raw <- function (data, featuresName, baseTemperature = 18, outputFeaturesName = NULL, 
@@ -364,31 +394,13 @@ degree_raw <- function (data, featuresName, baseTemperature = 18, outputFeatures
   }
 }
 
-#' Create data frame from multiple arrays
-#'
-#' @param series <list> List of arrays to join to single data frame
-#' @param outputFeatureName <list> List of column names. One name per each
-#' of the arrays provided as input
-#' @return <data.frame> Data frame with input series as named columns
 
-vectorial_transformation <- function(series, outputFeatureName="transformated"){
-  return(setNames(data.frame(series),outputFeatureName))
-}
-
-#' Add new serie to current data frame
-#'
-#' @param data <data.frame> Original data frame to be updated
-#' @param newColumn <serie> Serie appended to original data frame
-#' @return <data.frame> Data frame with additional column
-
-add_to_dataframe <- function(data, newColumn){
-  return(cbind(data, newColumn))
-}
-
+#' Degree days with time aggregation
+#' 
 #' Calculate the degree-days with a desired output frequency and considering
 #' cooling or heating mode.
 #'
-#' @param data <timeSeries> containing the series with data. The time zone
+#' @param data <data.frame> containing the series with data. The time zone
 #' of the datetimes must be UTC. The other variables describing the series are
 #' directly bypassed to the output.
 #' @param temperatureFeature <string> giving the column name of the outdoor
@@ -413,7 +425,8 @@ add_to_dataframe <- function(data, newColumn){
 #' @param fixedOutputFeaturesName <boolean> enable fixed column name used as
 #' output of the degreedays results. Otherwise baseTemperature is added 
 #' as suffix in the output column name
-#' @return degreeDays <timeSeries> in the outputTimeStep of the heating or
+#' 
+#' @return <data.frame> in the outputTimeStep of the heating or
 #' cooling degree days.
 
 degree_days <- function(data, temperatureFeature, localTimeZone, baseTemperature,
@@ -453,6 +466,8 @@ degree_days <- function(data, temperatureFeature, localTimeZone, baseTemperature
     )
 }
 
+#' Estimate the optimal change point temperature and weather dependance
+#' 
 #' Calculate change point temperature by modeling temperature vs consumption
 #' relationship using a multi-step weather dependency signature model.
 #' Multi-step weather dependency signature model is based in best
@@ -461,12 +476,12 @@ degree_days <- function(data, temperatureFeature, localTimeZone, baseTemperature
 #' weather vs consumption relationship. Model coefficients analysis is used
 #' is used to identify type and amount of weather dependency.
 #'
-#' @param consumptionData <timeSerie> containing consumption data serie.
-#' The time zone of the datetimes must be UTC
-#' @param weatherData <timeSerie> containing temperature data serie.
-#' The time zone of the datetimes must be UTC
-#' @param consumptionFeature <string> Column name of consumption
-#' @param temperatureFeature <string> Column name of temperature
+#' @param consumptionData <data.frame> containing consumption time series.
+#' The time zone of the datetimes must be UTC.
+#' @param weatherData <data.frame> containing temperature time series.
+#' The time zone of the datetimes must be UTC.
+#' @param consumptionFeature <string> with the name of consumption column.
+#' @param temperatureFeature <string> with the name of temperature column.
 #' @param localTimeZone <string> specifying the local time zone related to
 #' the building in analysis. The format of this time zones are defined by
 #' the IANA Time Zone Database (https://www.iana.org/time-zones). This
@@ -684,6 +699,35 @@ get_change_point_temperature <- function(consumptionData, weatherData,
   )
 }
 
+#' Estimate the optimal change point temperature and weather dependance (v2)
+#' 
+#' Calculate change point temperature by modeling temperature vs consumption
+#' relationship using a multi-step weather dependency signature model.
+#' Multi-step weather dependency signature model is based in best
+#' fitting penalized regression model analysis. Regression quality analysis
+#' is used to identify wether proposed model properly describes the
+#' weather vs consumption relationship. Model coefficients analysis is used
+#' is used to identify type and amount of weather dependency.
+#'
+#' @param consumptionData <data.frame> containing consumption time series.
+#' The time zone of the datetimes must be UTC.
+#' @param weatherData <data.frame> containing temperature time series.
+#' The time zone of the datetimes must be UTC.
+#' @param consumptionFeature <string> with the name of consumption column.
+#' @param temperatureFeature <string> with the name of temperature column.
+#' @param consumptionGroupFeature <string> with the name of column in consumptionData
+#' that describes the grouping feature used in the estimation model.
+#' @param localTimeZone <string> specifying the local time zone related to
+#' the building in analysis. The format of this time zones are defined by
+#' the IANA Time Zone Database (https://www.iana.org/time-zones). This
+#' argument is optional, by default no transformation to local time zone is
+#' done.
+#' @param plot <boolean> Plot change point model describing load vs
+#' temperature relationship in order to identify breakpoints
+#' @return Changepoint analysis results attributes <struct>
+#      - tbal. Change point temperature 
+#      - heating. Heating dependency detected
+#      - cooling. Cooling dependency detected
 
 get_change_point_temperature_v2 <- function(consumptionData, weatherData, 
                                          consumptionFeature, 
@@ -916,6 +960,12 @@ get_change_point_temperature_v2 <- function(consumptionData, weatherData,
   )
 }
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 get_local_min_from_density <- function(values,onlyPosition=NULL,minNumberValleys=1,kDensityAdjuster=3){
   d <- density(values,adjust=kDensityAdjuster,na.rm=T)
@@ -930,10 +980,24 @@ get_local_min_from_density <- function(values,onlyPosition=NULL,minNumberValleys
   } else { return(mins) }
 }
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 opt_boxcox_lambda <- function(x){
   b <- MASS::boxcox(lm(x ~ 1))
   return(b$x[which.max(b$y)])
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 boxcox_transformation <- function(x, lambda){
   return(
@@ -945,6 +1009,13 @@ boxcox_transformation <- function(x, lambda){
   )
 }
 
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 inverse_boxcox_transformation <- function(x, lambda){
   return(
     if(lambda == 0){
@@ -955,11 +1026,7 @@ inverse_boxcox_transformation <- function(x, lambda){
   )
 }
 
-### ---
-### Clustering and classification of daily load curves----
-### ---
-
-#' Normalze time serie using min-max range normalization method
+#' Normalze time series using min-max range normalization method
 #'
 #' @param data <data.frame> containing a set of time series to normalise
 #' @param lower <float> lower value
@@ -1026,7 +1093,7 @@ normalise_range <- function(data, lower = 0, upper = 1, lowerThreshold = NULL,
 
 #' Normalize time serie using hourly over daily relative consumption (%) normalization method
 #'
-#' @param data <timeSeries> containing serie to normalise
+#' @param data <data.frame> containing serie to normalise
 #' @param method <string> Normalization method. Supported methods
 #'   relative
 #' @return daily normalised timeserie
@@ -1046,7 +1113,7 @@ normalise_daily <- function(data, method = "relative", localTimeZone) {
 
 #' Normalize time serie using Zscore normalization method
 #'
-#' @param data <timeSeries> containing serie to normalise
+#' @param data <data.frame> containing serie to normalise
 #' @return Normalized input data using Z-score normalization method.
 #' Output data properties is different depending on input data properties
 #' If input data class is not in "matrix", "data.frame" or "tbl_df" then
@@ -1093,7 +1160,7 @@ normalise_zscore <- function(data, scalingAttr=NULL) {
 #'  - znorm. Z-score normalization method
 #' @param scalingAttr <data.frame> it includes the scaling attributes for each
 #' variable
-#' @return normalised load <timeseries>
+#' @return normalised load <data.frame>
 normalise_dlc <- function(data, localTimeZone, transformation = "relative", 
                           inputVars = c("loadCurves"), nDayParts = 24, holidays = c(),
                           method = "range01", scalingAttr = NULL, balanceOutdoorTemperatures = NULL){
@@ -1538,7 +1605,7 @@ make.similarity <- function(my.data, similarity) {
 #' Cluster similar daily load curves based on the load curves itself, calendar
 #' variables and outdoor temperature
 #'
-#' @param data <timeSeries> containing the time series for total energy
+#' @param data <data.frame> containing the time series for total energy
 #' consumption of a building, the outdoor temperature, or whatever input is
 #' needed for clustering.
 #' @param consumptionFeature <string> containing the column name the consumption
@@ -1571,7 +1638,7 @@ make.similarity <- function(my.data, similarity) {
 #' @param ignoreDates <list of dates> list of dates to ignore (holidays,
 #' weather, ..)
 #' @return <dict>
-#'     dailyClassification <timeSeries> in daily frequency, containing
+#'     dailyClassification <data.frame> in daily frequency, containing
 #' the classification of each daily load curve.
 #'     absoluteLoadCurvesCentroids <matrix> with row names as the
 #' identifier of the cluster, and column names as the day hours. This matrix
@@ -1733,7 +1800,7 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
 #' Classify daily load curves based on the outputs of a clustering and a
 #' new set of data
 #'
-#' @param data <timeSeries> containing the time series for total energy
+#' @param data <data.frame> containing the time series for total energy
 #' consumption of a building, the outdoor temperature, or whatever input is
 #' needed for clustering.
 #' @param consumptionFeature <string> containing the column name the consumption
@@ -1749,7 +1816,7 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
 #'     procedure. Applying the same transformations done during that process.
 #'   classificationModel: Based on a classification model of the calendar
 #'     features.
-#' @return dailyClassification: <timeSeries>
+#' @return dailyClassification: <data.frame>
 classification_dlc <- function(data, consumptionFeature, outdoorTemperatureFeature, 
                                localTimeZone, clustering, methodNormalDays="clusteringCentroids",
                                holidaysDatesFeature = NULL, abnormalDaysFeature = NULL,
@@ -1884,9 +1951,12 @@ classification_dlc <- function(data, consumptionFeature, outdoorTemperatureFeatu
   ))
 }
 
-###
-### Wrapper for data transformation in the modelling phase ----
-###
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 data_transformation_wrapper <- function(data, features, transformationSentences, param, 
                                         transformationResults=list(), 

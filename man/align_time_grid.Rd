@@ -7,9 +7,14 @@ frequency given as an argument using the specified aggregation function.}
 \usage{
 align_time_grid(
   data,
-  measurementReadingType,
-  outputTimeStep,
-  aggregationFunction
+  timeColumn = "time",
+  valueColumn = "value",
+  isRealColumn = "isReal",
+  outputFrequency,
+  aggregationFunctions = c("SUM", "AVG", "MIN", "MAX"),
+  aggregationFunctionsSuffix = NULL,
+  useEstimatedValues = F,
+  tz = "UTC"
 )
 }
 \arguments{
@@ -18,11 +23,28 @@ output time step, i.e. with a specific frequency. If the
 measurementReadingType of the series is not instantaneous, the data must
 be converted first using the function clean_ts_integrate.}
 
-\item{outputTimeStep}{<string> The frequency used to resample the input
-time series for the alignment. It must be a string in ISO 8601 format
-representing the time step (e.g. "15T","1H", "M", "D",...).}
+\item{timeColumn}{<string> Time column in data time serie}
 
-\item{aggregationFunction}{<string> The aggregation function to use when}
+\item{valueColumn}{<string> Value column in data time serie}
+
+\item{isRealColumn}{<string> isReal boolean column in data time serie
+describing estimated value}
+
+\item{outputFrequency}{<string> The frequency used to resample the input
+time series for the alignment. It must be a string in ISO 8601 format
+representing the time step (e.g. "PT15M","PT1H", "P1M", "P1D",...).}
+
+\item{aggregationFunctions}{<list The aggregation functions to use when
+resampling the series. Supported aggregation functions
+   - AVG
+   - SUM
+   - MIN
+   - MAX
+   - HDD. Heating degree days. Base temperature 20, 21, 22
+   - CDD. Cooling degree days. Base temperature 20, 21, 22}
+
+\item{useEstimatedValued}{<boolean> Do not ignore estimated values in input
+time serie}
 }
 \value{
 data <timeSeries> The time series resampled with the specified

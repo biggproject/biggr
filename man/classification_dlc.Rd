@@ -11,24 +11,30 @@ classification_dlc(
   outdoorTemperatureFeature,
   localTimeZone,
   clustering,
-  methodPriority
+  methodNormalDays = "clusteringCentroids",
+  holidaysDatesFeature = NULL,
+  abnormalDaysFeature = NULL,
+  holidaysDates = c(),
+  abnormalDays = c(),
+  methodAbnormalDays = "clusteringCentroids"
 )
 }
 \arguments{
-\item{data}{<timeSeries> containing the time series for total energy consumption
-of a building, the outdoor temperature, or whatever input is needed for clustering.}
+\item{data}{<data.frame> containing the time series for total energy
+consumption of a building, the outdoor temperature, or whatever input is
+needed for clustering.}
 
-\item{consumptionFeature}{<string> containing the column name the consumption feature 
-in the data argument.}
-
-\item{outdoorTemperatureFeature}{<string> containing the column name of the outdoor temperature feature
-in the data argument.}
+\item{consumptionFeature}{<string> containing the column name the consumption
+feature in the data argument.}
 
 \item{localTimeZone}{<string> local time zone}
 
 \item{clustering}{<object> clustering_dlc() output}
 
-\item{methodPriority:}{<list of strings>. Possible values:
+\item{outdorTemperatureFeature}{<string> containing the column name of the outdoor
+temperature feature in the data argument.}
+
+\item{method:}{<string>. Choose one, by default clusteringCentroids:
 absoluteLoadCurvesCentroids: Based on the absolute consumption load
   curve
 clusteringCentroids: Based on the inputs considered in the clustering
@@ -37,7 +43,7 @@ classificationModel: Based on a classification model of the calendar
   features.}
 }
 \value{
-dailyClassification: <timeSeries>
+dailyClassification: <data.frame>
 }
 \description{
 Classify daily load curves based on the outputs of a clustering and a

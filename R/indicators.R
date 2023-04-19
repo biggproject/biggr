@@ -1,3 +1,10 @@
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
 get_eem_lifespan <- function(lifespans, eemTypes){
   
   defaultLifespan <- lifespans$default
@@ -15,6 +22,13 @@ get_eem_lifespan <- function(lifespans, eemTypes){
     })
   )
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 calculate_indicator_not_aggregable_by_time <- function(indicator, annualEnergySavings, annualCostSavings, affectedBuildingArea, 
                                                        investment, discountRate, lifespan){
@@ -50,6 +64,13 @@ calculate_indicator_not_aggregable_by_time <- function(indicator, annualEnergySa
   }
   return(valueInd)
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 calculate_indicator <-  function(data, indicator, consumptionColumn, baselineConsumptionColumn, energyPriceColumn, 
                                  carbonEmissionsColumn, buildingGrossFloorArea, heatingDegreeDays18Column, coolingDegreeDays21Column){
@@ -124,6 +145,13 @@ calculate_indicator <-  function(data, indicator, consumptionColumn, baselineCon
   
   return(valueInd)
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 generate_longitudinal_benchmarking_indicators <- function (
   data, indicators, measuredProperty, measuredPropertyComponent, frequencies, 
@@ -290,6 +318,13 @@ generate_longitudinal_benchmarking_indicators <- function (
   }
   return(list(results_rdf=obj, results_ts=results_ts))
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 generate_eem_assessment_indicators <- function(
     data, indicators, indicatorsNotAggregableByTime, measuredProperty, measuredPropertyComponent, frequencies, 
@@ -609,6 +644,13 @@ generate_eem_assessment_indicators <- function(
   
   return(list(results_rdf=obj, results_ts=results_ts))
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 generate_cross_sectional_benchmarking_indicator <- function(
     data, isReal, indicator, frequency, groupSubject, prefixUtcTimeColumns,

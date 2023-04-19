@@ -2,18 +2,19 @@
 % Please edit documentation in R/transformation.R
 \name{normalise_range}
 \alias{normalise_range}
-\title{Range normalization method}
+\title{Normalze time series using min-max range normalization method}
 \usage{
 normalise_range(
   data,
   lower = 0,
   upper = 1,
   lowerThreshold = NULL,
-  upperThreshold = NULL
+  upperThreshold = NULL,
+  scalingAttr = NULL
 )
 }
 \arguments{
-\item{data}{<serie> containing serie to normalise}
+\item{data}{<data.frame> containing a set of time series to normalise}
 
 \item{lower}{<float> lower value}
 
@@ -22,10 +23,21 @@ normalise_range(
 \item{lowerThreshold}{<float> lower threshold value}
 
 \item{upperThreshold}{<float> upper threshold value}
+
+\item{scalingAttr}{<struct> setting lower and upper threshold in case of
+null lowerThreshold or upperThreshold
+- min: lowerThreshold
+- max: upperThreshold}
 }
 \value{
-normalised serie
+Normalized input data using range normalization method. Output
+data properties is different depending on input data properties
+If input data class is not in "matrix", "data.frame" or "tbl_df" then
+output data provides normalization 
+If input data class is in "matrix", "data.frame" or "tbl_df" then
+output data provides struct with normalization in "values" attribute and
+min-max values used in "scalingAttr" attribute
 }
 \description{
-Range normalization method
+Normalze time series using min-max range normalization method
 }

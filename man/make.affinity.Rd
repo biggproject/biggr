@@ -4,9 +4,9 @@
 \alias{make.affinity}
 \title{Calculate affinity
  Code from https://www.di.fc.ul.pt/~jpn/r/spectralclustering/spectralclustering.html
-Done applying a k-nearest neighboor filter to build a representation of a graph
-connecting just the closest dataset points. However, to be symmetric, if
-Aij is selected as a nearest neighboor, so will Aji.}
+Done applying a k-nearest neighboor filter to build a representation of a
+graph. connecting just the closest dataset points. However, to be symmetric,
+if Aij is selected as a nearest neighboor, so will Aji.}
 \usage{
 make.affinity(S, n.neighboors = 2)
 }
@@ -21,7 +21,7 @@ Affinity matrix
 \description{
 Calculate affinity
  Code from https://www.di.fc.ul.pt/~jpn/r/spectralclustering/spectralclustering.html
-Done applying a k-nearest neighboor filter to build a representation of a graph
-connecting just the closest dataset points. However, to be symmetric, if
-Aij is selected as a nearest neighboor, so will Aji.
+Done applying a k-nearest neighboor filter to build a representation of a
+graph. connecting just the closest dataset points. However, to be symmetric,
+if Aij is selected as a nearest neighboor, so will Aji.
 }
