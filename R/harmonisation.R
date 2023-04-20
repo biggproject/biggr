@@ -1,11 +1,12 @@
 bigg_namespaces <- c("bigg" = "http://bigg-project.eu/ontology#",
                      "unit" = "http://qudt.org/vocab/unit/")
 
-#' Title
+#' Export an RDF to Turtle format (TTL)
 #' 
-#' Description
+#' Export a knowledge graph, represented in RDF, to a file in Turtle format (TTL)
 #'
-#' @param arg <> 
+#' @param object <rdf> knowledge graph
+#' @param file <string> containing the path and filename where to store the data in TTL format. 
 #' @return 
 
 write_rdf <- function(object, file){
@@ -14,7 +15,7 @@ write_rdf <- function(object, file){
                 format = "turtle")
 }
 
-#' Title
+#' 
 #' 
 #' Description
 #'

@@ -418,8 +418,7 @@ degree_raw <- function (data, featuresName, baseTemperature = 18, outputFeatures
 #' "cooling" or "heating". By default, "heating" is configured.
 #' @param outputFrequency <string> The frequency used to resample the daily
 #' degree days. It must be a string in ISO 8601 format representing the
-#' time step. Only yearly ("Y"), monthly ("M"), daily ("D") output time
-#' steps are allowed.
+#' time step. Examples: 'P1D' (One day), 'P1Y' (One year), 'P1M' (One month)...
 #' @param outputFeaturesName <string> giving the column name used as output of
 #' the degreedays result. By default, "HDD" is configured
 #' @param fixedOutputFeaturesName <boolean> enable fixed column name used as

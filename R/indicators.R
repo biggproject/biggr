@@ -1,12 +1,23 @@
-#' Title
+#' Get the Energy Efficiency Measures (EEM) lifespan
 #' 
-#' Description
+#' From a list of lifespans, obtain the list of lifespans of a set of EEM types
 #'
-#' @param arg <> 
-#' @return 
+#' @param lifespans a named <array> defining the default lifespans to consider for each type of EEM.
+#' @param eemTypes an <array> that defines the EEM types.
+#' @return <array> of lifespans for each EEM type.
 
-get_eem_lifespan <- function(lifespans, eemTypes){
+get_eem_lifespan <- function(lifespans=NULL, eemTypes){
   
+  # Default lifespans
+  if(is.null(lifespans)){
+    lifespans <- c(
+      "BuildingFabricMeasure"= 25,
+      "LightingMeasure"= 10,
+      "RenewableGenerationMeasure"= 25,
+      "HVACAndHotWaterMeasure"= 15,
+      "default"= 10
+    )
+  }
   defaultLifespan <- lifespans$default
   lifespans <- lifespans[-which(names(lifespans)=="default")]
   
@@ -23,12 +34,22 @@ get_eem_lifespan <- function(lifespans, eemTypes){
   )
 }
 
-#' Title
+#' Calculate a Key Performance Indicator (KPI) not aggregable by time.
 #' 
-#' Description
+#' This function computes the value of a certain indicator that is not aggregable by time 
+#' (normally, those related to financial). 
 #'
-#' @param arg <> 
-#' @return 
+#' @param indicator <string> defining the KPI to calculate. Possible values: NormalisedInvestmentCost,
+#' AvoidanceCost, SimplePayback, NetPresentValue, ProfitabilityIndex, NetPresentValueQuotient,
+#' InternalRateOfReturn.
+#' @param annualEnergySavings <float> definining the accumulated energy saving for a whole year.
+#' @param annualCostSavings <float> definining the accumulated cost saving for a whole year.
+#' @param affectedBuildingArea <float> definining building area affected by the EEM, or project of EEMs.
+#' @param investment <float> defining the total initial investment cost of EEM, or project of EEMs.
+#' @param discountRate <float> defining the discount rate for the Net Present value. Unit: %.
+#' @param lifespan <int> defining the lifespan of a EEM, or a project of EEMs.
+#' 
+#' @return <float> with the value of the KPI.
 
 calculate_indicator_not_aggregable_by_time <- function(indicator, annualEnergySavings, annualCostSavings, affectedBuildingArea, 
                                                        investment, discountRate, lifespan){
@@ -65,12 +86,27 @@ calculate_indicator_not_aggregable_by_time <- function(indicator, annualEnergySa
   return(valueInd)
 }
 
-#' Title
+#' Calculate time series Key Performance Indicators (KPI).
 #' 
-#' Description
+#' This function calculates a large list of energy-related KPIs considering a set predicted and real energy measurements.
+#' It only accounts for KPI that can be time-aggregable, so input and output data are time series.
 #'
-#' @param arg <> 
-#' @return 
+#' @param data <data.frame> that contains all resultant time series.
+#' @param indicator <string> defining the KPI to calculate. Possible values: EnergyUse, EnergyUseIntensity,
+#' EnergyUseSavings, EnergyUseSavingsRelative, EnergyUseSavingsIntensity, EnergyCost, EnergyCostIntensity,
+#' EnergyCostSavings, EnergyCostSavingsRelative, EnergyCostSavingsIntensity, EnergyEmissions, EnergyEmissionsIntensity,
+#' EnergyEmissionsSavings, EnergyEmissionsSavingsRelative, EnergyEmissionsSavingsIntensity, HeatingDegreeDays,
+#' CoolingDegreeDays
+#' @param consumptionColumn <string> defining the energy consumption column name in data.
+#' @param baselineConsumptionColumn <string> defining the counterfactual energy consumption column name in data.
+#' @param energyPriceColumn <string> defining the column in data related with the price of energy consumption.
+#' @param carbonEmissionsColumn <string> defining the column in data related with the CO2 emissions factor of energy consumption.
+#' @param buildingGrossFloorArea <float> defining the gross floor area of the building. 
+#' @param heatingDegreeDays18Column <string> defining the column in data related with HDD with 18º as base temperature.
+#' @param coolingDegreeDays21Column <string> defining the column in data related with CDD with 21º as base temperature.
+#' 
+#' @return <data.frame> with a column 'ind' specifying the indicator time series and an optional 'weights' column specifying 
+#' the weights that should be considered when time-aggregate the results.
 
 calculate_indicator <-  function(data, indicator, consumptionColumn, baselineConsumptionColumn, energyPriceColumn, 
                                  carbonEmissionsColumn, buildingGrossFloorArea, heatingDegreeDays18Column, coolingDegreeDays21Column){
@@ -146,18 +182,55 @@ calculate_indicator <-  function(data, indicator, consumptionColumn, baselineCon
   return(valueInd)
 }
 
-#' Title
+#' Generate the harmonised longitudinal benchmarking results
 #' 
-#' Description
-#'
-#' @param arg <> 
-#' @return 
+#' Generate the results in harmonised format to BIGG ontology for the energy consumption benchmarking of 
+#' buildings. In this case, the focus is to generate the results for the longitudinal benchmarking, 
+#' so input data must be related with one single building. 
+#' 
+#' @param data <data.frame> that contains all resultant time series.
+#' @param indicators <array> of strings defining the KPIs to calculate. Possible values: EnergyUse, EnergyUseIntensity,
+#' EnergyUseSavings, EnergyUseSavingsRelative, EnergyUseSavingsIntensity, EnergyCost, EnergyCostIntensity,
+#' EnergyCostSavings, EnergyCostSavingsRelative, EnergyCostSavingsIntensity, EnergyEmissions, EnergyEmissionsIntensity,
+#' EnergyEmissionsSavings, EnergyEmissionsSavingsRelative, EnergyEmissionsSavingsIntensity, HeatingDegreeDays,
+#' CoolingDegreeDays
+#' @param measuredProperty <uri> defining the energy consumption measured property. (E.g.: http://bigg-project.eu/ontology#EnergyConsumptionGridElectricity)
+#' @param measuredPropertyComponent <uri> defining the energy consumption component name. (E.g.: "http://bigg-project.eu/ontology#Heating").
+#' @param frequencies <array> of strings defining the frequencies used to resample the results. 
+#' They must follow ISO 8601 format representing the time step. Examples: 'P1D' (One day), 'P1Y' (One year), 
+#' 'P1M' (One month), 'P1DT12H' (One day and a half)...
+#' @param buildingId <string> building unique identifier.
+#' @param buildingSubject <uri> building unique URI.
+#' @param timeColumn <string> of the time column name.
+#' @param localTimeZone <string> specifying the local time zone related to
+#' the building in analysis. The format of this time zones are defined by
+#' the IANA Time Zone Database (https://www.iana.org/time-zones).
+#' @param consumptionColumn <string> defining the energy consumption column name in data.
+#' @param indicatorsUnitsSubjects named <array> of URIs containing the units for each indicator.
+#' @param baselineConsumptionColumn <string> defining the counterfactual energy consumption column name in data. By default it is not considered.
+#' @param buildingGrossFloorArea <float> defining the gross floor area of the building. By default it is not considered.
+#' @param outdoorTemperatureColumn <string> defining the column in data related to outdoor temperature. By default it is not considered.
+#' @param heatingDegreeDays18Column <string> defining the column in data related with HDD with 18º as base temperature. By default it is not considered.
+#' @param coolingDegreeDays21Column <string> defining the column in data related with CDD with 21º as base temperature. By default it is not considered.
+#' @param carbonEmissionsColumn <string> defining the column in data related with the CO2 emissions factor of energy consumption. By default it is not considered.
+#' @param energyPriceColumn <string> defining the column in data related with the price of energy consumption. By default it is not considered.
+#' @param modelName <string> Name of the model used to predict the consumption. By default results are not based by any model.
+#' @param modelId <string> Identifier of the model used to predict the consumption. By default results are not based by any model.
+#' @param modelLocation <string> containing the model path in the model storage infrastructure. By default results are not based by any model.
+#' @param modelStorageInfrastructureSubject <uri> of the model infrastructure type. By default results are not based by any model.
+#' @param modelTypeSubject <uri> of the model type depending on the data training strategy (Dynamic or Baseline). By default results are not based by any model.
+#' @param modelBaselineYear <array> of integers containing the baseline years considered in model training. Only useful when the model type is baseline. By default results are not based by any model.
+#' @param estimateWhenAggregate <boolean> defining if a linear estimation should be made when gaps are found 
+#' in the time-aggregation of the results. By default, the estimation is done.
+#' @param prevResults <list> with the previous results of this function. By default, no previous results are considered.
+#' @return <list> containing a knowledge graph with all resultant metadata and time series objects, that later can be transformed to
+#' TTL and JSON files.
 
 generate_longitudinal_benchmarking_indicators <- function (
   data, indicators, measuredProperty, measuredPropertyComponent, frequencies, 
   buildingId, buildingSubject, timeColumn, localTimeZone, 
   consumptionColumn, indicatorsUnitsSubjects, baselineConsumptionColumn = NULL, 
-  buildingGrossFloorArea = 0, outdoorTemperatureColumn = NULL, 
+  buildingGrossFloorArea = NULL, outdoorTemperatureColumn = NULL, 
   heatingDegreeDays18Column = NULL, coolingDegreeDays21Column = NULL, 
   carbonEmissionsColumn = NULL, energyPriceColumn = NULL, 
   modelName = NULL, modelId = NULL, modelLocation = NULL, 
@@ -319,12 +392,47 @@ generate_longitudinal_benchmarking_indicators <- function (
   return(list(results_rdf=obj, results_ts=results_ts))
 }
 
-#' Title
+#' Generate the harmonised results of the Energy Efficiency Measures (EEM) assessment
 #' 
-#' Description
-#'
-#' @param arg <> 
-#' @return 
+#' Generate the results in harmonised format to BIGG ontology for the EEM assessment in buildings. 
+#' Results are always related to project of EEMs, which are single or combinations of multiple EEMs. 
+#' 
+#' @param data <data.frame> that contains all resultant time series.
+#' @param indicators <array> of strings defining the KPIs to calculate. Possible values: 
+#' EnergyUseSavings, EnergyUseSavingsRelative, EnergyUseSavingsIntensity, 
+#' EnergyCostSavings, EnergyCostSavingsRelative, EnergyCostSavingsIntensity, 
+#' EnergyEmissionsSavings, EnergyEmissionsSavingsRelative, EnergyEmissionsSavingsIntensity.
+#' @param indicatorsNotAggregableByTime <string> defining the KPI to calculate. Possible values: NormalisedInvestmentCost,
+#' AvoidanceCost, SimplePayback, NetPresentValue, ProfitabilityIndex, NetPresentValueQuotient,
+#' InternalRateOfReturn.
+#' @param measuredProperty <uri> defining the energy consumption measured property. (E.g.: http://bigg-project.eu/ontology#EnergyConsumptionGridElectricity)
+#' @param measuredPropertyComponent <uri> defining the energy consumption component name. (E.g.: "http://bigg-project.eu/ontology#Heating").
+#' @param frequencies <array> of strings defining the frequencies used to resample the results. 
+#' They must follow ISO 8601 format representing the time step. Examples: 'P1D' (One day), 'P1Y' (One year), 
+#' 'P1M' (One month), 'P1DT12H' (One day and a half)...
+#' @param buildingId <string> building unique identifier.
+#' @param buildingSubject <uri> building unique URI.
+#' @param timeColumn <string> of the time column name.
+#' @param localTimeZone <string> specifying the local time zone related to
+#' the building in analysis. The format of this time zones are defined by
+#' the IANA Time Zone Database (https://www.iana.org/time-zones).
+#' @param eemProjectDf
+#' @param consumptionColumn <string> defining the energy consumption column name in data.
+#' @param indicatorsTimeAggregationFunctions 
+#' @param indicatorsUnitsSubjects named <array> of URIs containing the units for each indicator.
+#' @param baselineConsumptionColumn <string> defining the counterfactual energy consumption column name in data. By default it is not considered.
+#' @param buildingGrossFloorArea <float> defining the gross floor area of the building. By default it is not considered.
+#' @param carbonEmissionsColumn <string> defining the column in data related with the CO2 emissions factor of energy consumption. By default it is not considered.
+#' @param energyPriceColumn <string> defining the column in data related with the price of energy consumption. By default it is not considered.
+#' @param modelName <string> Name of the model used to predict the consumption. By default results are not based by any model.
+#' @param modelId <string> Identifier of the model used to predict the consumption. By default results are not based by any model.
+#' @param modelLocation <string> containing the model path in the model storage infrastructure. By default results are not based by any model.
+#' @param modelStorageInfrastructureSubject <uri> of the model infrastructure type. By default results are not based by any model.
+#' @param estimateWhenAggregate <boolean> defining if a linear estimation should be made when gaps are found 
+#' in the time-aggregation of the results. By default, the estimation is done.
+#' @param prevResults <list> with the previous results of this function. By default, no previous results are considered.
+#' @return <list> containing a knowledge graph with all resultant metadata and time series objects, that later can be transformed to
+#' TTL and JSON files.
 
 generate_eem_assessment_indicators <- function(
     data, indicators, indicatorsNotAggregableByTime, measuredProperty, measuredPropertyComponent, frequencies, 
@@ -332,35 +440,7 @@ generate_eem_assessment_indicators <- function(
     consumptionColumn, indicatorsTimeAggregationFunctions, indicatorsUnitsSubjects, baselineConsumptionColumn = NULL, 
     buildingGrossFloorArea = NA, carbonEmissionsColumn = NULL, energyPriceColumn = NULL, 
     modelName = NULL, modelId = NULL, modelLocation = NULL, modelStorageInfrastructureSubject = NULL, 
-    modelTypeSubject = NULL, estimateWhenAggregate = T, prevResults = NULL) {
-  
-  # data = results
-  # indicators = unlist(settings$Indicators[c("Energy","Cost","Emissions")])
-  # indicatorsNotAggregableByTime = if(measuredPropertyComponent=="Total"){settings$Indicators$NotAggregableByTime}else{NULL}
-  # measuredProperty = measuredProperty
-  # measuredPropertyComponent = measuredPropertyComponent
-  # frequencies = settings$Frequencies
-  # buildingId = buildingId
-  # buildingSubject = buildingSubject
-  # timeColumn = "time"
-  # localTimeZone = tz
-  # consumptionColumn =
-  #   paste0(measuredPropertyComponentsMapping[["after_eem"]][measuredPropertyComponent],".after_eem")
-  # indicatorsUnitsSubjects = settings$IndicatorsUnitsSubjects
-  # indicatorsTimeAggregationFunctions = settings$IndicatorsTimeAggregationFunctions
-  # baselineConsumptionColumn =
-  #   paste0(measuredPropertyComponentsMapping[["counterfactual"]][measuredPropertyComponent],".counterfactual")
-  # buildingGrossFloorArea = buildingGrossFloorArea
-  # eemProjectDf = eems[eems$eemProjectId==strsplit(eemProject,"\\.")[[1]][2],]
-  # carbonEmissionsColumn = "Qe_emissionsFactor"
-  # energyPriceColumn = "Qe_price"
-  # modelName = modelName
-  # modelId = modelId
-  # modelLocation = modelSubject
-  # modelTypeSubject = "bigg:MODELTYPE-BaselineModel"
-  # modelStorageInfrastructureSubject = "bigg:MODELINFRA-MLFlow"
-  # estimateWhenAggregate = T
-  # prevResults = NULL
+    estimateWhenAggregate = T, prevResults = NULL) {
   
   buildingNamespace <- paste0(strsplit(buildingSubject, "#")[[1]][1], "#")
   namespaces <- bigg_namespaces
@@ -414,7 +494,7 @@ generate_eem_assessment_indicators <- function(
                                             `bigg:modelName` = modelName), 
                                      objectProperties = list(
                                        `bigg:hasModelStorageInfrastructure` = modelStorageInfrastructureSubject, 
-                                       `bigg:hasModelType` = modelTypeSubject), namespaces = namespaces)
+                                       `bigg:hasModelType` = "bigg:MODELTYPE-BaselineModel"), namespaces = namespaces)
       obj <- obj %>% add_item_to_rdf(subject = buildingSubject, 
                                      objectProperties = list(`bigg:hasAnalyticalModel` = modelSubject), 
                                      namespaces = namespaces)
@@ -645,80 +725,3 @@ generate_eem_assessment_indicators <- function(
   return(list(results_rdf=obj, results_ts=results_ts))
 }
 
-#' Title
-#' 
-#' Description
-#'
-#' @param arg <> 
-#' @return 
-
-generate_cross_sectional_benchmarking_indicator <- function(
-    data, isReal, indicator, frequency, groupSubject, prefixUtcTimeColumns,
-    indicatorsUnitsSubjects, prevResults = NULL){
-  
-  groupNamespace <- paste0(strsplit(groupSubject,"#")[[1]][1],"#")
-  groupId <- strsplit(groupSubject,"#")[[1]][2]
-  
-  if (is.null(prevResults)) {
-    prevResults <- list(results_rdf=rdf(), results_ts=list()) 
-  }
-  
-  obj <- prevResults$results_rdf
-  results_ts <- prevResults$results_ts
-  
-  distinct_local_tz <- 
-    gsub(prefixUtcTimeColumns,"",colnames(data)[grepl(prefixUtcTimeColumns,colnames(data))])
-  value_columns <- colnames(data)[!grepl(paste0("localtime|",prefixUtcTimeColumns),colnames(data))]
-  data$localtime <- NULL
-  
-  for (local_tz in distinct_local_tz){
-    indDfAux <- data.frame(
-        "start" = data[,paste0("utctime_",local_tz)],
-        "value" = mapply(function(i){
-          toJSON(as.list(data[i, !grepl(prefixUtcTimeColumns,colnames(data))]),
-                 auto_unbox = T)}, 
-          1:nrow(data)), 
-        "isReal" = isReal)
-    if (as.period(frequency) >= as.period("P1D")) {
-      indDfAux$end <- with_tz(with_tz(indDfAux$start, local_tz) + 
-                                iso8601_period_to_timedelta(frequency) - 
-                                seconds(1), "UTC")
-    } else {
-      indDfAux$end <- indDfAux$start + iso8601_period_to_timedelta(frequency) - 
-        seconds(1)
-    }
-    keyPerformanceIndicatorName <- indicator
-    keyPerformanceIndicatorSubject <- paste("bigg:KPI", 
-                                            keyPerformanceIndicatorName, sep = "-")
-    aggKPISubject <- paste(paste0(groupNamespace,"AggregatedKPI"), 
-                           groupId, keyPerformanceIndicatorName, isReal, frequency, sep = "-")
-    aggKPISubjectHash <- digest(namespace_integrator(aggKPISubject, 
-                                                        bigg_namespaces), "sha256", serialize = T)
-    aggKPIPointSubject <- paste0(groupNamespace,aggKPISubjectHash)
-    obj %>% add_item_to_rdf(
-      subject = aggKPISubject, 
-      classes = c("bigg:AggregatedKPIAssessment", "bigg:KPIAssessment", 
-                  "bigg:TimeSeriesList"), 
-      dataProperties = list(`bigg:timeSeriesIsRegular` = T, 
-                            `bigg:timeSeriesIsOnChange` = F, 
-                            `bigg:timeSeriesIsCumulative` = F, 
-                            `bigg:timeSeriesStart` = min(indDfAux$start, na.rm = T), 
-                            `bigg:timeSeriesEnd` = max(indDfAux$end,  na.rm = T), 
-                            `bigg:timeSeriesFrequency` = frequency, 
-                            `bigg:localTimeZone` = local_tz,
-                            `bigg:timeSeriesTimeAggregationFunction` = "AVG"), 
-      objectProperties = 
-        list(`bigg:hasKPIUnit` = indicatorsUnitsSubjects[[indicator]], 
-             `bigg:hasAggregatedKPIPoint` = aggKPIPointSubject, 
-             `bigg:quantifiesKPI` = keyPerformanceIndicatorSubject), 
-      namespaces = bigg_namespaces)
-    obj %>% add_item_to_rdf(subject = groupSubject, 
-                            objectProperties = list(`bigg:assessesAggregatedKPI` = aggKPISubject), 
-                            namespaces = bigg_namespaces)
-    indDfAux$start <- parsedate::format_iso_8601(indDfAux$start)
-    indDfAux$end <- parsedate::format_iso_8601(indDfAux$end)
-    
-    results_ts[[aggKPISubjectHash]]<-indDfAux
-  }
-  return(list(results_rdf=obj, results_ts=results_ts))
-}
