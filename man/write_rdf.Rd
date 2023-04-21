@@ -2,16 +2,18 @@
 % Please edit documentation in R/harmonisation.R
 \name{write_rdf}
 \alias{write_rdf}
-\title{Title}
+\title{Export an RDF to Turtle format (TTL)}
 \usage{
 write_rdf(object, file)
 }
 \arguments{
-\item{arg}{<>}
+\item{object}{<rdf> knowledge graph}
+
+\item{file}{<string> containing the path and filename where to store the data in TTL format.}
 }
 \value{
 
 }
 \description{
-Description
+Export a knowledge graph, represented in RDF, to a file in Turtle format (TTL)
 }

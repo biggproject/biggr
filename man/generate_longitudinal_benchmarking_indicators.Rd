@@ -2,7 +2,7 @@
 % Please edit documentation in R/indicators.R
 \name{generate_longitudinal_benchmarking_indicators}
 \alias{generate_longitudinal_benchmarking_indicators}
-\title{Title}
+\title{Generate the harmonised longitudinal benchmarking results}
 \usage{
 generate_longitudinal_benchmarking_indicators(
   data,
@@ -17,7 +17,7 @@ generate_longitudinal_benchmarking_indicators(
   consumptionColumn,
   indicatorsUnitsSubjects,
   baselineConsumptionColumn = NULL,
-  buildingGrossFloorArea = 0,
+  buildingGrossFloorArea = NULL,
   outdoorTemperatureColumn = NULL,
   heatingDegreeDays18Column = NULL,
   coolingDegreeDays21Column = NULL,
@@ -34,11 +34,73 @@ generate_longitudinal_benchmarking_indicators(
 )
 }
 \arguments{
-\item{arg}{<>}
+\item{data}{<data.frame> that contains all resultant time series.}
+
+\item{indicators}{<array> of strings defining the KPIs to calculate. Possible values: EnergyUse, EnergyUseIntensity,
+EnergyUseSavings, EnergyUseSavingsRelative, EnergyUseSavingsIntensity, EnergyCost, EnergyCostIntensity,
+EnergyCostSavings, EnergyCostSavingsRelative, EnergyCostSavingsIntensity, EnergyEmissions, EnergyEmissionsIntensity,
+EnergyEmissionsSavings, EnergyEmissionsSavingsRelative, EnergyEmissionsSavingsIntensity, HeatingDegreeDays,
+CoolingDegreeDays}
+
+\item{measuredProperty}{<uri> defining the energy consumption measured property. (E.g.: http://bigg-project.eu/ontology#EnergyConsumptionGridElectricity)}
+
+\item{measuredPropertyComponent}{<uri> defining the energy consumption component name. (E.g.: "http://bigg-project.eu/ontology#Heating").}
+
+\item{frequencies}{<array> of strings defining the frequencies used to resample the results. 
+They must follow ISO 8601 format representing the time step. Examples: 'P1D' (One day), 'P1Y' (One year), 
+'P1M' (One month), 'P1DT12H' (One day and a half)...}
+
+\item{buildingId}{<string> building unique identifier.}
+
+\item{buildingSubject}{<uri> building unique URI.}
+
+\item{timeColumn}{<string> of the time column name.}
+
+\item{localTimeZone}{<string> specifying the local time zone related to
+the building in analysis. The format of this time zones are defined by
+the IANA Time Zone Database (https://www.iana.org/time-zones).}
+
+\item{consumptionColumn}{<string> defining the energy consumption column name in data.}
+
+\item{indicatorsUnitsSubjects}{named <array> of URIs containing the units for each indicator.}
+
+\item{baselineConsumptionColumn}{<string> defining the counterfactual energy consumption column name in data. By default it is not considered.}
+
+\item{buildingGrossFloorArea}{<float> defining the gross floor area of the building. By default it is not considered.}
+
+\item{outdoorTemperatureColumn}{<string> defining the column in data related to outdoor temperature. By default it is not considered.}
+
+\item{heatingDegreeDays18Column}{<string> defining the column in data related with HDD with 18º as base temperature. By default it is not considered.}
+
+\item{coolingDegreeDays21Column}{<string> defining the column in data related with CDD with 21º as base temperature. By default it is not considered.}
+
+\item{carbonEmissionsColumn}{<string> defining the column in data related with the CO2 emissions factor of energy consumption. By default it is not considered.}
+
+\item{energyPriceColumn}{<string> defining the column in data related with the price of energy consumption. By default it is not considered.}
+
+\item{modelName}{<string> Name of the model used to predict the consumption. By default results are not based by any model.}
+
+\item{modelId}{<string> Identifier of the model used to predict the consumption. By default results are not based by any model.}
+
+\item{modelLocation}{<string> containing the model path in the model storage infrastructure. By default results are not based by any model.}
+
+\item{modelStorageInfrastructureSubject}{<uri> of the model infrastructure type. By default results are not based by any model.}
+
+\item{modelTypeSubject}{<uri> of the model type depending on the data training strategy (Dynamic or Baseline). By default results are not based by any model.}
+
+\item{modelBaselineYear}{<array> of integers containing the baseline years considered in model training. Only useful when the model type is baseline. By default results are not based by any model.}
+
+\item{estimateWhenAggregate}{<boolean> defining if a linear estimation should be made when gaps are found 
+in the time-aggregation of the results. By default, the estimation is done.}
+
+\item{prevResults}{<list> with the previous results of this function. By default, no previous results are considered.}
 }
 \value{
-
+<list> containing a knowledge graph with all resultant metadata and time series objects, that later can be transformed to
+TTL and JSON files.
 }
 \description{
-Description
+Generate the results in harmonised format to BIGG ontology for the energy consumption benchmarking of 
+buildings. In this case, the focus is to generate the results for the longitudinal benchmarking, 
+so input data must be related with one single building.
 }

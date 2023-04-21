@@ -2,7 +2,7 @@
 % Please edit documentation in R/indicators.R
 \name{calculate_indicator_not_aggregable_by_time}
 \alias{calculate_indicator_not_aggregable_by_time}
-\title{Title}
+\title{Calculate a Key Performance Indicator (KPI) not aggregable by time.}
 \usage{
 calculate_indicator_not_aggregable_by_time(
   indicator,
@@ -15,11 +15,26 @@ calculate_indicator_not_aggregable_by_time(
 )
 }
 \arguments{
-\item{arg}{<>}
+\item{indicator}{<string> defining the KPI to calculate. Possible values: NormalisedInvestmentCost,
+AvoidanceCost, SimplePayback, NetPresentValue, ProfitabilityIndex, NetPresentValueQuotient,
+InternalRateOfReturn.}
+
+\item{annualEnergySavings}{<float> definining the accumulated energy saving for a whole year.}
+
+\item{annualCostSavings}{<float> definining the accumulated cost saving for a whole year.}
+
+\item{affectedBuildingArea}{<float> definining building area affected by the EEM, or project of EEMs.}
+
+\item{investment}{<float> defining the total initial investment cost of EEM, or project of EEMs.}
+
+\item{discountRate}{<float> defining the discount rate for the Net Present value. Unit: %.}
+
+\item{lifespan}{<int> defining the lifespan of a EEM, or a project of EEMs.}
 }
 \value{
-
+<float> with the value of the KPI.
 }
 \description{
-Description
+This function computes the value of a certain indicator that is not aggregable by time 
+(normally, those related to financial).
 }

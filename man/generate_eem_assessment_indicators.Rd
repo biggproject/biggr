@@ -2,7 +2,7 @@
 % Please edit documentation in R/indicators.R
 \name{generate_eem_assessment_indicators}
 \alias{generate_eem_assessment_indicators}
-\title{Title}
+\title{Generate the harmonised results of the Energy Efficiency Measures (EEM) assessment}
 \usage{
 generate_eem_assessment_indicators(
   data,
@@ -27,17 +27,77 @@ generate_eem_assessment_indicators(
   modelId = NULL,
   modelLocation = NULL,
   modelStorageInfrastructureSubject = NULL,
-  modelTypeSubject = NULL,
   estimateWhenAggregate = T,
   prevResults = NULL
 )
 }
 \arguments{
-\item{arg}{<>}
+\item{data}{<data.frame> that contains all resultant time series.}
+
+\item{indicators}{<array> of strings defining the KPIs to calculate. Possible values: 
+EnergyUseSavings, EnergyUseSavingsRelative, EnergyUseSavingsIntensity, 
+EnergyCostSavings, EnergyCostSavingsRelative, EnergyCostSavingsIntensity, 
+EnergyEmissionsSavings, EnergyEmissionsSavingsRelative, EnergyEmissionsSavingsIntensity.}
+
+\item{indicatorsNotAggregableByTime}{<string> defining the KPI to calculate. Possible values: NormalisedInvestmentCost,
+AvoidanceCost, SimplePayback, NetPresentValue, ProfitabilityIndex, NetPresentValueQuotient,
+InternalRateOfReturn.}
+
+\item{measuredProperty}{<uri> defining the energy consumption measured property. (E.g.: http://bigg-project.eu/ontology#EnergyConsumptionGridElectricity)}
+
+\item{measuredPropertyComponent}{<uri> defining the energy consumption component name. (E.g.: "http://bigg-project.eu/ontology#Heating").}
+
+\item{frequencies}{<array> of strings defining the frequencies used to resample the results. 
+They must follow ISO 8601 format representing the time step. Examples: 'P1D' (One day), 'P1Y' (One year), 
+'P1M' (One month), 'P1DT12H' (One day and a half)...}
+
+\item{buildingId}{<string> building unique identifier.}
+
+\item{buildingSubject}{<uri> building unique URI.}
+
+\item{timeColumn}{<string> of the time column name.}
+
+\item{localTimeZone}{<string> specifying the local time zone related to
+the building in analysis. The format of this time zones are defined by
+the IANA Time Zone Database (https://www.iana.org/time-zones).}
+
+\item{eemProjectDf}{<data.frame> defining the single EEMs applied to the project. Example format:
+|eemSubject                                                      |ExchangeRate|Description                                                                             |Investment|Date               |Currency                       |Type                                                                                                                                                           |AffectationShare|buildingSubject                 |buildingElement                |Lifespan|DiscountRate|TrainingDays    |TrainingDataTimesteps|DateNext|NextMeasureDays|ValidationDays  |eemProjectId|
+|----------------------------------------------------------------|------------|----------------------------------------------------------------------------------------|----------|-------------------|-------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------|--------------------------------|-------------------------------|--------|------------|----------------|---------------------|--------|---------------|----------------|------------|
+ |https://icaen.cat#EEM-01438-27238259282aad37e3aad3b669f2a908~349|1           |Altres millores per al control i automatització del sistema de calefacció i refrigeració|115.44    |2020-06-15 02:00:00|http://qudt.org/vocab/unit/Euro|http://bigg-project.eu/ontology#HVACAndHotWaterMeasure.CombinedHeatingCoolingSystemMeasure.HeatingAndCoolingControlMeasure.OtherHeatingAndCoolingControlMeasure|100             |https://icaen.cat#BUILDING-01438|https://icaen.cat#ELEMENT-01438|15      |5           |531.041666666667|12745                |NA      |NA             |861.916655092593|1           |}
+
+\item{consumptionColumn}{<string> defining the energy consumption column name in data.}
+
+\item{indicatorsTimeAggregationFunctions}{}
+
+\item{indicatorsUnitsSubjects}{named <array> of URIs containing the units for each indicator.}
+
+\item{baselineConsumptionColumn}{<string> defining the counterfactual energy consumption column name in data. By default it is not considered.}
+
+\item{buildingGrossFloorArea}{<float> defining the gross floor area of the building. By default it is not considered.}
+
+\item{carbonEmissionsColumn}{<string> defining the column in data related with the CO2 emissions factor of energy consumption. By default it is not considered.}
+
+\item{energyPriceColumn}{<string> defining the column in data related with the price of energy consumption. By default it is not considered.}
+
+\item{modelName}{<string> Name of the model used to predict the consumption. By default results are not based by any model.}
+
+\item{modelId}{<string> Identifier of the model used to predict the consumption. By default results are not based by any model.}
+
+\item{modelLocation}{<string> containing the model path in the model storage infrastructure. By default results are not based by any model.}
+
+\item{modelStorageInfrastructureSubject}{<uri> of the model infrastructure type. By default results are not based by any model.}
+
+\item{estimateWhenAggregate}{<boolean> defining if a linear estimation should be made when gaps are found 
+in the time-aggregation of the results. By default, the estimation is done.}
+
+\item{prevResults}{<list> with the previous results of this function. By default, no previous results are considered.}
 }
 \value{
-
+<list> containing a knowledge graph with all resultant metadata and time series objects, that later can be transformed to
+TTL and JSON files.
 }
 \description{
-Description
+Generate the results in harmonised format to BIGG ontology for the EEM assessment in buildings. 
+Results are always related to project of EEMs, which are single or combinations of multiple EEMs.
 }

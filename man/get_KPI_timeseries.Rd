@@ -2,7 +2,7 @@
 % Please edit documentation in R/harmonisation.R
 \name{get_KPI_timeseries}
 \alias{get_KPI_timeseries}
-\title{Title}
+\title{Get KPIs time series from harmonised data}
 \usage{
 get_KPI_timeseries(
   buildingsRdf,

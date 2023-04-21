@@ -1,3 +1,94 @@
+#
+# General utils for harmonised data writing ----
+#
+
+bigg_namespaces <- c("bigg" = "http://bigg-project.eu/ontology#",
+                     "unit" = "http://qudt.org/vocab/unit/")
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
+namespace_integrator <- function(items, namespaces=NULL){
+  if(is.null(namespaces)){
+    return(items)
+  } else {
+    return(mapply(function(k){
+      nm <- namespaces[mapply(function(i)grepl(paste0("^",i,":"),k),names(namespaces))]
+      if(length(nm)==0){ k } else { gsub(paste0("^",names(nm),":"),nm,k) }
+    },items))
+  }
+}
+
+#' Export an RDF to Turtle format (TTL)
+#' 
+#' Export a knowledge graph, represented in RDF, to a file in Turtle format (TTL)
+#' 
+#' @param object <rdf> knowledge graph
+#' @param file <string> containing the path and filename where to store the data in TTL format. 
+#' @return <boolean> TRUE if the file writing process succeed
+
+write_rdf <- function(object, file){
+  tryCatch({
+    rdf_serialize(object, file,
+                  namespace = bigg_namespaces,
+                  format = "turtle")}, 
+    error=function(e){
+      return(F)
+    })
+  return(T)
+}
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
+add_item_to_rdf <- function(object, subject, classes = NULL, dataProperties = NULL, 
+                            objectProperties = NULL, namespaces=NULL){
+  subject <- namespace_integrator(subject, namespaces)
+  for(cl in namespace_integrator(classes, namespaces)){
+    object %>% rdf_add(
+      subject = subject,
+      predicate = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      object = cl,
+      subjectType = "uri",objectType = "uri"
+    )
+  }
+  if(!is.null(dataProperties)){
+    for(i in 1:length(dataProperties)){
+      value <- dataProperties[[i]]
+      if(!is.null(value)){
+        datetimeDetected <- class(value)[1]=="POSIXct"
+        object %>% rdf_add(
+          subject = subject,
+          predicate = namespace_integrator(names(dataProperties)[i],namespaces),
+          object = if(datetimeDetected){parsedate::format_iso_8601(value)} else {value},
+          subjectType = "uri",objectType = "literal",
+          datatype_uri = if(datetimeDetected){"xsd:dateTime"
+          } else {as.character(NA)}
+        )
+      }
+    }
+  }
+  if(!is.null(objectProperties)){
+    for(i in 1:length(objectProperties)){
+      object %>% rdf_add(
+        subject = subject,
+        predicate = namespace_integrator(names(objectProperties)[i],namespaces),
+        object = namespace_integrator(objectProperties[[i]],namespaces),
+        subjectType = "uri",objectType = "uri"
+      )
+    }
+  }
+  return(object)
+}
+
 #' Get the Energy Efficiency Measures (EEM) lifespan
 #' 
 #' From a list of lifespans, obtain the list of lifespans of a set of EEM types
@@ -182,6 +273,10 @@ calculate_indicator <-  function(data, indicator, consumptionColumn, baselineCon
   return(valueInd)
 }
 
+#
+# Specific functions to harmonise resultant datasets to BIGG Ontology ----
+#
+
 #' Generate the harmonised longitudinal benchmarking results
 #' 
 #' Generate the results in harmonised format to BIGG ontology for the energy consumption benchmarking of 
@@ -189,16 +284,19 @@ calculate_indicator <-  function(data, indicator, consumptionColumn, baselineCon
 #' so input data must be related with one single building. 
 #' 
 #' @param data <data.frame> that contains all resultant time series.
-#' @param indicators <array> of strings defining the KPIs to calculate. Possible values: EnergyUse, EnergyUseIntensity,
-#' EnergyUseSavings, EnergyUseSavingsRelative, EnergyUseSavingsIntensity, EnergyCost, EnergyCostIntensity,
-#' EnergyCostSavings, EnergyCostSavingsRelative, EnergyCostSavingsIntensity, EnergyEmissions, EnergyEmissionsIntensity,
-#' EnergyEmissionsSavings, EnergyEmissionsSavingsRelative, EnergyEmissionsSavingsIntensity, HeatingDegreeDays,
-#' CoolingDegreeDays
-#' @param measuredProperty <uri> defining the energy consumption measured property. (E.g.: http://bigg-project.eu/ontology#EnergyConsumptionGridElectricity)
-#' @param measuredPropertyComponent <uri> defining the energy consumption component name. (E.g.: "http://bigg-project.eu/ontology#Heating").
+#' @param indicators <array> of strings defining the KPIs to calculate. Possible values: 
+#' EnergyUse, EnergyUseIntensity, EnergyUseSavings, EnergyUseSavingsRelative, 
+#' EnergyUseSavingsIntensity, EnergyCost, EnergyCostIntensity, EnergyCostSavings, 
+#' EnergyCostSavingsRelative, EnergyCostSavingsIntensity, EnergyEmissions, 
+#' EnergyEmissionsIntensity, EnergyEmissionsSavings, EnergyEmissionsSavingsRelative, 
+#' EnergyEmissionsSavingsIntensity, HeatingDegreeDays, CoolingDegreeDays
+#' @param measuredProperty <uri> defining the energy consumption measured property. 
+#' (E.g.: http://bigg-project.eu/ontology#EnergyConsumptionGridElectricity)
+#' @param measuredPropertyComponent <uri> defining the energy consumption component name. 
+#' (E.g.: "http://bigg-project.eu/ontology#Heating").
 #' @param frequencies <array> of strings defining the frequencies used to resample the results. 
-#' They must follow ISO 8601 format representing the time step. Examples: 'P1D' (One day), 'P1Y' (One year), 
-#' 'P1M' (One month), 'P1DT12H' (One day and a half)...
+#' They must follow ISO 8601 format representing the time step. Examples: 'P1D' (One day), 
+#' 'P1Y' (One year), 'P1M' (One month), 'P1DT12H' (One day and a half)...
 #' @param buildingId <string> building unique identifier.
 #' @param buildingSubject <uri> building unique URI.
 #' @param timeColumn <string> of the time column name.
@@ -207,24 +305,39 @@ calculate_indicator <-  function(data, indicator, consumptionColumn, baselineCon
 #' the IANA Time Zone Database (https://www.iana.org/time-zones).
 #' @param consumptionColumn <string> defining the energy consumption column name in data.
 #' @param indicatorsUnitsSubjects named <array> of URIs containing the units for each indicator.
-#' @param baselineConsumptionColumn <string> defining the counterfactual energy consumption column name in data. By default it is not considered.
-#' @param buildingGrossFloorArea <float> defining the gross floor area of the building. By default it is not considered.
-#' @param outdoorTemperatureColumn <string> defining the column in data related to outdoor temperature. By default it is not considered.
-#' @param heatingDegreeDays18Column <string> defining the column in data related with HDD with 18º as base temperature. By default it is not considered.
-#' @param coolingDegreeDays21Column <string> defining the column in data related with CDD with 21º as base temperature. By default it is not considered.
-#' @param carbonEmissionsColumn <string> defining the column in data related with the CO2 emissions factor of energy consumption. By default it is not considered.
-#' @param energyPriceColumn <string> defining the column in data related with the price of energy consumption. By default it is not considered.
-#' @param modelName <string> Name of the model used to predict the consumption. By default results are not based by any model.
-#' @param modelId <string> Identifier of the model used to predict the consumption. By default results are not based by any model.
-#' @param modelLocation <string> containing the model path in the model storage infrastructure. By default results are not based by any model.
-#' @param modelStorageInfrastructureSubject <uri> of the model infrastructure type. By default results are not based by any model.
-#' @param modelTypeSubject <uri> of the model type depending on the data training strategy (Dynamic or Baseline). By default results are not based by any model.
-#' @param modelBaselineYear <array> of integers containing the baseline years considered in model training. Only useful when the model type is baseline. By default results are not based by any model.
-#' @param estimateWhenAggregate <boolean> defining if a linear estimation should be made when gaps are found 
-#' in the time-aggregation of the results. By default, the estimation is done.
-#' @param prevResults <list> with the previous results of this function. By default, no previous results are considered.
-#' @return <list> containing a knowledge graph with all resultant metadata and time series objects, that later can be transformed to
-#' TTL and JSON files.
+#' @param baselineConsumptionColumn <string> defining the counterfactual energy consumption 
+#' column name in data. By default it is not considered.
+#' @param buildingGrossFloorArea <float> defining the gross floor area of the building. 
+#' By default it is not considered.
+#' @param outdoorTemperatureColumn <string> defining the column in data related to outdoor 
+#' temperature. By default it is not considered.
+#' @param heatingDegreeDays18Column <string> defining the column in data related with HDD 
+#' with 18º as base temperature. By default it is not considered.
+#' @param coolingDegreeDays21Column <string> defining the column in data related with CDD 
+#' with 21º as base temperature. By default it is not considered.
+#' @param carbonEmissionsColumn <string> defining the column in data related with the CO2 
+#' emissions factor of energy consumption. By default it is not considered.
+#' @param energyPriceColumn <string> defining the column in data related with the price of 
+#' energy consumption. By default it is not considered.
+#' @param modelName <string> Name of the model used to predict the consumption. By default 
+#' results are not based by any model.
+#' @param modelId <string> Identifier of the model used to predict the consumption. By default 
+#' results are not based by any model.
+#' @param modelLocation <string> containing the model path in the model storage infrastructure. 
+#' By default results are not based by any model.
+#' @param modelStorageInfrastructureSubject <uri> of the model infrastructure type. By default 
+#' results are not based by any model.
+#' @param modelTypeSubject <uri> of the model type depending on the data training strategy 
+#' (Dynamic or Baseline). By default results are not based by any model.
+#' @param modelBaselineYear <array> of integers containing the baseline years considered 
+#' in model training. Only useful when the model type is baseline. By default results are 
+#' not based by any model.
+#' @param estimateWhenAggregate <boolean> defining if a linear estimation should be made 
+#' when gaps are found in the time-aggregation of the results. By default, the estimation is done.
+#' @param prevResults <list> with the previous results of this function. By default, no 
+#' previous results are considered.
+#' @return <list> containing a knowledge graph with all resultant metadata and time series 
+#' objects, that later can be transformed to TTL and JSON files.
 
 generate_longitudinal_benchmarking_indicators <- function (
   data, indicators, measuredProperty, measuredPropertyComponent, frequencies, 
@@ -402,37 +515,51 @@ generate_longitudinal_benchmarking_indicators <- function (
 #' EnergyUseSavings, EnergyUseSavingsRelative, EnergyUseSavingsIntensity, 
 #' EnergyCostSavings, EnergyCostSavingsRelative, EnergyCostSavingsIntensity, 
 #' EnergyEmissionsSavings, EnergyEmissionsSavingsRelative, EnergyEmissionsSavingsIntensity.
-#' @param indicatorsNotAggregableByTime <string> defining the KPI to calculate. Possible values: NormalisedInvestmentCost,
-#' AvoidanceCost, SimplePayback, NetPresentValue, ProfitabilityIndex, NetPresentValueQuotient,
-#' InternalRateOfReturn.
-#' @param measuredProperty <uri> defining the energy consumption measured property. (E.g.: http://bigg-project.eu/ontology#EnergyConsumptionGridElectricity)
-#' @param measuredPropertyComponent <uri> defining the energy consumption component name. (E.g.: "http://bigg-project.eu/ontology#Heating").
+#' @param indicatorsNotAggregableByTime <string> defining the KPI to calculate. 
+#' Possible values: NormalisedInvestmentCost, AvoidanceCost, SimplePayback, NetPresentValue, 
+#' ProfitabilityIndex, NetPresentValueQuotient, InternalRateOfReturn.
+#' @param measuredProperty <uri> defining the energy consumption measured property. 
+#' (E.g.: http://bigg-project.eu/ontology#EnergyConsumptionGridElectricity)
+#' @param measuredPropertyComponent <uri> defining the energy consumption component name. 
+#' (E.g.: "http://bigg-project.eu/ontology#Heating").
 #' @param frequencies <array> of strings defining the frequencies used to resample the results. 
-#' They must follow ISO 8601 format representing the time step. Examples: 'P1D' (One day), 'P1Y' (One year), 
-#' 'P1M' (One month), 'P1DT12H' (One day and a half)...
+#' They must follow ISO 8601 format representing the time step. 
+#' Examples: 'P1D' (One day), 'P1Y' (One year), 'P1M' (One month), 'P1DT12H' (One day and a half)...
 #' @param buildingId <string> building unique identifier.
 #' @param buildingSubject <uri> building unique URI.
 #' @param timeColumn <string> of the time column name.
 #' @param localTimeZone <string> specifying the local time zone related to
 #' the building in analysis. The format of this time zones are defined by
 #' the IANA Time Zone Database (https://www.iana.org/time-zones).
-#' @param eemProjectDf
+#' @param eemProjectDf <data.frame> defining the single EEMs applied to the project. 
+#' Columns that must be available: eemSubject, ExchangeRate, Investment, Date, Currency, 
+#' Type, AffectationShare, buildingSubject, buildingElement, Lifespan, DiscountRate, eemProjectId
 #' @param consumptionColumn <string> defining the energy consumption column name in data.
-#' @param indicatorsTimeAggregationFunctions 
+#' @param indicatorsTimeAggregationFunctions named <array> of the aggregation function used 
+#' for each indicator. Possible values are: "SUM", "AVG", "WEIGHTED-AVG".
 #' @param indicatorsUnitsSubjects named <array> of URIs containing the units for each indicator.
-#' @param baselineConsumptionColumn <string> defining the counterfactual energy consumption column name in data. By default it is not considered.
-#' @param buildingGrossFloorArea <float> defining the gross floor area of the building. By default it is not considered.
-#' @param carbonEmissionsColumn <string> defining the column in data related with the CO2 emissions factor of energy consumption. By default it is not considered.
-#' @param energyPriceColumn <string> defining the column in data related with the price of energy consumption. By default it is not considered.
-#' @param modelName <string> Name of the model used to predict the consumption. By default results are not based by any model.
-#' @param modelId <string> Identifier of the model used to predict the consumption. By default results are not based by any model.
-#' @param modelLocation <string> containing the model path in the model storage infrastructure. By default results are not based by any model.
-#' @param modelStorageInfrastructureSubject <uri> of the model infrastructure type. By default results are not based by any model.
-#' @param estimateWhenAggregate <boolean> defining if a linear estimation should be made when gaps are found 
-#' in the time-aggregation of the results. By default, the estimation is done.
-#' @param prevResults <list> with the previous results of this function. By default, no previous results are considered.
-#' @return <list> containing a knowledge graph with all resultant metadata and time series objects, that later can be transformed to
-#' TTL and JSON files.
+#' @param baselineConsumptionColumn <string> defining the counterfactual energy consumption column 
+#' name in data. By default it is not considered.
+#' @param buildingGrossFloorArea <float> defining the gross floor area of the building. By default 
+#' it is not considered.
+#' @param carbonEmissionsColumn <string> defining the column in data related with the CO2 emissions 
+#' factor of energy consumption. By default it is not considered.
+#' @param energyPriceColumn <string> defining the column in data related with the price of energy 
+#' consumption. By default it is not considered.
+#' @param modelName <string> Name of the model used to predict the consumption. By default results 
+#' are not based by any model.
+#' @param modelId <string> Identifier of the model used to predict the consumption. By default 
+#' results are not based by any model.
+#' @param modelLocation <string> containing the model path in the model storage infrastructure. 
+#' By default results are not based by any model.
+#' @param modelStorageInfrastructureSubject <uri> of the model infrastructure type. 
+#' By default results are not based by any model.
+#' @param estimateWhenAggregate <boolean> defining if a linear estimation should be made when 
+#' gaps are found in the time-aggregation of the results. By default, the estimation is done.
+#' @param prevResults <list> with the previous results of this function. By default, no previous 
+#' results are considered.
+#' @return <list> containing a knowledge graph with all resultant metadata and time series 
+#' objects, that later can be transformed to TTL and JSON files.
 
 generate_eem_assessment_indicators <- function(
     data, indicators, indicatorsNotAggregableByTime, measuredProperty, measuredPropertyComponent, frequencies, 

@@ -2,16 +2,18 @@
 % Please edit documentation in R/indicators.R
 \name{get_eem_lifespan}
 \alias{get_eem_lifespan}
-\title{Title}
+\title{Get the Energy Efficiency Measures (EEM) lifespan}
 \usage{
-get_eem_lifespan(lifespans, eemTypes)
+get_eem_lifespan(lifespans = NULL, eemTypes)
 }
 \arguments{
-\item{arg}{<>}
+\item{lifespans}{a named <array> defining the default lifespans to consider for each type of EEM.}
+
+\item{eemTypes}{an <array> that defines the EEM types.}
 }
 \value{
-
+<array> of lifespans for each EEM type.
 }
 \description{
-Description
+From a list of lifespans, obtain the list of lifespans of a set of EEM types
 }

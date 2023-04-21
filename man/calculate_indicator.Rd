@@ -2,7 +2,7 @@
 % Please edit documentation in R/indicators.R
 \name{calculate_indicator}
 \alias{calculate_indicator}
-\title{Title}
+\title{Calculate time series Key Performance Indicators (KPI).}
 \usage{
 calculate_indicator(
   data,
@@ -17,11 +17,33 @@ calculate_indicator(
 )
 }
 \arguments{
-\item{arg}{<>}
+\item{data}{<data.frame> that contains all resultant time series.}
+
+\item{indicator}{<string> defining the KPI to calculate. Possible values: EnergyUse, EnergyUseIntensity,
+EnergyUseSavings, EnergyUseSavingsRelative, EnergyUseSavingsIntensity, EnergyCost, EnergyCostIntensity,
+EnergyCostSavings, EnergyCostSavingsRelative, EnergyCostSavingsIntensity, EnergyEmissions, EnergyEmissionsIntensity,
+EnergyEmissionsSavings, EnergyEmissionsSavingsRelative, EnergyEmissionsSavingsIntensity, HeatingDegreeDays,
+CoolingDegreeDays}
+
+\item{consumptionColumn}{<string> defining the energy consumption column name in data.}
+
+\item{baselineConsumptionColumn}{<string> defining the counterfactual energy consumption column name in data.}
+
+\item{energyPriceColumn}{<string> defining the column in data related with the price of energy consumption.}
+
+\item{carbonEmissionsColumn}{<string> defining the column in data related with the CO2 emissions factor of energy consumption.}
+
+\item{buildingGrossFloorArea}{<float> defining the gross floor area of the building.}
+
+\item{heatingDegreeDays18Column}{<string> defining the column in data related with HDD with 18º as base temperature.}
+
+\item{coolingDegreeDays21Column}{<string> defining the column in data related with CDD with 21º as base temperature.}
 }
 \value{
-
+<data.frame> with a column 'ind' specifying the indicator time series and an optional 'weights' column specifying 
+the weights that should be considered when time-aggregate the results.
 }
 \description{
-Description
+This function calculates a large list of energy-related KPIs considering a set predicted and real energy measurements.
+It only accounts for KPI that can be time-aggregable, so input and output data are time series.
 }

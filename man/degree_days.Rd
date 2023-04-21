@@ -40,8 +40,7 @@ cooling, over BPT in cooling mode}
 
 \item{outputFrequency}{<string> The frequency used to resample the daily
 degree days. It must be a string in ISO 8601 format representing the
-time step. Only yearly ("Y"), monthly ("M"), daily ("D") output time
-steps are allowed.}
+time step. Examples: 'P1D' (One day), 'P1Y' (One year), 'P1M' (One month)...}
 
 \item{outputFeaturesName}{<string> giving the column name used as output of
 the degreedays result. By default, "HDD" is configured}

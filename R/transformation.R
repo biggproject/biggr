@@ -1147,13 +1147,13 @@ normalise_zscore <- function(data, scalingAttr=NULL) {
 #' @param data <timeserie>
 #' @param localTimeZone <string> timezone
 #' @param transformation <string> absolute or relative
-#' @param inputVars <list of strings> Possible values: loadCurves, daysWeekend,
+#' @param inputVars <array> of strings. Possible values: loadCurves, daysWeekend,
 #' daysHolidays, daysWeek, dailyTemperature, dailyConsumption, dailyHdd, dailyCdd,
 #' ratioDailyConsumptionHdd, ratioDailyConsumptionCdd
 #' @param nDayParts <int> number of part days. Clustering considering
 #' parts of the day as "aggregation" of multiple hours. Default value 24 so
 #' each hour is considered a single part of the day
-#' @param holidays <list date> holidays dates ignored in clustering
+#' @param holidays <array> of dates. Holidays dates that are ignored in clustering phase.
 #' @param method <string> Normalization methods supported:
 #'  - range01. Min-max normalization method
 #'  - znorm. Z-score normalization method
@@ -1626,6 +1626,32 @@ make.similarity <- function(my.data, similarity) {
 #'   daysOfTheWeek: use a discrete value to represent the days of the week
 #'   daysWeekend: use a boolean representing whether is weekend or not
 #'   dailyHolidays: use a boolean representing whether is holiday or not.
+#'   daysWeek: use a factorial value for each day of the week.
+#'   loadCurves: loadCurves_columns, 
+#'   month: use the month of the year,
+#'   dailyMinConsumption: use the minimum consumption of the day
+#'   dailyMaxConsumption: use the maximum consumption of the day
+#'   
+# residualsGAM = sprintf("residualsGAM%s",qu*100),
+# dailyMinConsumption = c("minConsumption"), 
+# dailyMaxConsumption = c("maxConsumption"), 
+# dailyTemperature = c("temperature"),
+# ratioDailyConsumptionHdd = paste0("ratioConsumptionHdd",balanceOutdoorTemperatures),
+# ratioDailyConsumptionCdd = paste0("ratioConsumptionCdd",balanceOutdoorTemperatures),
+# dailyBaseloadConsumptionGAM = "baseload",
+# residualsEnergySignatureGAM = "residualsEnergySignature",
+# positiveResidualsEnergySignatureGAM = "positiveResidualsEnergySignature",
+# negativeResidualsEnergySignatureGAM = "negativeResidualsEnergySignature",
+# residualsEnergySignature = paste0("residualsEnergySignature",balanceOutdoorTemperatures),
+# positiveResidualsEnergySignature = paste0("positiveResidualsEnergySignature",balanceOutdoorTemperatures),
+# negativeResidualsEnergySignature = paste0("negativeResidualsEnergySignature",balanceOutdoorTemperatures),
+# dailyBaseloadConsumption = paste0("baseload",balanceOutdoorTemperatures),
+# slopeHdd = paste0("slopeHdd",balanceOutdoorTemperatures),
+# slopeCdd = paste0("slopeCdd",balanceOutdoorTemperatures),
+# # slopeHddDyn = paste0("slopeHddDyn",balanceOutdoorTemperatures),
+# # slopeCddDyn = paste0("slopeCddDyn",balanceOutdoorTemperatures),
+# dailyHdd = paste0("hdd",balanceOutdoorTemperatures),
+# dailyCdd = paste0("cdd",balanceOutdoorTemperatures)
 #' @param loadCurveTransformation <string> that defines the transformation
 #' procedure over the consumption load curves. Possible values are:
 #'   relative: All daily load curves are relative to their total daily
