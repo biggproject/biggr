@@ -1055,11 +1055,30 @@ GLM <- function(input_parameters){
   return(modelFramework)
 }
 
-#' Title
+#' Recursive Least Square model
 #' 
-#' Description
+#' This function is a custom model wrapper to train and predict recursive linear 
+#' models over the Caret modelling framework. It should be launched using the train() and 
+#' biggr::predict.train() functions. An example to train a model:
+#' train(
+#'  formula = Qe ~ daily_seasonality + yearly_seasonality + tc + tcint + tcinty,
+#'  data = df,
+#'  method = GLM(
+#'    data.frame(parameter = names(params),
+#'               class = mapply(names(params),FUN=function(i) generalParams[[i]][["datatype"]]))
+#'  ),
+#'  tuneGrid = expand.grid(params),
+#'  trControl = trControl,
+#'  minPredictionValue = 0,
+#'  maxPredictionValue = max(df$Qe,na.rm=T) * 1.1,
+#'  familyGLM = quasipoisson(link="log"),
+#'  transformationSentences = args$transformationSentences,
+#'  weatherDependenceByCluster = args$weatherDependenceByCluster,
+#'  clusteringResults = args$clusteringResults
+#'  )
 #'
-#' @param arg <> 
+#' @param formula <>
+#' @param transformationSentences <>
 #' @return 
 
 RLS <- function(input_parameters){

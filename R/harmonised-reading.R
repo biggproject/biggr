@@ -2,12 +2,15 @@
 # General utils for harmonised data reading ----
 #
 
-#' Title
+#' Get timezone of a building
 #' 
-#' Description
+#' This function get from a BIGG-harmonised dataset the timezone of a list of buildings.
 #'
-#' @param arg <> 
-#' @return 
+#' @param buildingsRdf <rdf> containing the information of a set of buildings.
+#' @param buildingSubjects <array> of URIs of the building subjects.
+#' @return named <array> with the timezone for each building. 
+#' The format of this time zones are defined by
+#' the IANA Time Zone Database (https://www.iana.org/time-zones).
 
 get_tz_building <- function(buildingsRdf, buildingSubjects){
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
@@ -28,12 +31,13 @@ get_tz_building <- function(buildingsRdf, buildingSubjects){
   } else {NULL} )
 }
 
-#' Title
+#' Get gross floor area of a building
 #' 
-#' Description
+#' This function get from a BIGG-harmonised dataset the gross floor area of a list of buildings.
 #'
-#' @param arg <> 
-#' @return 
+#' @param buildingsRdf <rdf> containing the information of a set of buildings.
+#' @param buildingSubjects <array> of URIs of the building subjects.
+#' @return named <array> with the total gross floor area for each building.
 
 get_area_building <- function(buildingsRdf, buildingSubjects){
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
@@ -54,17 +58,19 @@ get_area_building <- function(buildingsRdf, buildingSubjects){
     }')))
   if(length(metadata_df)>0) {
     metadata_df$area <- as.numeric(metadata_df$area)
+    metadata_df <- metadata_df %>% group_by(b) %>% summarise(area=sum(area,na.rm=T))
     r <- setNames(ifelse(metadata_df$area>0,metadata_df$area,NA),nm=as.character(metadata_df$b))
   } else { r <- NULL }
   return(r)
 }
 
-#' Title
+#' Get namespaces of a building
 #' 
-#' Description
+#' This function get from a BIGG-harmonised dataset the namespaces of a list of buildings.
 #'
-#' @param arg <> 
-#' @return 
+#' @param buildingsRdf <rdf> containing the information of a set of buildings.
+#' @param buildingSubjects <array> of URIs of the building subjects.
+#' @return named <array> with the namespace for each building.
 
 get_building_namespaces <- function(buildingsRdf, buildingSubjects){
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
@@ -76,22 +82,25 @@ get_building_namespaces <- function(buildingsRdf, buildingSubjects){
     SELECT ?b
     WHERE {
       ?b a bigg:Building .
-      FILTER ( ?b IN ("',paste(buildingSubjects,collapse='","'),'") ) .
+      FILTER ( ?b IN (<',paste(buildingSubjects,collapse='>,<'),'>) ) .
     }')))
   
   return( 
     if(length(metadata_df)>0) {
-      paste0(strsplit(metadata_df$b,"#")[[1]][1],"#")
+      setNames(mapply(function(x){
+        paste0(strsplit(metadata_df$b,"#")[[x]][1],"#")},1:nrow(metadata_df)),
+        nm=metadata_df$b)
     } else { NULL } 
   )
 }
 
-#' Title
+#' Get building subjects of a set of building identifier from organisation
 #' 
-#' Description
+#' This function get the building subjects of a list of building identifier from organisation (foreign key).
 #'
-#' @param arg <> 
-#' @return 
+#' @param buildingsRdf <rdf> containing the information of a set of buildings.
+#' @param buildingIdsFromOrganization <array> of strings containing the building identifiers from the organisation.
+#' @return <array> with the subject URI for each building.
 
 get_buildings_subjects <- function(buildingsRdf, buildingIdsFromOrganization){
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
@@ -114,11 +123,11 @@ get_buildings_subjects <- function(buildingsRdf, buildingIdsFromOrganization){
   )
 }
 
-#' Title
+#' Calculate the building identifiers
 #' 
-#' Description
+#' This function calculates the building identifiers from a list of building subjects.
 #'
-#' @param arg <> 
+#' @param buildingSubjects <array> of URIs of the building subjects.
 #' @return 
 
 get_building_identifiers <- function(buildingSubjects){
@@ -127,11 +136,105 @@ get_building_identifiers <- function(buildingSubjects){
   )
 }
 
-#' Title
+#' Get all building subjects in an harmonised dataset
 #' 
-#' Description
+#' This function get all building subjects available from a BIGG-harmonised dataset.
 #'
-#' @param arg <> 
+#' @param buildingsRdf <rdf> containing the information of a set of buildings.
+#' @param buildingSubjects <array> of URIs of the building subjects.
+#' @return <array> with the subject URI for each building.
+
+get_all_buildings_list <- function(buildingsRdf){
+  metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
+    SELECT ?b
+    WHERE {
+      ?b a bigg:Building .
+    }')))
+  return( if(length(metadata_df)>0) {as.character(metadata_df$b)} else {NULL} )
+}
+
+#' Exists analytical model in a BIGG-harmonised dataset.
+#' 
+#' This function checks if certain analytical model subject exists in a BIGG-harmonised dataset.
+#'
+#' @param buildingsRdf <rdf> containing the information of a set of buildings.
+#' @param modelSubject <uri> of an analytical model.
+#' @param namespaces named <array> that relates simple namespaces and complete.
+#' ones.
+#' @return <boolean> if the model exists.
+
+exists_analytical_model <- function(buildingsRdf, modelSubject, namespaces){
+  
+  modelSubject <- namespace_integrator(modelSubject, namespaces)
+  return(nrow(suppressMessages(buildingsRdf %>% rdf_query(paste0(    
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
+    SELECT ?m
+    WHERE {
+      ?m a bigg:AnalyticalModel .
+      FILTER (?m = <',modelSubject,'>) .
+    }'))))>0)
+}
+
+#' ISO 8601 period to natural text
+#' 
+#' This function converts an ISO 8601 period (e.g. PT1H30M) to natural text (in the example, "1 hour, 30 mins").
+#'
+#' @param x <string> defining the frequency to be converted. 
+#' It must follow ISO 8601 format representing the time step. 
+#' @param only_first <boolean> specifying if only the first 
+#' timestep item should be converted.
+#' @return <string> with the time step in natural text.
+
+iso8601_period_to_text <- function(x,only_first=F){
+  x <- lubridate::period(x)
+  items <- c("year"=x@year,"month"=x@month,"day"=x@day,
+             "hour"=x@hour,"min"=x@minute,
+             "sec"=lubridate::second(x))
+  text_items <- lapply(FUN = function(i){
+    if(items[i]>0){
+      paste(items[i], 
+            if(items[i]>1){paste0(names(items)[i],"s")
+            } else { names(items)[i] })
+    }},1:length(items))
+  text_items <- text_items[mapply(function(i)!is.null(i),text_items)]
+  if(only_first)
+    text_items <- text_items[1]
+  return(do.call(function(...) paste(..., sep=", "), text_items))
+}
+
+#' ISO 8601 period to timedelta
+#' 
+#' This function converts an ISO 8601 period (e.g. PT1H30M) to a timedelta object.
+#'
+#' @param x <string> defining the frequency to be converted. 
+#' It must follow ISO 8601 format representing the time step.
+#' @return <period> with format defined in lubridate 'Period-class'.
+
+iso8601_period_to_timedelta <- function(x){
+  x <- lubridate::period(x)
+  return(lubridate::years(x@year) + months(x@month) + lubridate::days(x@day) +
+           lubridate::hours(x@hour) + lubridate::minutes(x@minute) + lubridate::seconds(lubridate::second(x)))
+}
+
+#
+# Get time series of harmonised data ----
+#
+
+#' Get the metadata of all device aggregators in an BIGG-harmonised dataset.
+#' 
+#' This function gets all the device aggregators available in a BIGG-harmonised dataset.
+#' It also provides metadata with the characteristics of this device aggregators.
+#'
+#' @param buildingsRdf <rdf> containing the information of a set of buildings.
 #' @return 
 
 get_all_device_aggregators <- function(buildingsRdf){
@@ -167,118 +270,16 @@ get_all_device_aggregators <- function(buildingsRdf){
   return(result)
 }
 
-#' Title
+#' Get sensor metadata
 #' 
-#' Description
+#' This function gets the available metadata of a certain sensor time series.
 #'
-#' @param arg <> 
-#' @return 
-
-get_all_buildings_list <- function(buildingsRdf){
-  metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
-    paste0(mapply(function(i){
-      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
-              bigg_namespaces[i])},
-      1:length(bigg_namespaces))),
-    '
-    SELECT ?b
-    WHERE {
-      ?b a bigg:Building .
-    }')))
-  return( if(length(metadata_df)>0) {as.character(metadata_df$b)} else {NULL} )
-}
-
-#' Title
-#' 
-#' Description
-#'
-#' @param arg <> 
-#' @return 
-
-exists_analytical_model <- function(buildingsRdf, modelSubject, namespaces){
-  modelSubject <- namespace_integrator(modelSubject, namespaces)
-  return(nrow(suppressMessages(buildingsRdf %>% rdf_query(paste0(    
-    paste0(mapply(function(i){
-      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
-              bigg_namespaces[i])},
-      1:length(bigg_namespaces))),
-    '
-    SELECT ?m
-    WHERE {
-      ?m a bigg:AnalyticalModel .
-      FILTER (?m = <',modelSubject,'>) .
-    }'))))>0)
-}
-
-#' Title
-#' 
-#' Description
-#'
-#' @param arg <> 
-#' @return 
-
-exists_project_model <- function(buildingsRdf, projectSubject, namespaces){
-  projectSubject <- namespace_integrator(projectSubject, namespaces)
-  return(nrow(suppressMessages(buildingsRdf %>% rdf_query(paste0(    
-    paste0(mapply(function(i){
-      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
-              bigg_namespaces[i])},
-      1:length(bigg_namespaces))),
-    '
-    SELECT ?m
-    WHERE {
-      ?m a bigg:Project .
-      FILTER (?m = <',projectSubject,'>) .
-    }'))))>0)
-}
-
-#' Title
-#' 
-#' Description
-#'
-#' @param arg <> 
-#' @return 
-
-iso8601_period_to_text <- function(x,only_first=F){
-  x <- lubridate::period(x)
-  items <- c("year"=x@year,"month"=x@month,"day"=x@day,
-             "hour"=x@hour,"min"=x@minute,
-             "sec"=lubridate::second(x))
-  text_items <- lapply(FUN = function(i){
-    if(items[i]>0){
-      paste(items[i], 
-            if(items[i]>1){paste0(names(items)[i],"s")
-            } else { names(items)[i] })
-    }},1:length(items))
-  text_items <- text_items[mapply(function(i)!is.null(i),text_items)]
-  if(only_first)
-    text_items <- text_items[1]
-  return(do.call(function(...) paste(..., sep=", "), text_items))
-}
-
-#' Title
-#' 
-#' Description
-#'
-#' @param arg <> 
-#' @return 
-
-iso8601_period_to_timedelta <- function(x){
-  x <- lubridate::period(x)
-  return(years(x@year) + months(x@month) + days(x@day) +
-           hours(x@hour) + minutes(x@minute) + seconds(lubridate::second(x)))
-}
-
-#
-# Get time series of harmonised data ----
-#
-
-#' Title
-#' 
-#' Description
-#'
-#' @param arg <> 
-#' @return 
+#' @param buildingsRdf <rdf> containing the information of a set of buildings.
+#' @param sensorId <uri> of an analytical model.
+#' @param tz <string> specifying the local time zone related to the
+#' building in analysis. The format of this time zones are defined by the IANA
+#' Time Zone Database (https://www.iana.org/time-zones).
+#' @return <data.frame> with the metadata of the sensor identifier.
 
 get_sensor_metadata <- function(buildingsRdf, sensorId, tz){
   metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
@@ -318,12 +319,16 @@ get_sensor_metadata <- function(buildingsRdf, sensorId, tz){
   return(metadata_df)
 }
 
-#' Title
+#' Read time series and generate a list of timeseries splitted by sensor identifiers
 #' 
-#' Description
+#' This function gets time series from JSON files that has the name of a 
+#' selected sensor identifier. If a list of time series is provided, this function
+#' only filters the input list considering the sensor identifiers. 
 #'
-#' @param arg <> 
-#' @return 
+#' @param timeseriesObject <string> describing the local path with the JSON 
+#' files or a <list> containing the time series.
+#' @param sensorId <string> identifying a time series. 
+#' @return <list> of data.frames with all time series found.
 
 read_timeseries_object <- function(timeseriesObject,sensorId){
   if(is.character(timeseriesObject)){
@@ -332,24 +337,40 @@ read_timeseries_object <- function(timeseriesObject,sensorId){
       jsonFiles[grepl(sensorId,jsonFiles)],
       function(x){jsonlite::fromJSON(x)}),recursive=F)
   } else {
-    timeseriesObject_ <- timeseriesObject
+    timeseriesObject_ <- timeseriesObject[names(timeseriesObject) %in% sensorId]
   }
   return(timeseriesObject_)
 }
 
-#' Title
+#' Compute the specified formula of a device aggregator
 #' 
-#' Description
-#'
-#' @param arg <> 
-#' @return 
+#' This function obtains all the time series related with a device aggregator, aggregates them 
+#' according to the device aggregator metadata and obtains a single resultant time series.
+#' 
+#' @param buildingsRdf <rdf> containing the information of a set of buildings.
+#' @param timeseriesObject <string> path of JSON files, or <list> of time series.
+#' @param buildingSubject <uri> containing the building subject.
+#' @param formula <string> describing the formula for the device aggregator. 
+#' It consist on a sequence of arithmetical operations over one (or multiple) sensor 
+#' identifier(s). The sensor identifiers must be written between prefix '<mi>' and suffix </mi>. 
+#' On contrary, the operators are described between prefix <mo> and suffix </mo>.
+#' Example of the sum of two sensors (let's identify them as 'ID1' and 'ID2'): 
+#' '<mi>ID1</mi><mo>+</mo><mi>ID2</mi>'
+#' @param outputFrequency <string> defining the frequency selected as output. 
+#' It must follow ISO 8601 format representing the time step.
+#' @param aggFunctions <string> describing the possible aggregation functions of the
+#' resultant time series. Possible values: 'SUM', 'AVG', 'HDD', 'CDD'.
+#' @param useEstimatedValues <boolean> describing if the estimated values of time series 
+#' should be taken into account.
+#' @param ratioCorrection <boolean> describing whether a ratio correction should be done, 
+#' or not. Important to set to TRUE when time series contain gaps.
+#' @return <data.frame> containing the resultant time series.
 
 parse_device_aggregator_formula <- function(buildingsRdf, timeseriesObject, 
-                                            buildingSubject, formula, inputFrequency, 
+                                            buildingSubject, formula, 
                                             outputFrequency, aggFunctions,
                                             useEstimatedValues, ratioCorrection=F){
-  #formula <- "<mi>501898a024310399210beb4d7f7bb890c568714cc006e7e6429cc6869ccb215c</mi><mo>+</mo><mi>501898a024310399210beb4d7f7bb890c568714cc006e7e6429cc6869ccb215c</mi>"
-  #formula <- devagg_buildings[4,3]
+
   result <- data.frame()
   op <- NULL
   tz <- get_tz_building(buildingsRdf, buildingSubject)
@@ -391,15 +412,6 @@ parse_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
             }
           }
         }
-        ## To do, update the following operators
-        # } else if(op=="-") {
-        #   result[,"value_2"] <- -result[,"value_2"]
-        #   result[,"value"] <- rowSums(result[,c("value_1","value_2")],na.rm=T)
-        # } else if(op=="*") {
-        #   result[,"value"] <- matrixStats::rowProds(result[,c("value_1","value_2")],na.rm=T)
-        # } else if(op=="/") {
-        #   result[,"value_2"] <- 1/result[,"value_2"]
-        #   result[,"value"] <- matrixStats::rowProds(result[,c("value_1","value_2")],na.rm=T)
       }
       if(!is.null(result)){
         result[,endsWith(colnames(result),"_1") | endsWith(colnames(result),"_2")] <- NULL
@@ -421,12 +433,28 @@ parse_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
 }
 
 
-#' Title
+
+#' Read and transform an harmonised time series
 #' 
-#' Description
-#'
-#' @param arg <> 
-#' @return 
+#' This function get a raw time series related with a sensor and transform it to a time series with 
+#' the required characteristics (e.g. time aggregation, time alignment, cumulative to instantaneous, 
+#' irregular to regular time steps...).
+#' 
+#' @param timeseriesObject <string> path of JSON files, or <list> of time series.
+#' @param buildingSubject <uri> containing the building subject.
+#' @param sensorId <string> containing the sensor identifier.
+#' @param tz <string> specifying the local time zone related to the
+#' building in analysis. The format of this time zones are defined by the IANA
+#' Time Zone Database (https://www.iana.org/time-zones).
+#' @param outputFrequency <string> defining the frequency selected as output. 
+#' It must follow ISO 8601 format representing the time step.
+#' @param aggFunctions <string> describing the possible aggregation functions of the
+#' resultant time series. Possible values: 'SUM', 'AVG', 'HDD', 'CDD'.
+#' @param useEstimatedValues <boolean> describing if the estimated values of time series 
+#' should be taken into account.
+#' @param ratioCorrection <boolean> describing whether a ratio correction should be done, 
+#' or not. Important to set to TRUE when time series contain gaps.
+#' @return <data.frame> containing the resultant time series.
 
 read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz,
                                       outputFrequency, aggFunctions,
@@ -606,12 +634,26 @@ read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId, 
   return(timeseriesSensor)
 }
 
-#' Title
+#' Obtain the metadata and time series of device aggregators
 #' 
-#' Description
-#'
-#' @param arg <> 
-#' @return 
+#' This function get the metadata and time series of all device aggregators in an 
+#' BIGG-harmonised dataset. 
+#' 
+#' @param buildingsRdf <rdf> containing the information of a set of buildings.
+#' @param timeseriesObject <string> path of JSON files, or <list> of time series.
+#' @param allowedBuildingSubjects <array> of URI(s) containing the allowed building 
+#' subject(s).
+#' @param allowedMeasuredProperties <array> of string(s) containing the allowed 
+#' measured property(ies).
+#' @param useEstimatedValues <boolean> describing if the estimated values of time 
+#' series should be taken into account.
+#' @param ratioCorrection <boolean> describing whether a ratio correction should 
+#' be done, or not. Important to set to TRUE when time series contain gaps.
+#' @param containsEEMs <boolean> to filter only those buildings that contain one
+#' or more EEM.
+#' @param alignGreaterThanHourlyFrequencyToYearly <boolean> to force time
+#' alignment to P1Y frequency if original alignment frequency is greater to PT1H.
+#' @return <list> of time series and metadata related with all device aggregators.
 
 get_device_aggregators_by_building <- function(
     buildingsRdf, timeseriesObject=NULL, allowedBuildingSubjects=NULL, 
@@ -667,8 +709,6 @@ get_device_aggregators_by_building <- function(
                                                  buildingSubject = buildingSubject,
                                                  formula = as.character(unique(aux[aux$deviceAggregatorName==devAggName,
                                                                                    "deviceAggregatorFormula"])),
-                                                 inputFrequency = as.character(unique(aux[aux$deviceAggregatorName==devAggName,
-                                                                                          "deviceAggregatorFrequency"])),
                                                  outputFrequency = largerFrequency,
                                                  aggFunctions = unlist(
                                                    unique(aux[aux$deviceAggregatorName==devAggName,
@@ -700,12 +740,41 @@ get_device_aggregators_by_building <- function(
 # Read EEMs from harmonised data ----
 #
 
-#' Title
+#' Exists a project in a BIGG-harmonised dataset.
 #' 
-#' Description
+#' This function checks if certain project subject exists in a BIGG-harmonised dataset.
 #'
-#' @param arg <> 
-#' @return 
+#' @param buildingsRdf <rdf> containing the information of a set of buildings.
+#' @param projectSubject <uri> of project subject.
+#' @param namespaces named <array> that relates simple namespaces and complete 
+#' ones.
+#' @return <boolean> if the project exists.
+
+exists_project_model <- function(buildingsRdf, projectSubject, namespaces){
+  projectSubject <- namespace_integrator(projectSubject, namespaces)
+  return(nrow(suppressMessages(buildingsRdf %>% rdf_query(paste0(    
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
+    SELECT ?m
+    WHERE {
+      ?m a bigg:Project .
+      FILTER (?m = <',projectSubject,'>) .
+    }'))))>0)
+}
+
+#' Get EEMs subjects of a set of buildings
+#' 
+#' This function search for all the available EEMs subjects
+#' in a set of buildings. It also relates the EEMs with the 
+#' building element.
+#'
+#' @param buildingsRdf <rdf> containing the information of a set of buildings.
+#' @param buildingSubjects <array> of URIs related with the building subjects.
+#' @return <data.frame> containing the building subject, building element and 
+#' EEM subject.
 
 get_building_eems <- function(buildingsRdf, buildingSubjects=NULL){
   result <- suppressMessages(buildingsRdf %>% rdf_query(paste0(
@@ -734,12 +803,14 @@ get_building_eems <- function(buildingsRdf, buildingSubjects=NULL){
   } else {NULL})
 }
 
-#' Title
+#' Get the details of a set of EEMs subjects
 #' 
-#' Description
+#' This function get the metadata of a set of EEMs in a BIGG-harmonised dataset. 
+#' The investment is always converted to Euros.
 #'
-#' @param arg <> 
-#' @return 
+#' @param buildingsRdf <rdf> containing the information of a set of buildings.
+#' @param eemSubjects <array> of URIs related with the EEM subjects.
+#' @return <data.frame> containing the metadata of EEMs
 
 get_eem_details <- function(buildingsRdf, eemSubjects=NULL){
   result <- suppressMessages(buildingsRdf %>% rdf_query(paste0(
@@ -852,6 +923,13 @@ get_KPI_timeseries <- function(buildingsRdf, timeseriesObject, buildingSubject,
   
   return(timeseriesKPI)
 }
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
 
 get_KPI_by_building <- function(buildingsRdf,timeseriesObject,buildingSubject,
                                 KPI, frequency, ratedBy, localTz){

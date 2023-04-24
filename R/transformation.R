@@ -1145,7 +1145,9 @@ normalise_zscore <- function(data, scalingAttr=NULL) {
 #' and supporting multiple normalization methods
 #'
 #' @param data <timeserie>
-#' @param localTimeZone <string> timezone
+#' @param localTimeZone <string> specifying the local time zone related to the
+#' building in analysis. The format of this time zones are defined by the IANA
+#' Time Zone Database (https://www.iana.org/time-zones).
 #' @param transformation <string> absolute or relative
 #' @param inputVars <array> of strings. Possible values: loadCurves, daysWeekend,
 #' daysHolidays, daysWeek, dailyTemperature, dailyConsumption, dailyHdd, dailyCdd,
@@ -1611,8 +1613,9 @@ make.similarity <- function(my.data, similarity) {
 #' feature  in the data argument.
 #' @param outdoorTemperatureFeature <string> containing the column name of the
 #' outdoor temperature feature in the data argument.
-#' @param localTimeZone <string> specifying the local time zone related
-#' to the building in analysis
+#' @param localTimeZone <string> specifying the local time zone related to the
+#' building in analysis. The format of this time zones are defined by the IANA
+#' Time Zone Database (https://www.iana.org/time-zones).
 #' @param kMin <integer> defining the minimum number of allowed groups in
 #' the clustering proceed.
 #' @param kMax <integer> defining the maximum number of allowed groups in
@@ -1832,7 +1835,9 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
 #' feature in the data argument.
 #' @param outdorTemperatureFeature <string> containing the column name of the outdoor
 #' temperature feature in the data argument.
-#' @param localTimeZone <string> local time zone
+#' @param localTimeZone <string> specifying the local time zone related to the
+#' building in analysis. The format of this time zones are defined by the IANA
+#' Time Zone Database (https://www.iana.org/time-zones).
 #' @param clustering <object> clustering_dlc() output
 #' @param method: <string>. Choose one, by default clusteringCentroids:
 #'   absoluteLoadCurvesCentroids: Based on the absolute consumption load

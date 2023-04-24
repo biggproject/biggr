@@ -5,12 +5,13 @@
 bigg_namespaces <- c("bigg" = "http://bigg-project.eu/ontology#",
                      "unit" = "http://qudt.org/vocab/unit/")
 
-#' Title
+#' Namespace integrator
 #' 
-#' Description
+#' This function converts the simplified namespace subtring of multiple URIs to his complete URI namespace.
 #'
-#' @param arg <> 
-#' @return 
+#' @param items <array> of strings with the URIs to complete.
+#' @param namespaces named <array>. Example: 'biggr::bigg_namespaces'.
+#' @return <array> of strings with the complete namespace integrated.
 
 namespace_integrator <- function(items, namespaces=NULL){
   if(is.null(namespaces)){
@@ -42,12 +43,22 @@ write_rdf <- function(object, file){
   return(T)
 }
 
-#' Title
+#' Add triplet to and RDF object
 #' 
-#' Description
+#' This function adds a triplet to an RDF object. Classes, data properties and 
+#' object properties can be defined to a certain subject.
 #'
-#' @param arg <> 
-#' @return 
+#' @param object <rdf> base object.
+#' @param subject <uri> containing the subject of the new item.
+#' @param classes <uri(s)> containing the subject(s) name(s) in the 
+#' ontology related with this item.
+#' @param dataProperties <list> containing data properties of the triplet. 
+#' It is literal information, no connections to other subjects of the RDF.
+#' @param objectProperties <list> containing object properties of the triplet. 
+#' It consists on links to other items of the RDF.
+#' @param namespaces named <array> that relates simple namespaces and complete 
+#' ones.
+#' @return <rdf> object with the new item added.
 
 add_item_to_rdf <- function(object, subject, classes = NULL, dataProperties = NULL, 
                             objectProperties = NULL, namespaces=NULL){
