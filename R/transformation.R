@@ -1665,7 +1665,7 @@ make.similarity <- function(my.data, similarity) {
 #'   values: 24, 12, 8, 6, 4, 3, 2.
 #' @param ignoreDates <list of dates> list of dates to ignore (holidays,
 #' weather, ..)
-#' @return <dict>
+#' @return <list>
 #'     dailyClassification <data.frame> in daily frequency, containing
 #' the classification of each daily load curve.
 #'     absoluteLoadCurvesCentroids <matrix> with row names as the
