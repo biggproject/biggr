@@ -289,7 +289,7 @@ get_sensor_metadata <- function(buildingsRdf, sensorId, tz){
 #' @param sensorId <string> identifying a time series. 
 #' @return <list> of data.frames with all time series found.
 
-read_timeseries_object <- function(timeseriesObject,sensorId){
+get_sensor_file <- function(timeseriesObject,sensorId){
   if(is.character(timeseriesObject)){
     jsonFiles <- list.files(timeseriesObject,"json",full.names=T)
     timeseriesObject_ <- unlist(lapply(
@@ -324,7 +324,7 @@ read_timeseries_object <- function(timeseriesObject,sensorId){
 #' or not. Important to set to TRUE when time series contain gaps.
 #' @return <data.frame> containing the resultant time series.
 
-read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz,
+get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz,
                                       outputFrequency, aggFunctions,
                                       useEstimatedValues, integrateCost = T,
                                       integrateEmissions = T){
@@ -348,7 +348,7 @@ read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId, 
     useEstimatedValues <- T
   
   # If timeseriesObject is NULL, read certain sensor
-  timeseriesObject_ <- read_timeseries_object(timeseriesObject,metadata$sensorId) 
+  timeseriesObject_ <- get_sensor_file(timeseriesObject,metadata$sensorId) 
   
   if(is.null(timeseriesObject_)) return(NULL)
   timeseriesSensor <- timeseriesObject_[sensorId][[1]]
@@ -523,7 +523,7 @@ read_and_transform_sensor <- function(timeseriesObject, buildingsRdf, sensorId, 
 #' @param buildingsRdf <rdf> containing the information of a set of buildings.
 #' @return 
 
-get_all_device_aggregators <- function(buildingsRdf){
+get_device_aggregators_metadata <- function(buildingsRdf){
   result <- suppressMessages(buildingsRdf %>% rdf_query(paste0(
     paste0(mapply(function(i){
       sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
@@ -580,7 +580,7 @@ get_all_device_aggregators <- function(buildingsRdf){
 #' or not. Important to set to TRUE when time series contain gaps.
 #' @return <data.frame> containing the resultant time series.
 
-parse_device_aggregator_formula <- function(buildingsRdf, timeseriesObject, 
+compute_device_aggregator_formula <- function(buildingsRdf, timeseriesObject, 
                                             buildingSubject, formula, 
                                             outputFrequency, aggFunctions,
                                             useEstimatedValues, ratioCorrection=F){
@@ -593,7 +593,7 @@ parse_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
       res <- stringr::str_match(formula, "<mi>\\s*(.*?)\\s*</mi>")
       formula <- gsub(res[1,1],"",formula,fixed = T)
       aux_result <- eval(parse(text=
-                                 paste0('read_and_transform_sensor(
+                                 paste0('get_sensor(
             timeseriesObject = timeseriesObject,
             buildingsRdf = buildingsRdf,
             sensorId = "',res[1,2],'",
@@ -667,13 +667,13 @@ parse_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
 #' alignment to P1Y frequency if original alignment frequency is greater to PT1H.
 #' @return <list> of time series and metadata related with all device aggregators.
 
-get_device_aggregators_by_building <- function(
+get_device_aggregators <- function(
     buildingsRdf, timeseriesObject=NULL, allowedBuildingSubjects=NULL, 
     allowedMeasuredProperties=NULL, useEstimatedValues=F, ratioCorrection=T,
     containsEEMs=F, alignGreaterThanHourlyFrequencyToYearly=F){
   
   # Get formulas and associated metadata for each building and device aggregator
-  devagg_buildings <- get_all_device_aggregators(buildingsRdf)
+  devagg_buildings <- get_device_aggregators_metadata(buildingsRdf)
   
   # Filter by the allowed buildings
   if(!is.null(allowedBuildingSubjects)){
@@ -715,7 +715,7 @@ get_device_aggregators_by_building <- function(
                       dfs <- setNames(lapply(unique(aux$deviceAggregatorName),
                                              function(devAggName){
                                                #devAggName = "totalGasConsumption"
-                                               df <- parse_device_aggregator_formula(
+                                               df <- compute_device_aggregator_formula(
                                                  buildingsRdf = buildingsRdf,
                                                  timeseriesObject = timeseriesObject,
                                                  buildingSubject = buildingSubject,
@@ -1018,7 +1018,7 @@ get_emissions_metadata <- function(buildingsRdf, sensorId){
 #' energy cost calculation. It must follow ISO 8601 format representing the 
 #' time step.
 #' @param energyTimeseriesSensor <data.frame> output from 
-#' read_and_transform_sensor().
+#' get_sensor().
 #' 
 #' @return <data.frame>, by-passing the input argument energyTimeseriesSensor and 
 #' appending columns related to energy cost.
@@ -1068,7 +1068,7 @@ append_cost_to_sensor <- function(buildingsRdf, timeseriesObject, tariffSubject,
     metadata_df <- metadata_df[order(metadata_df$start),]
     prices <- do.call(rbind,lapply(1:nrow(metadata_df), function(i){
       
-      timeseriesObject_ <- read_timeseries_object(timeseriesObject,metadata_df$hash[i]) 
+      timeseriesObject_ <- get_sensor_file(timeseriesObject,metadata_df$hash[i]) 
       timeseriesTariff <- timeseriesObject_[metadata_df$hash[i]][[1]]
       timeseriesTariff$start <- parse_iso_8601(timeseriesTariff$start)
       timeseriesTariff$end <- parse_iso_8601(timeseriesTariff$end)
@@ -1124,7 +1124,7 @@ append_cost_to_sensor <- function(buildingsRdf, timeseriesObject, tariffSubject,
 #' emissions calculation. It must follow ISO 8601 format representing the 
 #' time step.
 #' @param energyTimeseriesSensor <data.frame> output from 
-#' read_and_transform_sensor().
+#' get_sensor().
 #' 
 #' @return <data.frame>, by-passing the input argument energyTimeseriesSensor 
 #' and appending columns related to emissions.
@@ -1169,7 +1169,7 @@ append_emissions_to_sensor <- function(buildingsRdf, timeseriesObject, emissions
                                  as.period(metadata_df$timeSeriesFrequency)==as.period(frequency_),]
     }
     
-    timeseriesObject_ <- read_timeseries_object(timeseriesObject,metadata_df$hash) 
+    timeseriesObject_ <- get_sensor_file(timeseriesObject,metadata_df$hash) 
     emissions <- timeseriesObject_[metadata_df$hash][[1]]
     emissions$start <- parse_iso_8601(emissions$start)
     emissions$end <- parse_iso_8601(emissions$end)
