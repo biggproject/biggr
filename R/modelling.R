@@ -1058,28 +1058,82 @@ GLM <- function(input_parameters){
 #' Recursive Least Square model
 #' 
 #' This function is a custom model wrapper to train and predict recursive linear 
-#' models over the Caret modelling framework. It should be launched using the train() and 
-#' biggr::predict.train() functions. An example to train a model:
+#' models over the Caret modelling framework. 
+#'
+#' @param formula -arg for train()- <formula> providing the model output feature
+#' and the model input features. Inputs can be columns defined in data argument
+#' and/or features described in transformationSentences argument.
+#' @param data -arg for train()- <data.frame> containing the output feature and 
+#' all the raw input features used to train the model.
+#' @param transformationSentences -arg for train()- <list>. See 
+#' data_transformation_wrapper() function for details.
+#' @param logOutput -arg for train()- <boolean> indicating if 
+#' Box-Jenkins transformation is done.
+#' @param minMonthsTraining -arg for train()- <int> indicating 
+#' the minimum number of months for training.
+#' @param continuousTime -arg for train()- <boolean> indicating if the 
+#' fitting process of the model coefficients should account for the 
+#' data gaps.
+#' @param maxPredictionValue -arg for train()- <float> defining 
+#' the maximum value of predictions.
+#' @param weatherDependenceByCluster -arg for train()- <data.frame>
+#' containing the columns 's', 'heating', 'cooling', 'tbalh', 'tbalc';
+#' corresponding to the daily load curve cluster, the heating dependence 
+#' (TRUE or FALSE), the cooling dependance (TRUE or FALSE), the balance 
+#' heating temperature, and the balance cooling temperature, respectively.
+#' @param clusteringResults -arg for train()- <list> from the 
+#' output produced by clustering_dlc().
+#' @param newdata -arg for biggr::predict.train()- <data.frame> containing
+#' the input data to consider in a model prediction.
+#' @param forceGlobalInputFeatures -arg for biggr::predict.train()- <list> 
+#' containing the input model features to overwrite in newdata. 
+#' Each input feature must have length 1, or equal to the newdata's 
+#' number of rows.
+#' @param forceInitInputFeatures -arg for biggr::predict.train()- <list>
+#' containing the last timesteps of the input features.
+#' @param forceInitOutputFeatures -arg for biggr::predict.train()- <list>
+#' containing the last timesteps of the output feature.
+#' @param forceOneStepPrediction -arg for biggr::predict.train()- 
+#' <boolean> indicating if the prediction mode should be done in one step 
+#' prediction mode. 
+#' @param modelMinMaxHorizonInHours -arg for biggr::predict.train()- 
+#' <array> considering the minimum and maximum horizon in hours for each 
+#' prediction timestep. When forceOneStepPrediction is TRUE, this argument
+#' is not used.
+#' @param modelWindow -arg for biggr::predict.train()- <string> containing the 
+#' window size considered in best model selection  (e.g. '%M-%Y', '%d-%M-%Y').
+#' When forceOneStepPrediction is TRUE, this argument is not used.
+#' @param modelSelection -arg for biggr::predict.train()- <string> defining 
+#' the model selection mode for selecting the best model at every timeframe. 
+#' Default: 'rmse' or 'random'. When forceOneStepPrediction is TRUE, 
+#' this argument is not used.
+#' 
+#' It should be launched using the train() function for training, and 
+#' biggr::predict.train() function for predicting. 
+#' An example to train a model is :
 #' train(
-#'  formula = Qe ~ daily_seasonality + yearly_seasonality + tc + tcint + tcinty,
-#'  data = df,
-#'  method = GLM(
-#'    data.frame(parameter = names(params),
-#'               class = mapply(names(params),FUN=function(i) generalParams[[i]][["datatype"]]))
+#'  formula = Qe ~ daily_seasonality,
+#'  data = df, # data.frame with three columns: 
+#'             #  'time','Qe', and 'hour'; 
+#'             #  corresponding to time, electricity consumption, 
+#'             #  and hour of the day.
+#'  method = RLS(
+#'    data.frame(parameter = "nhar",
+#'               class = "discrete")
 #'  ),
-#'  tuneGrid = expand.grid(params),
-#'  trControl = trControl,
+#'  tuneGrid = data.frame("nhar"=4:6),
+#'  trControl = trainControl(method="timeslice", initialWindow = 100,
+#'                           horizon = 10, skip = 10, fixedWindow = T),
 #'  minPredictionValue = 0,
 #'  maxPredictionValue = max(df$Qe,na.rm=T) * 1.1,
-#'  familyGLM = quasipoisson(link="log"),
-#'  transformationSentences = args$transformationSentences,
-#'  weatherDependenceByCluster = args$weatherDependenceByCluster,
-#'  clusteringResults = args$clusteringResults
+#'  transformationSentences = list(
+#'     "daily_seasonality" = c(
+#'         "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
+#'         "weekday")
+#'    )
 #'  )
-#'
-#' @param formula <>
-#' @param transformationSentences <>
-#' @return 
+#' 
+#' @return When training: <list> containing the model, when predicting: <array> of the predicted results.
 
 RLS <- function(input_parameters){
   input_parameters$label <- input_parameters$parameter
