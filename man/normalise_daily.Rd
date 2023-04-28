@@ -9,11 +9,11 @@ normalise_daily(data, method = "relative", localTimeZone)
 \arguments{
 \item{data}{<data.frame> containing serie to normalise}
 
-\item{method}{<string> Normalization method. Supported methods
-relative}
+\item{method}{<string> Normalization method. 
+Supported methods: relative}
 }
 \value{
-daily normalised timeserie
+<data.frame> daily normalised time series
 }
 \description{
 Normalize time serie using hourly over daily relative consumption (%) normalization method

@@ -2,8 +2,7 @@
 % Please edit documentation in R/preparation.R
 \name{detect_ts_zscore_outliers}
 \alias{detect_ts_zscore_outliers}
-\title{Detect elements of the time series out of a Z-score threshold,
-applied on the whole timeseries or a rolling window of predefined width.}
+\title{Detect Z-score outliers in time series.}
 \usage{
 detect_ts_zscore_outliers(
   data,
@@ -14,30 +13,30 @@ detect_ts_zscore_outliers(
 )
 }
 \arguments{
-\item{data}{<timeSeries> An argument containing the time series from which
-the outliers need to be detected.}
+\item{data}{<data.frame> describing the input time series whose outliers need 
+to be detected. Time column: 'time', value column: 'value'.}
 
-\item{zScoreThreshold}{<float> An argument defining the threshold of the
+\item{zScoreThreshold}{<float> describing the threshold of the
 Z-score calculation.}
 
-\item{window}{<string> A string in ISO 8601 format representing the window
-(e.g. "7D","1D", "72H" ,...). This is an optional argument setting
+\item{window}{<string> in ISO 8601 format representing the window
+(e.g. "P7D","P1D", "PT168H" ,...). This is an optional argument setting
 the width of the rolling window where the Z-normalization calculation
 is considered. This argument allows to adapt the outlier filtering depending
 the dynamics of the signal itself. Default value is "NULL", thus no rolling
 window is considered.}
 
-\item{zScoreExtremesSensitive}{<boolean> An optional argument to define if the
+\item{zScoreExtremesSensitive}{<boolean> defining if the
 aggregation function of the Zscore is the mean (true), or median(false).
 The first one makes the Z-score sensitive to extreme values, and the
 second no. Default is true.}
 
-\item{na.rm}{<boolean> Remove NAN values in mean, medin and sd functions}
+\item{na.rm}{<boolean> describing if NAN values should be removed 
+in mean, median and sd functions}
 }
 \value{
-outliers boolean timeSeries object using the original time period
-and frequency, only assigning true values when an element should be
-considered as an outlier.
+<data.frame> with boolean values representing whether a item is an 
+outlier, or not.
 }
 \description{
 Detect elements of the time series out of a Z-score threshold,

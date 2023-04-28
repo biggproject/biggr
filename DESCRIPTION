@@ -35,7 +35,7 @@ Depends:
     GA,
     parallel,
     FinCal,
-    R (>= 4.1)
+    R (== 4.1.2)
 License: "" 
 RoxygenNote: 7.1.2
 Suggests: 

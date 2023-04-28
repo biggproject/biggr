@@ -2,16 +2,106 @@
 % Please edit documentation in R/modelling.R
 \name{RLS}
 \alias{RLS}
-\title{Title}
+\title{Recursive Least Square model}
 \usage{
 RLS(input_parameters)
 }
 \arguments{
-\item{arg}{<>}
+\item{formula}{-arg for train()- <formula> providing the model output feature
+and the model input features. Inputs can be columns defined in data argument
+and/or features described in transformationSentences argument.}
+
+\item{data}{-arg for train()- <data.frame> containing the output feature and 
+all the raw input features used to train the model.}
+
+\item{transformationSentences}{-arg for train()- <list>. See 
+data_transformation_wrapper() function for details.}
+
+\item{logOutput}{-arg for train()- <boolean> indicating if a
+Box-Jenkins transformation is considered in the output feature
+during the training of the model. When predicting, 
+it computes, automatically, the inverse transformation.}
+
+\item{minMonthsTraining}{-arg for train()- <integer> indicating 
+the minimum number of months for training.}
+
+\item{continuousTime}{-arg for train()- <boolean> indicating if the 
+fitting process of the model coefficients should account for the 
+data gaps. Set to}
+
+\item{maxPredictionValue}{-arg for train()- <float> defining 
+the maximum value of predictions.}
+
+\item{weatherDependenceByCluster}{-arg for train()- <data.frame>
+containing the columns 's', 'heating', 'cooling', 'tbalh', 'tbalc';
+corresponding to the daily load curve cluster, the heating dependence 
+(TRUE or FALSE), the cooling dependance (TRUE or FALSE), the balance 
+heating temperature, and the balance cooling temperature, respectively.}
+
+\item{clusteringResults}{-arg for train()- <list> from the 
+output produced by clustering_dlc().}
+
+\item{newdata}{-arg for biggr::predict.train()- <data.frame> containing
+the input data to consider in a model prediction.}
+
+\item{forceGlobalInputFeatures}{-arg for biggr::predict.train()- <list> 
+containing the input model features to overwrite in newdata. 
+Each input feature must have length 1, or equal to the newdata's 
+number of rows.}
+
+\item{forceInitInputFeatures}{-arg for biggr::predict.train()- <list>
+containing the last timesteps of the input features.}
+
+\item{forceInitOutputFeatures}{-arg for biggr::predict.train()- <list>
+containing the last timesteps of the output feature.}
+
+\item{forceOneStepPrediction}{-arg for biggr::predict.train()- 
+<boolean> indicating if the prediction mode should be done in one step 
+prediction mode.}
+
+\item{modelMinMaxHorizonInHours}{-arg for biggr::predict.train()- 
+<array> considering the minimum and maximum horizon in hours for each 
+prediction timestep. When forceOneStepPrediction is TRUE, this argument
+is not used.}
+
+\item{modelWindow}{-arg for biggr::predict.train()- <string> containing the 
+window size considered in best model selection  (e.g. '%M-%Y', '%d-%M-%Y').
+When forceOneStepPrediction is TRUE, this argument is not used.}
+
+\item{modelSelection}{-arg for biggr::predict.train()- <string> defining 
+the model selection mode for selecting the best model at every timeframe. 
+Default: 'rmse' or 'random'. When forceOneStepPrediction is TRUE, 
+this argument is not used.
+
+It should be launched using the train() function for training, and 
+biggr::predict.train() function for predicting. 
+An example to train a model is :
+train(
+ formula = Qe ~ daily_seasonality,
+ data = df, # data.frame with three columns: 
+            #  'time','Qe', and 'hour'; 
+            #  corresponding to time, electricity consumption, 
+            #  and hour of the day.
+ method = RLS(
+   data.frame(parameter = "nhar",
+              class = "discrete")
+ ),
+ tuneGrid = data.frame("nhar"=4:6),
+ trControl = trainControl(method="timeslice", initialWindow = 100,
+                          horizon = 10, skip = 10, fixedWindow = T),
+ minPredictionValue = 0,
+ maxPredictionValue = max(df$Qe,na.rm=T) * 1.1,
+ transformationSentences = list(
+    "daily_seasonality" = c(
+        "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
+        "weekday")
+   )
+ )}
 }
 \value{
-
+When training: <list> containing the model, when predicting: <array> of the predicted results.
 }
 \description{
-Description
+This function is a custom model wrapper to train and predict recursive linear 
+models over the modelling framework of caret R package.
 }

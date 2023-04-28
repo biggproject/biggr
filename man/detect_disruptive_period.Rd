@@ -2,10 +2,7 @@
 % Please edit documentation in R/preparation.R
 \name{detect_disruptive_period}
 \alias{detect_disruptive_period}
-\title{The function detects periods of time with anomalous low consumption
-Evaluates multiple time periods in order to find the best one
-fitting a model which considers the relationship between
-cooling/heating and consumption}
+\title{Detect disruptive periods in consumption time series.}
 \usage{
 detect_disruptive_period(
   data,
@@ -26,11 +23,13 @@ detect_disruptive_period(
 \item{data}{<timeSeries> Time serie with potential anomalies in
 values}
 
-\item{timeColumn}{<string> Time column in data time serie}
+\item{timeColumn}{<string> Time column in data time series}
 
-\item{temperatureColumn}{<string> Temperature column in data time serie}
+\item{temperatureColumn}{<string> Temperature column in data time series}
 
-\item{tz}{<string> Timezone}
+\item{tz}{<string> specifying the local time zone related to
+the building in analysis. The format of this time zones are defined by
+the IANA Time Zone Database (https://www.iana.org/time-zones).}
 
 \item{minIniDate}{<date> Minimum date to start looking for anomalies}
 
@@ -43,17 +42,25 @@ values}
 \item{checkFor}{<string> Which effect will the disruptive
 event generate? e.g. the SARS-CoV2 pandemia decrease the energy consumption of tertiary buildings,
 so in that case we should check for decrement in consumption 
-Options: decrement, increment, incrementAndDecrement.}
+Possible values: decrement, increment, incrementAndDecrement.}
 
-\item{consumptionValue}{<string> Consumption column in data time serie}
+\item{minDecrementPercentualAffectation}{<float> indicating the minimum
+decrement of consumption (vs. baseline) to be considered as abnormal.
+Default 30%.}
+
+\item{minIncrementPercentualAffectation}{<float> indicating the minimum
+increment of consumption (vs. baseline) to be considered as abnormal.
+Default 60%.}
+
+\item{consumptionValue}{<string> Consumption column in data time series}
 }
 \value{
-Period of time <start,end> with anomalous low consumption. Period
-of time is within the InitDate and EndDate limits
+<data.frame> with the period of time (min-max) with abnormal 
+consumption.
 }
 \description{
-The function detects periods of time with anomalous low consumption
-Evaluates multiple time periods in order to find the best one
-fitting a model which considers the relationship between
-cooling/heating and consumption
+The function detects periods of time with abnormal consumption.
+It evaluates multiple time periods in order to find the best one
+fitting a model which considers the relationship of consumption 
+against weekday and temperature.
 }

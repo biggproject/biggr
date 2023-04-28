@@ -4,14 +4,21 @@
 \alias{detect_profiled_data}
 \title{Detect profiled days in data}
 \usage{
-detect_profiled_data(data)
+detect_profiled_data(data, timeColumn = "localtime", valueColumn = "Qe")
 }
 \arguments{
-\item{data}{timeSeries Data time serie with potential profiled content}
+\item{data}{<data.frame> with potential profiled content.}
+
+\item{timeColumn}{<string> identifying the local time of the 
+time series.}
+
+\item{valueColumn}{<string> identifying the value of the time
+series.}
 }
 \value{
-list <date> List of dates with profiled data
+<array> of dates that have a high probability to be profiled.
 }
 \description{
-Detect profiled days in data
+This function detects if there are profiled days in a consumption 
+time series.
 }

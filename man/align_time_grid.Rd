@@ -2,8 +2,7 @@
 % Please edit documentation in R/preparation.R
 \name{align_time_grid}
 \alias{align_time_grid}
-\title{The function aligns the frequency of the input time series with the output
-frequency given as an argument using the specified aggregation function.}
+\title{Align a time series to an specific time grid.}
 \usage{
 align_time_grid(
   data,
@@ -18,37 +17,40 @@ align_time_grid(
 )
 }
 \arguments{
-\item{data}{<timeSeries> The time series that has to be aligned with an
-output time step, i.e. with a specific frequency. If the
+\item{data}{<data.frame> containing the time series that has to be aligned 
+with an output time step, i.e. with a specific frequency. If the
 measurementReadingType of the series is not instantaneous, the data must
 be converted first using the function clean_ts_integrate.}
 
-\item{timeColumn}{<string> Time column in data time serie}
+\item{timeColumn}{<string> identifying time column in data time series}
 
-\item{valueColumn}{<string> Value column in data time serie}
+\item{valueColumn}{<string> identifying value column in data time series}
 
-\item{isRealColumn}{<string> isReal boolean column in data time serie
-describing estimated value}
+\item{isRealColumn}{<string> identifying the column in data time series
+that describes whether a value is real (T) or estimated (F).}
 
-\item{outputFrequency}{<string> The frequency used to resample the input
+\item{outputFrequency}{<string>. The frequency used to resample the input
 time series for the alignment. It must be a string in ISO 8601 format
 representing the time step (e.g. "PT15M","PT1H", "P1M", "P1D",...).}
 
-\item{aggregationFunctions}{<list The aggregation functions to use when
-resampling the series. Supported aggregation functions
-   - AVG
-   - SUM
-   - MIN
-   - MAX
-   - HDD. Heating degree days. Base temperature 20, 21, 22
-   - CDD. Cooling degree days. Base temperature 20, 21, 22}
+\item{aggregationFunctions}{<array> of strings. The aggregation 
+functions to use when resampling the series. 
+Supported aggregation functions: AVG, SUM, MIN, MAX, 
+HDD (base temperature 20, 21, 22), CDD (base temperature 20, 21, 22).}
 
-\item{useEstimatedValued}{<boolean> Do not ignore estimated values in input
-time serie}
+\item{aggregationFunctionsSuffix}{<string> added as a suffix in resultant
+column values. Optional.}
+
+\item{tz}{<string> specifying the local time zone related to
+the building in analysis. The format of this time zones are defined by
+the IANA Time Zone Database (https://www.iana.org/time-zones).}
+
+\item{useEstimatedValued}{<boolean>. Do not ignore estimated values in input
+time series.}
 }
 \value{
-data <timeSeries> The time series resampled with the specified
-period and aggregation function.
+<data.frame>. The time series resampled with the specified
+period and aggregation functions.
 }
 \description{
 The function aligns the frequency of the input time series with the output

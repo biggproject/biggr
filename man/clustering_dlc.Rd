@@ -33,8 +33,9 @@ feature  in the data argument.}
 \item{outdoorTemperatureFeature}{<string> containing the column name of the
 outdoor temperature feature in the data argument.}
 
-\item{localTimeZone}{<string> specifying the local time zone related
-to the building in analysis}
+\item{localTimeZone}{<string> specifying the local time zone related to the
+building in analysis. The format of this time zones are defined by the IANA
+Time Zone Database (https://www.iana.org/time-zones).}
 
 \item{kMax}{<integer> defining the maximum number of allowed groups in
 the clustering proceed.}
@@ -50,7 +51,12 @@ of the clustering.
   dailyConsumption: use the total daily consumption
   daysOfTheWeek: use a discrete value to represent the days of the week
   daysWeekend: use a boolean representing whether is weekend or not
-  dailyHolidays: use a boolean representing whether is holiday or not.}
+  dailyHolidays: use a boolean representing whether is holiday or not.
+  daysWeek: use a factorial value for each day of the week.
+  loadCurves: loadCurves_columns, 
+  month: use the month of the year,
+  dailyMinConsumption: use the minimum consumption of the day
+  dailyMaxConsumption: use the maximum consumption of the day}
 
 \item{loadCurveTransformation}{<string> that defines the transformation
 procedure over the consumption load curves. Possible values are:
@@ -66,7 +72,7 @@ values: 24, 12, 8, 6, 4, 3, 2.}
 weather, ..)}
 }
 \value{
-<dict>
+<list>
     dailyClassification <data.frame> in daily frequency, containing
 the classification of each daily load curve.
     absoluteLoadCurvesCentroids <matrix> with row names as the

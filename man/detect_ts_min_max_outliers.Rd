@@ -2,32 +2,32 @@
 % Please edit documentation in R/preparation.R
 \name{detect_ts_min_max_outliers}
 \alias{detect_ts_min_max_outliers}
-\title{Detect elements of the time series outside a minimum and maximum range.}
+\title{Detect min-max outliers in time series}
 \usage{
 detect_ts_min_max_outliers(data, min, max, minSeries = NULL, maxSeries = NULL)
 }
 \arguments{
-\item{data}{<timeSeries> An argument containing the time series from which
-the outliers need to be detected.}
+\item{data}{<data.frame> describing the input time series whose outliers need 
+to be detected. Time column: 'time', value column: 'value'.}
 
-\item{min:}{float The minimum value allowed for each element of the time
-series.}
+\item{min:}{<float> describing the minimum value allowed for each element 
+of the time series.}
 
-\item{max:}{float The maximum value allowed for each element of the time
-series.}
+\item{max:}{<float> describing the maximum value allowed for each element 
+of the time series.}
 
-\item{minSeries:}{timeSeries. An optional argument defining a time series
-with minimum allowed values.}
+\item{minSeries:}{<data.frame> defining the time series with minimum allowed 
+values. Time column: 'time', value column: 'value'.}
 
-\item{maxSeries:}{timeSeries. An optional argument defining a time series
-with maximum allowed values.}
+\item{maxSeries:}{<data.frame> defining the time series with maximum allowed 
+values. Time column: 'time', value column: 'value'.}
 }
 \value{
-outliers <boolean> timeSeries object using the original time period
-and frequency, only assigning True values when an element should be
-considered as an outlier.
+<data.frame> with boolean values representing whether a item is an 
+outlier, or not.
 }
 \description{
+Detect elements of the time series outside a minimum and maximum range.
 Additionally, with the minSeries and maxSeries arguments, this ranges can
 be set differently along the period. When using this feature, the timestep
 of both minSeries and maxSeries need to be resampled to the original

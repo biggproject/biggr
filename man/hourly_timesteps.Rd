@@ -9,11 +9,11 @@ hourly_timesteps(nHours, original_timestep)
 \arguments{
 \item{nHours}{<integer> Number of hours to obtain}
 
-\item{timeStep}{<string> A string in ISO 8601 format representing the period
+\item{original_timestep}{<string> in ISO 8601 format representing the period
 or timestep (e.g. "PT15M","PT1H", "P3M", "P1D" ,...).}
 }
 \value{
-Amount of ISO 8601 timesteps corresponding to nHours
+<integer> corresponding to the number of hours
 }
 \description{
 Supported ISO 8601 timesteps:

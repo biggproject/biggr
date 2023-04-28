@@ -1,3 +1,196 @@
+#
+# General utils for transformation ----
+#
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
+get_local_min_from_density <- function(values,onlyPosition=NULL,minNumberValleys=1,kDensityAdjuster=3){
+  d <- density(values,adjust=kDensityAdjuster,na.rm=T)
+  tp <- pastecs::turnpoints(ts(d$y))
+  y <- d$y[tp$tppos]
+  x <- d$x[tp$tppos]
+  sy <- c(0,shift(y,1)[is.finite(shift(y,1))])
+  mins <- x[y-sy<=0]
+  if(length(mins) < minNumberValleys) return(NULL)
+  if(!is.null(onlyPosition)){
+    return(mins[onlyPosition])
+  } else { return(mins) }
+}
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
+opt_boxcox_lambda <- function(x){
+  b <- MASS::boxcox(lm(x ~ 1))
+  return(b$x[which.max(b$y)])
+}
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
+boxcox_transformation <- function(x, lambda){
+  return(
+    if(lambda == 0){ 
+      log(x)
+    } else {
+      ((x ^ lambda) - 1) / lambda
+    }
+  )
+}
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
+inverse_boxcox_transformation <- function(x, lambda){
+  return(
+    if(lambda == 0){
+      exp(x)
+    } else {
+      exp(log(lambda*x+1)/lambda)
+    }
+  )
+}
+
+#' Title
+#' 
+#' Description
+#'
+#' @param arg <> 
+#' @return 
+
+data_transformation_wrapper <- function(data, features, transformationSentences, param, 
+                                        transformationResults=list(), 
+                                        weatherDependenceByCluster=NULL,
+                                        clusteringResults=NULL){
+  
+  transformationItems <- list()
+  if(is.null(transformationSentences)){
+    transformationSentences <- list()
+  }
+  for (feature in unique(c(names(transformationSentences), features))){
+    #feature <- unique(c(names(transformationSentences), features))[3]
+    trFields <- list()
+    trData <- NULL
+    attach(data,warn.conflicts = F)
+    if(feature %in% names(transformationSentences)){
+      for (trFunc in transformationSentences[[feature]]){
+        #trFunc <- transformationSentences[[feature]][1]
+        trFuncName <- if(length(transformationSentences[[feature]])>1){
+          trFunc } else { feature }
+        if(grepl("[.]{3}",trFunc)){trFunc <- gsub("[.]{3}","data=data",trFunc)}
+        if(grepl("clustering_wrapper\\(",trFunc,perl = T) && feature %in% names(transformationResults)){
+          trFunc <- gsub("clustering_wrapper\\(","clustering_wrapper\\(results=transformationResults[[feature]],",trFunc,perl = T)
+        }
+        trDataElem <- eval(parse(text=trFunc))
+        trOriginal <- NULL
+        if(grepl("clustering_wrapper\\(",trFunc)){
+          transformationResults[[feature]] <- trDataElem
+          trDataElem <- setNames(trDataElem$labels,feature)
+        } else if(any(class(trDataElem) %in% c("factor","character","logical"))){
+          trDataElem <- fastDummies::dummy_cols(as.factor(trDataElem),remove_selected_columns = F)
+          colnames(trDataElem) <- gsub(".data",trFuncName,colnames(trDataElem))
+          trOriginal <- data.frame(trDataElem[,1])
+          colnames(trOriginal)[1] <- colnames(trDataElem)[1]
+          trDataElem[,1] <- NULL
+        } else if(any(class(trDataElem) %in% c("numeric","integer"))){
+          trDataElem <- data.frame(trDataElem)
+          colnames(trDataElem) <- trFuncName
+        } else if(any(class(trDataElem) %in% c("data.frame")) && length(trDataElem)==1){
+          colnames(trDataElem) <- trFuncName
+        }
+        
+        trData <- 
+          if(!is.null(trData)){
+            cbind(trData,trDataElem)
+          } else {trDataElem}
+        if(!is.null(trOriginal)){ 
+          trData <- cbind(trOriginal,trData)
+        }
+        if(feature %in% features){
+          trFields[[length(trFields)+1]] <- colnames(trDataElem)
+        }
+        # trData <- trData[,(ncol(data)+1):(ncol(trData))]
+      }
+    } else {
+      trData <- tryCatch({
+        aux <- eval(parse(text=feature))
+        orig <- NULL
+        aux <- if(is.list(aux)){
+          as.data.frame(aux)
+        } else {
+          data.frame(aux)
+        }
+        if(ncol(aux)==1 && any(class(aux[,1]) %in% c("factor","character"))){
+          aux <- fastDummies::dummy_cols(as.factor(aux[,1]),remove_selected_columns = F)
+          colnames(aux) <- gsub(".data",feature,colnames(aux))
+          orig <- data.frame(aux[,1])
+          colnames(orig)[1] <- colnames(aux)[1]
+          aux[,1] <- NULL
+        } else if(ncol(aux)==1){
+          aux <- setNames(aux,feature)
+        }
+        trData <- if (is.null(trData)) {
+          aux
+        } else {
+          cbind(trData,aux)
+        }},
+        error=function(e){
+          if(is.null(trData)){
+            setNames(
+              data.frame(rep(0,nrow(data))),
+              feature
+            )
+          } else {
+            cbind(trData, setNames(
+              data.frame(rep(0,nrow(data))),
+              feature
+            )
+            )
+          }
+        })
+      if(!is.null(orig)){ 
+        trData <- cbind(orig,trData)
+      }
+      trFields[[length(trFields)+1]] <- if(ncol(aux)==1){feature}else{
+        colnames(aux)}
+    }
+    detach(data,unload = T)
+    data <- cbind(data,trData)
+    data <- data[,!duplicated(colnames(data),fromLast=T)]
+    transformationItems[[feature]] <- list(
+      "formula" = do.call(paste,c(do.call(expand.grid,trFields),sep=":")),
+      "vars" = do.call(c,trFields)
+    )
+  }
+  
+  featuresAll <- features[!(features %in% names(transformationItems))]
+  for(trFeat in names(transformationItems)[names(transformationItems) %in% features]){
+    featuresAll <- c(featuresAll, transformationItems[[trFeat]]$vars)
+  }
+  # } else {
+  #   featuresAll <- features
+  # }
+  return(list("featuresAll" = unique(featuresAll), "features" = unique(features), "items" = transformationItems, 
+              "results" = transformationResults, "data" = data))
+}
+
 #' Lag components
 #' 
 #' This function shift in time a set of features in order to be used in
@@ -141,10 +334,10 @@ lag_components <- function(data, maxLag, featuresNames=NULL, predictionStep=NULL
 #' @param outputFeaturesName optional, <array> giving the series names used as the output of
 #' the transformation. It must have the same length as featuresNames.
 #' By default, suffix "_lpf" is added to featuresNames.
-#' @param inplace: <boolean> indicating if the output should be the original
+#' @param inplace <boolean> indicating if the output should be the original
 #' data argument, plus the transformed objects -True- , or only the transformed
 #' series -False.
-#' @param autoUnbox: <boolean> indicating if the output data.frame should be
+#' @param autoUnbox <boolean> indicating if the output data.frame should be
 #' unboxed of the resultant data.frame, obtaining a numeric vector. Only is
 #' usable when inplace is True.
 #' 
@@ -231,7 +424,7 @@ get_lpf_smoothing_time_scale <- function (data, timeConstantInHours) {
 calendar_components <- function (data, localTimeZone = NULL, holidays = c(), inplace=T){
   data_ini <- data
   data <- data.frame("time"=lubridate::with_tz(
-    data[,which(mapply(function(x)class(data[,x])[1],colnames(data))=="POSIXct")[1]],
+    data[,which(mapply(function(x)class(data[,x])[1],colnames(data)) %in% c("POSIXct","Date"))[1]],
     "UTC"))
   getSeason <- function(dates){
     WS <- as.Date("2012-12-15", format = "%Y-%m-%d")
@@ -244,7 +437,7 @@ calendar_components <- function (data, localTimeZone = NULL, holidays = c(), inp
                   ifelse(d >= SS & d < FE, "Summer", "Fall")))
   }
   result <- data %>% summarise(
-    localtime = with_tz(time, localTimeZone), 
+    localtime = lubridate::with_tz(time, localTimeZone), 
     date = lubridate::date(localtime), 
     weekday = as.factor(lubridate::wday(localtime, week_start = getOption("lubridate.week.start", 1))),
     weekdayNum = as.numeric(as.character(weekday)),
@@ -270,7 +463,7 @@ calendar_components <- function (data, localTimeZone = NULL, holidays = c(), inp
     second = second(localtime))# %>% 
   # select(-localtime)
   if(inplace==T){
-    if(ncol(data_ini)==1){
+    if(nrow(data_ini)==1){
       return(cbind(data_ini,result))
     } else {
       return(cbind(data_ini[,!(colnames(data_ini) %in% colnames(result))],result))
@@ -278,6 +471,39 @@ calendar_components <- function (data, localTimeZone = NULL, holidays = c(), inp
   } else {
     return(result)
   }
+}
+
+#' Obtain the components of the Fourier Series, in sine-cosine form
+#'
+#' It is useful for linearising the relationship of a seasonal input
+#' time series (e.g. solar azimuth, solar elevation, calendar features, ...)
+#' to some output (energy consumption, indoor temperatures, ...).
+#' It basically decomposes a cyclic time series into a set of sine-cosine
+#' components that are used as inputs for the modelling of some output,
+#' each of the components linearly depends to the output.
+#' @param X <timeSeries> timeSeries containing the series to transform.
+#' This series must have a cyclic behaviour (e.g. hour of the day, day
+#' of the week, solar azimuth, day of the year, ...) in order to be
+#' correctly transformed. Optionally, other variables that are not
+#' declared in featuresNames can be bypassed to the output..
+#' @param featureNames <list> list of strings selecting the series
+#' to transform
+#' @param nHarmonics <integer> number of harmonics considered in
+#' the Fourier Series. A high number allows to model more precisely
+#' the relation, but it considerably increase the cost of computation.
+#' The number of harmonics is related with the number of features in
+#' the output matrix (2 * nHarmonics) + 1
+#' @return <timeSeries> same initial information of data input argument,
+#' plus the sine-cosine components of the Fourier Series as new columns
+
+fs <- function(X, featureName, nHarmonics) {
+  cbind(do.call(cbind,lapply(1:nHarmonics, function(i) {
+    value <- list(sin(i * X * 2 * pi), cos(i * X * 2 * 
+                                             pi))
+    names(value) <- paste0(featureName, c("_sin_", "_cos_"), 
+                           i)
+    return(as.data.frame(value))
+  })), setNames(data.frame(rep(1,length(X))),paste0(featureName,"_fs_int")))
 }
 
 #' Fourier series components decomposition
@@ -340,6 +566,10 @@ fs_components <- function (data, featuresNames, nHarmonics, mask=NULL, inplace=T
     return(fs_multiple)    
   }
 }
+
+#
+# Weather data transformations ----
+#
 
 #' Degree days without time aggregation
 #' 
@@ -529,7 +759,7 @@ get_change_point_temperature <- function(consumptionData, weatherData,
               .groups = 'drop')
   
   estimate_signature <- function(par, weatherData, consumptionData, localTimeZone){
-    newdata <- consumptionData %>% mutate(time=force_tz(time,localTimeZone))
+    newdata <- consumptionData %>% mutate(time=lubridate::force_tz(time,localTimeZone))
     newdata <- newdata %>% 
       left_join(weatherData, by="time") %>% 
       left_join(
@@ -760,7 +990,7 @@ get_change_point_temperature_v2 <- function(consumptionData, weatherData,
       .groups = 'drop')
   
   estimate_signature <- function(par, weatherDataD, consumptionDataD, localTimeZone){
-    newdata <- consumptionDataD %>% mutate(time=force_tz(time,localTimeZone))
+    newdata <- consumptionDataD %>% mutate(time=lubridate::force_tz(time,localTimeZone))
     newdata <- newdata %>% 
       left_join(weatherDataD, by="time") %>% 
       left_join(
@@ -959,90 +1189,26 @@ get_change_point_temperature_v2 <- function(consumptionData, weatherData,
   )
 }
 
-#' Title
-#' 
-#' Description
-#'
-#' @param arg <> 
-#' @return 
-
-get_local_min_from_density <- function(values,onlyPosition=NULL,minNumberValleys=1,kDensityAdjuster=3){
-  d <- density(values,adjust=kDensityAdjuster,na.rm=T)
-  tp <- pastecs::turnpoints(ts(d$y))
-  y <- d$y[tp$tppos]
-  x <- d$x[tp$tppos]
-  sy <- c(0,shift(y,1)[is.finite(shift(y,1))])
-  mins <- x[y-sy<=0]
-  if(length(mins) < minNumberValleys) return(NULL)
-  if(!is.null(onlyPosition)){
-    return(mins[onlyPosition])
-  } else { return(mins) }
-}
-
-#' Title
-#' 
-#' Description
-#'
-#' @param arg <> 
-#' @return 
-
-opt_boxcox_lambda <- function(x){
-  b <- MASS::boxcox(lm(x ~ 1))
-  return(b$x[which.max(b$y)])
-}
-
-#' Title
-#' 
-#' Description
-#'
-#' @param arg <> 
-#' @return 
-
-boxcox_transformation <- function(x, lambda){
-  return(
-    if(lambda == 0){ 
-      log(x)
-    } else {
-      ((x ^ lambda) - 1) / lambda
-    }
-  )
-}
-
-#' Title
-#' 
-#' Description
-#'
-#' @param arg <> 
-#' @return 
-
-inverse_boxcox_transformation <- function(x, lambda){
-  return(
-    if(lambda == 0){
-      exp(x)
-    } else {
-      exp(log(lambda*x+1)/lambda)
-    }
-  )
-}
+#
+# Daily load curves clustering and classification ----
+#
 
 #' Normalze time series using min-max range normalization method
 #'
 #' @param data <data.frame> containing a set of time series to normalise
-#' @param lower <float> lower value
-#' @param upper <float> upper value
-#' @param lowerThreshold <float> lower threshold value
-#' @param upperThreshold <float> upper threshold value
-#' @param scalingAttr <struct> setting lower and upper threshold in case of
-#' null lowerThreshold or upperThreshold
-#' - min: lowerThreshold
-#' - max: upperThreshold
-#' @return Normalized input data using range normalization method. Output
-#' data properties is different depending on input data properties
-#' If input data class is not in "matrix", "data.frame" or "tbl_df" then
-#' output data provides normalization 
-#' If input data class is in "matrix", "data.frame" or "tbl_df" then
-#' output data provides struct with normalization in "values" attribute and
-#' min-max values used in "scalingAttr" attribute
+#' or an <array> of numerical values to normalise.
+#' @param lower <float> lower value of the resultant range.
+#' @param upper <float> upper value of the resultant range.
+#' @param lowerThreshold <float> lower threshold value.
+#' @param upperThreshold <float> upper threshold value.
+#' @param scalingAttr <data.frame> setting min-max threshold for each variable.
+#' Column names: column names specified in data argument; Row names: min, max.
+#' In case of NULL (default value), lowerThreshold or upperThreshold will be used.
+#' @return <list> containing two keys: "values" and "scalingAttr". The
+#' former consists on a <data.frame> or an <array> with the normalised values, 
+#' depending the class of data argument. The latter consists on the scaling 
+#' attributes used for normalisation.
+
 normalise_range <- function(data, lower = 0, upper = 1, lowerThreshold = NULL, 
                             upperThreshold = NULL, scalingAttr = NULL) {
   if (!(is.null(lower) & is.null(upper))) {
@@ -1093,9 +1259,10 @@ normalise_range <- function(data, lower = 0, upper = 1, lowerThreshold = NULL,
 #' Normalize time serie using hourly over daily relative consumption (%) normalization method
 #'
 #' @param data <data.frame> containing serie to normalise
-#' @param method <string> Normalization method. Supported methods
-#'   relative
-#' @return daily normalised timeserie
+#' @param method <string> Normalization method. 
+#' Supported methods: relative
+#' @return <data.frame> daily normalised time series
+
 normalise_daily <- function(data, method = "relative", localTimeZone) {
   if (!(method == "relative")) stop("Method not supported")
   time <- data$time
@@ -1113,14 +1280,13 @@ normalise_daily <- function(data, method = "relative", localTimeZone) {
 #' Normalize time serie using Zscore normalization method
 #'
 #' @param data <data.frame> containing serie to normalise
-#' @return Normalized input data using Z-score normalization method.
-#' Output data properties is different depending on input data properties
-#' If input data class is not in "matrix", "data.frame" or "tbl_df" then
-#' output data provides struct with normalized vector in "values" attribute
-#' and scaling "mean" and "sd" in "scalingAttr" attribute
-#' If input data class is in "matrix", "data.frame" or "tbl_df" then
-#' output data provides struct with normalization in "values" attribute and
-#' scaling "mean" and "sd" in "scalingAttr" attribute
+#' @param scalingAttr <data.frame> setting average and standard deviation 
+#' thresholds for each variable. Column names: column names specified in 
+#' data argument; Row names: mean, sd.
+#' @return <list> containing two keys: "values" and "scalingAttr". The
+#' former consists on a <data.frame> or an <array> with the normalised values, 
+#' depending the class of data argument. The latter consists on the scaling 
+#' attributes used for normalisation.
 normalise_zscore <- function(data, scalingAttr=NULL) {
   x <- if(is.null(scalingAttr)){
     scale(data)
@@ -1178,7 +1344,7 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
   # }
   
   tmp <- data %>% 
-    mutate(localtime = with_tz(time, localTimeZone), 
+    mutate(localtime = lubridate::with_tz(time, localTimeZone), 
            date = lubridate::date(localtime), hour = hour(localtime), 
            daypart = floor(hour(localtime)/(24/nDayParts)) ) %>% 
     distinct(date, hour, .keep_all = TRUE)
@@ -1691,12 +1857,13 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
                             nDayParts, balanceOutdoorTemperatures, nNeighboursAffinity = 7,
                             ignoreDates = c(), holidaysDates = c(), normalisationMethod = "range01") {
   # data = df
-  # consumptionFeature = "Qe"
-  # outdoorTemperatureFeature = "temperature"
+  # consumptionFeature = "Qe" 
+  # outdoorTemperatureFeature = "temperature" 
   # localTimeZone = tz
-  # kMax = settings$DailyLoadCurveClustering$kMax
+  # kMax = settings$DailyLoadCurveClustering$kMax 
   # kMin = settings$DailyLoadCurveClustering$kMin
-  # inputVars = settings$DailyLoadCurveClustering$inputVars
+  # nNeighboursAffinity = settings$DailyLoadCurveClustering$nNeighboursAffinity
+  # inputVars = settings$DailyLoadCurveClustering$inputVars 
   # loadCurveTransformation = settings$DailyLoadCurveClustering$loadCurveTransformation
   # balanceOutdoorTemperatures = settings$DailyLoadCurveClustering$balanceOutdoorTemperatures
   # ignoreDates =
@@ -1705,7 +1872,7 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
   #       outliers==T
   #     } else {
   #       outliers==T | (date >= maxDateForClustering)
-  #     }) %>% select(date) %>%
+  #     }) %>% select(date) %>% 
   #   unlist %>% as.Date
   # holidaysDates = holidaysDates
   # nDayParts = settings$DailyLoadCurveClustering$nDayParts
@@ -1716,14 +1883,14 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
     kMax<-99
     }
   data <- data[complete.cases(data[,c(consumptionFeature)]),]
-  data[,outdoorTemperatureFeature] <- 
+  data[,outdoorTemperatureFeature] <-
     na.locf(na.locf(
         na.approx(data[,outdoorTemperatureFeature],na.rm = F),
         fromLast = T,na.rm = T
       ),na.rm=T)
-  tmp <- data %>% 
-    select(time, all_of(consumptionFeature), all_of(outdoorTemperatureFeature)) %>% 
-    filter(!(lubridate::date(time) %in% ignoreDates)) %>% 
+  tmp <- data %>%
+    select(time, all_of(consumptionFeature), all_of(outdoorTemperatureFeature)) %>%
+    filter(!(lubridate::date(time) %in% ignoreDates)) %>%
     rename(consumption = consumptionFeature, temperature = outdoorTemperatureFeature)
   # inputVars <- c("dailyMinConsumption","loadCurves","dailyHdd",
   #                "dailyCdd","daysWeekend")
@@ -1773,7 +1940,7 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
   }
   cluster_results <- data.frame(date = tmp_norm$dates[complete.cases(tmp_norm$values)], s = s)
   tmp <- tmp %>% 
-    mutate(localtime = with_tz(time, localTimeZone), 
+    mutate(localtime = lubridate::with_tz(time, localTimeZone), 
            hour = hour(localtime), 
            date = lubridate::date(localtime), 
            weekday = lubridate::wday(date, week_start = getOption("lubridate.week.start", 1)), 
@@ -1803,7 +1970,7 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
   ## Classification model
   cluster_results_df <- calendar_components(
     data.frame("time"=as.Date(cluster_results$date,tz=localTimeZone),
-               "s"=cluster_results$s), 
+               "s"=cluster_results$s),
     localTimeZone, holidaysDates, inplace = T)
   cluster_results_df$s <- as.factor(cluster_results_df$s)
   mod <- ranger::ranger(s~.,data = cluster_results_df[,c("s","month","dayYear","weekday")])
@@ -1905,7 +2072,7 @@ classification_dlc <- function(data, consumptionFeature, outdoorTemperatureFeatu
     names(all_hours_default) <- all_hours
     tmp <- tmp %>%
       mutate(
-        localtime = with_tz(time, localTimeZone),
+        localtime = lubridate::with_tz(time, localTimeZone),
         date = lubridate::date(localtime),
         hour = hour(localtime),
         weekday = lubridate::wday(date,
@@ -1981,125 +2148,4 @@ classification_dlc <- function(data, consumptionFeature, outdoorTemperatureFeatu
   ))
 }
 
-#' Title
-#' 
-#' Description
-#'
-#' @param arg <> 
-#' @return 
 
-data_transformation_wrapper <- function(data, features, transformationSentences, param, 
-                                        transformationResults=list(), 
-                                        weatherDependenceByCluster=NULL,
-                                        clusteringResults=NULL){
-  
-  transformationItems <- list()
-  if(is.null(transformationSentences)){
-    transformationSentences <- list()
-  }
-  for (feature in unique(c(names(transformationSentences), features))){
-      #feature <- unique(c(names(transformationSentences), features))[3]
-      trFields <- list()
-      trData <- NULL
-      attach(data,warn.conflicts = F)
-      if(feature %in% names(transformationSentences)){
-        for (trFunc in transformationSentences[[feature]]){
-          #trFunc <- transformationSentences[[feature]][1]
-          trFuncName <- if(length(transformationSentences[[feature]])>1){
-            trFunc } else { feature }
-          if(grepl("[.]{3}",trFunc)){trFunc <- gsub("[.]{3}","data=data",trFunc)}
-          if(grepl("clustering_wrapper\\(",trFunc,perl = T) && feature %in% names(transformationResults)){
-            trFunc <- gsub("clustering_wrapper\\(","clustering_wrapper\\(results=transformationResults[[feature]],",trFunc,perl = T)
-          }
-          trDataElem <- eval(parse(text=trFunc))
-          trOriginal <- NULL
-          if(grepl("clustering_wrapper\\(",trFunc)){
-            transformationResults[[feature]] <- trDataElem
-            trDataElem <- setNames(trDataElem$labels,feature)
-          } else if(any(class(trDataElem) %in% c("factor","character","logical"))){
-            trDataElem <- fastDummies::dummy_cols(as.factor(trDataElem),remove_selected_columns = F)
-            colnames(trDataElem) <- gsub(".data",trFuncName,colnames(trDataElem))
-            trOriginal <- data.frame(trDataElem[,1])
-            colnames(trOriginal)[1] <- colnames(trDataElem)[1]
-            trDataElem[,1] <- NULL
-          } else if(any(class(trDataElem) %in% c("numeric","integer"))){
-            trDataElem <- data.frame(trDataElem)
-            colnames(trDataElem) <- trFuncName
-          } else if(any(class(trDataElem) %in% c("data.frame")) && length(trDataElem)==1){
-            colnames(trDataElem) <- trFuncName
-          }
-          
-          trData <- 
-            if(!is.null(trData)){
-              cbind(trData,trDataElem)
-            } else {trDataElem}
-          if(!is.null(trOriginal)){ 
-            trData <- cbind(trOriginal,trData)
-          }
-          if(feature %in% features){
-            trFields[[length(trFields)+1]] <- colnames(trDataElem)
-          }
-          # trData <- trData[,(ncol(data)+1):(ncol(trData))]
-        }
-      } else {
-        trData <- tryCatch({
-          aux <- eval(parse(text=feature))
-          orig <- NULL
-          aux <- if(is.list(aux)){
-            as.data.frame(aux)
-          } else {
-            data.frame(aux)
-          }
-          if(ncol(aux)==1 && any(class(aux[,1]) %in% c("factor","character"))){
-            aux <- fastDummies::dummy_cols(as.factor(aux[,1]),remove_selected_columns = F)
-            colnames(aux) <- gsub(".data",feature,colnames(aux))
-            orig <- data.frame(aux[,1])
-            colnames(orig)[1] <- colnames(aux)[1]
-            aux[,1] <- NULL
-          } else if(ncol(aux)==1){
-            aux <- setNames(aux,feature)
-          }
-          trData <- if (is.null(trData)) {
-            aux
-          } else {
-            cbind(trData,aux)
-          }},
-          error=function(e){
-            if(is.null(trData)){
-              setNames(
-                data.frame(rep(0,nrow(data))),
-                feature
-              )
-            } else {
-              cbind(trData, setNames(
-                  data.frame(rep(0,nrow(data))),
-                  feature
-                )
-              )
-            }
-          })
-        if(!is.null(orig)){ 
-          trData <- cbind(orig,trData)
-        }
-        trFields[[length(trFields)+1]] <- if(ncol(aux)==1){feature}else{
-          colnames(aux)}
-      }
-      detach(data,unload = T)
-      data <- cbind(data,trData)
-      data <- data[,!duplicated(colnames(data),fromLast=T)]
-      transformationItems[[feature]] <- list(
-        "formula" = do.call(paste,c(do.call(expand.grid,trFields),sep=":")),
-        "vars" = do.call(c,trFields)
-      )
-    }
-    
-    featuresAll <- features[!(features %in% names(transformationItems))]
-    for(trFeat in names(transformationItems)[names(transformationItems) %in% features]){
-      featuresAll <- c(featuresAll, transformationItems[[trFeat]]$vars)
-    }
-  # } else {
-  #   featuresAll <- features
-  # }
-  return(list("featuresAll" = unique(featuresAll), "features" = unique(features), "items" = transformationItems, 
-              "results" = transformationResults, "data" = data))
-}

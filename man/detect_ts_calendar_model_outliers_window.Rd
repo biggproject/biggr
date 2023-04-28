@@ -2,9 +2,7 @@
 % Please edit documentation in R/preparation.R
 \name{detect_ts_calendar_model_outliers_window}
 \alias{detect_ts_calendar_model_outliers_window}
-\title{Detect elements of the time series out of a confidence threshold based
-on linear model of the calendar variables (month, weekday, hour).
-Detection done in an specific window of data}
+\title{Detect outliers in time series based on a calendar model (applied over a window of time)}
 \usage{
 detect_ts_calendar_model_outliers_window(
   data,
@@ -51,7 +49,7 @@ of difference added to the upper model predition itself. Default is 30.}
 
 \item{lowerPercentualThreshold:}{float It sets the dynamic lower threshold
 to detect outliers. An optional argument to define the percentage of
-difference substracted to the predition of the model. () Default is 30.}
+difference substracted to the predition of the model. Default is 30.}
 
 \item{outputPredictors:}{boolean. Include calendar regression model prediction
 results as output}
@@ -59,8 +57,9 @@ results as output}
 \item{logValueColumn:}{boolean. Transform value column (log-transformation)}
 }
 \value{
-timeSeries with time index outliers mask and optional calendar
-regression model prediction
+<data.frame> with boolean values representing whether a item is an 
+outlier, or not. Additionally, the predition results of the model are also
+presented.
 }
 \description{
 Detect elements of the time series out of a confidence threshold based

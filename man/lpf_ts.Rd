@@ -24,17 +24,17 @@ the output}
 parameter. It corresponds to the so-called alpha parameter of low pass
 filter. It ranges from 0 to 1.}
 
-\item{outputFeaturesName}{optional, <array> giving the series names used as the output of
-the transformation. It must have the same length as featuresNames.
-By default, suffix "_lpf" is added to featuresNames.}
-
-\item{inplace:}{<boolean> indicating if the output should be the original
+\item{inplace}{<boolean> indicating if the output should be the original
 data argument, plus the transformed objects -True- , or only the transformed
 series -False.}
 
-\item{autoUnbox:}{<boolean> indicating if the output data.frame should be
+\item{autoUnbox}{<boolean> indicating if the output data.frame should be
 unboxed of the resultant data.frame, obtaining a numeric vector. Only is
 usable when inplace is True.}
+
+\item{outputFeaturesName}{optional, <array> giving the series names used as the output of
+the transformation. It must have the same length as featuresNames.
+By default, suffix "_lpf" is added to featuresNames.}
 }
 \value{
 <data.frame> containing the same initial information of the

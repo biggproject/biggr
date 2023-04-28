@@ -2,14 +2,14 @@
 % Please edit documentation in R/preparation.R
 \name{detect_static_reg_exp}
 \alias{detect_static_reg_exp}
-\title{Detect which string element satisfy the regular expression}
+\title{Detect reg-exp in static data.}
 \usage{
 detect_static_reg_exp(data, regExpValues, negativeExp = FALSE)
 }
 \arguments{
-\item{data}{<string> list The elements to be evaluated.}
+\item{data}{<array> of strings, representing the elements to be evaluated.}
 
-\item{regExpValues}{<string list> A list of regular expressions to be
+\item{regExpValues}{<array> of regular expressions to be
 checked.}
 
 \item{negativeExp}{<boolean> An optional argument to evaluate the inverse
@@ -17,9 +17,8 @@ result of the regular expressions. Default is false, thus all elements
 that are satified by any of the regular expressions are true.}
 }
 \value{
-outliers <boolean list> considering if each element of the data
-list satisfy any of the regular expression, or the contrary
-(if negativeExp is true).
+<array> of booleans, representing the evaluation results made
+for each data item.
 }
 \description{
 Detect which string element satisfy the regular expression

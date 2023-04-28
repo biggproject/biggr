@@ -7,11 +7,11 @@
 round_up(x)
 }
 \arguments{
-\item{x}{<value|array> Value to be rounded}
+\item{x}{<array> of floats to be rounded}
 }
 \value{
-Rounded value
+<array> of floats corresponding to the rounded value
 }
 \description{
-Round up value or array
+This function is used for rounding
 }

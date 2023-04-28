@@ -2,8 +2,7 @@
 % Please edit documentation in R/preparation.R
 \name{detect_ts_calendar_model_outliers}
 \alias{detect_ts_calendar_model_outliers}
-\title{Detect elements of the time series out of a confidence threshold based
-on linear model of the calendar variables (month, weekday, hour).}
+\title{Detect outliers in time series based on a calendar model}
 \usage{
 detect_ts_calendar_model_outliers(
   data,
@@ -24,7 +23,7 @@ detect_ts_calendar_model_outliers(
 )
 }
 \arguments{
-\item{data}{timeSeries An argument containing the time series from which
+\item{data}{<data.frame> An argument containing the time series from which
 the outliers need to be detected.}
 
 \item{holidaysCalendar}{list of dates An optional list giving the dates
@@ -34,7 +33,7 @@ argument. Default is empty list.}
 \item{daysThatAreOutliers}{list of outlier dates}
 
 \item{window}{string. A string in ISO 8601 format representing the
-window (e.g. "2m","4m","14D",...). This is an optional argument setting
+window (e.g. "P2M","P4M","P14D",...). This is an optional argument setting
 the width of the window where the model is trained and evaluated}
 
 \item{localTimeColumn:}{string Local time column name}
@@ -70,7 +69,7 @@ results as output}
 \item{logValueColumn:}{boolean. Transform value column (log-transformation)}
 
 \item{autoDetectProfiled:}{boolean. Detect and ignore profiled days from
-timeserie}
+timeseries}
 }
 \value{
 timeSeries with time index outliers mask and optional calendar

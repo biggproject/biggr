@@ -410,7 +410,7 @@ generate_longitudinal_benchmarking_indicators <- function (
                            outputFrequency = "P1D", outputFeaturesName = "ind", 
                            fixedOutputFeaturesName = T)) %>% 
         select(time,ind)
-      frequencies_ <- frequencies[frequencies >= as.period("P1D")]
+      frequencies_ <- frequencies[frequencies >= lubridate::as.period("P1D")]
       originalDataPeriod <- "P1D"
     } else if (!is.null(valueInd)) {
       indDf <- data.frame(time = data[, timeColumn], ind = valueInd$ind, weights = 
@@ -419,10 +419,10 @@ generate_longitudinal_benchmarking_indicators <- function (
       next
     }
     for (frequency in frequencies_) {
-      n <- hourly_timesteps(as.numeric(as.period(frequency))/3600, 
+      n <- hourly_timesteps(as.numeric(lubridate::as.period(frequency))/3600, 
                             originalDataPeriod)
       indDfAux <- indDf %>% 
-        group_by(start = floor_date(time, unit = frequency, 
+        group_by(start = lubridate::floor_date(time, lubridate::as.period(frequency), 
                   week_start = getOption("lubridate.week.start", 1))) %>% 
         summarise(estimated = mean(ind, na.rm = T) * n, 
                   real = sum(ind)) %>% 
@@ -434,9 +434,9 @@ generate_longitudinal_benchmarking_indicators <- function (
             ifelse(is.finite(value), F, NA)
           }) %>% 
         select(-real, -estimated)
-      indDfAux$start <- with_tz(indDfAux$start, "UTC")
-      if (as.period(frequency) >= as.period("P1D")) {
-        indDfAux$end <- with_tz(with_tz(indDfAux$start, 
+      indDfAux$start <- lubridate::with_tz(indDfAux$start, "UTC")
+      if (lubridate::as.period(frequency) >= lubridate::as.period("P1D")) {
+        indDfAux$end <- lubridate::with_tz(lubridate::with_tz(indDfAux$start, 
                                         localTimeZone) + iso8601_period_to_timedelta(frequency) - 
                                   seconds(1), "UTC")
       }
@@ -483,7 +483,7 @@ generate_longitudinal_benchmarking_indicators <- function (
       
       results_ts[[singleKPISubjectHash]] <- list()
       results_ts[[singleKPISubjectHash]]$basic <- indDfAux
-      if(as.period(frequency)>=as.period("P1M")){
+      if(lubridate::as.period(frequency)>=lubridate::as.period("P1M")){
         indDfAuxMeta <- data.frame(
           `individualSubject` = namespace_integrator(buildingSubject, namespaces),
           `keyPerformanceIndicator` = indicator,
@@ -497,7 +497,7 @@ generate_longitudinal_benchmarking_indicators <- function (
         results_ts[[singleKPISubjectHash]]$full <- 
           results_ts[[singleKPISubjectHash]]$full %>% filter(is.finite(value)) %>%
           {
-            if(as.period(frequency)>=as.period("P1Y")){
+            if(lubridate::as.period(frequency)>=lubridate::as.period("P1Y")){
               mutate(
                 .,
                 year = year(lubridate::with_tz(parsedate::parse_iso_8601(start), localTimeZone))
@@ -657,7 +657,7 @@ generate_eem_assessment_indicators <- function(
     
     for (frequency in frequencies) {
       if(frequency!=""){
-        n <- hourly_timesteps(as.numeric(as.period(frequency))/3600, 
+        n <- hourly_timesteps(as.numeric(lubridate::as.period(frequency))/3600, 
                          originalDataPeriod)
       } else {
         # When no frequency, calculate the indicators only considering the first 365 days
@@ -666,9 +666,9 @@ generate_eem_assessment_indicators <- function(
       }
       indDfAux <- indDf %>%  {
           if(frequency==""){
-            group_by(., start = first(time))
+            group_by(., start = dplyr::first(time))
           } else {
-            group_by(., start = floor_date(time, unit = frequency, 
+            group_by(., start = lubridate::floor_date(time, lubridate::as.period(frequency), 
                         week_start = getOption("lubridate.week.start", 1)))
           }
         } %>% {
@@ -691,12 +691,12 @@ generate_eem_assessment_indicators <- function(
             ifelse(is.finite(value), F, NA)
           }) %>% 
         select(-real, -estimated)
-      indDfAux$start <- with_tz(indDfAux$start, "UTC")
+      indDfAux$start <- lubridate::with_tz(indDfAux$start, "UTC")
       if(frequency==""){
         indDfAux$end <- last(indDf$time)
       } else {
-        if (as.period(frequency) >= as.period("P1D")) {
-          indDfAux$end <- with_tz(with_tz(indDfAux$start, 
+        if (lubridate::as.period(frequency) >= lubridate::as.period("P1D")) {
+          indDfAux$end <- lubridate::with_tz(lubridate::with_tz(indDfAux$start, 
                                           localTimeZone) + iso8601_period_to_timedelta(frequency) - 
                                     seconds(1), "UTC")
         } else {
@@ -755,7 +755,7 @@ generate_eem_assessment_indicators <- function(
       
       results_ts[[singleKPISubjectHash]] <- list()
       results_ts[[singleKPISubjectHash]]$basic <- indDfAux
-      if(frequency=="" | as.period(frequency)>=as.period("P1M")){
+      if(frequency=="" | lubridate::as.period(frequency)>=lubridate::as.period("P1M")){
         indDfAuxMeta <- data.frame(
           `individualSubject` = namespace_integrator(projectSubject, namespaces),
           `keyPerformanceIndicator` = indicator,
@@ -771,7 +771,7 @@ generate_eem_assessment_indicators <- function(
           {
             if(frequency==""){
               .
-            } else if(as.period(frequency)>=as.period("P1Y")){
+            } else if(lubridate::as.period(frequency)>=lubridate::as.period("P1Y")){
               mutate(
                 .,
                 year = year(lubridate::with_tz(parsedate::parse_iso_8601(start), localTimeZone))
@@ -843,7 +843,7 @@ generate_eem_assessment_indicators <- function(
       
       results_ts[[singleKPISubjectHash]] <- list()
       results_ts[[singleKPISubjectHash]]$basic <- indDfAux
-      if(frequency=="" | as.period(frequency)>=as.period("P1M")){
+      if(frequency=="" | lubridate::as.period(frequency)>=lubridate::as.period("P1M")){
         indDfAuxMeta <- data.frame(
           `individualSubject` = namespace_integrator(projectSubject, namespaces),
           `keyPerformanceIndicator` = indicatorNABT,

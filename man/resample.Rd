@@ -2,22 +2,23 @@
 % Please edit documentation in R/preparation.R
 \name{resample}
 \alias{resample}
-\title{Resample time serie to new ISO 8601 timestep}
+\title{Resample time series to new ISO 8601 timestep}
 \usage{
 resample(data, timestep)
 }
 \arguments{
-\item{data}{<timeSeries> Input time series to be resampled}
+\item{data}{<data.frame> describing the input time series to be resampled. 
+Time column: 'time', value column: 'value'.}
 
 \item{timeStep}{<string> A string in ISO 8601 format representing the period
 or timestep (e.g. "PT15M","PT1H", "P3M", "P1D" ,...).}
 }
 \value{
-Resampled time series
+<data.frame> corresponding to the resampled time series
 }
 \description{
-Time serie is upsampled creating synthetic forward fill time serie
-in case of higher frequency timestep required
-Time serie is downsampled maintaing curent values but
-repeated indexes in case of lower frequency timestep required
+Time series is upsampled creating synthetic forward fill time series
+in case of higher frequency timestep required. On contrary, is 
+downsampled maintaing current values but repeated indexes in case 
+of lower frequency timestep required.
 }

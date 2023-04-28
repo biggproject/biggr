@@ -2,7 +2,7 @@
 % Please edit documentation in R/preparation.R
 \name{detect_static_min_max_outliers}
 \alias{detect_static_min_max_outliers}
-\title{Detect which numerical elements are outside the min-max range.}
+\title{Detect min-max outliers in static data.}
 \usage{
 detect_static_min_max_outliers(
   data,
@@ -13,22 +13,22 @@ detect_static_min_max_outliers(
 )
 }
 \arguments{
-\item{data}{<float/integer> list The numerical elements to be evaluated}
+\item{data}{<array> of floats corresponding to the numerical elements to be evaluated}
 
-\item{min}{<float/integer> The minimum value of the range.}
+\item{min}{<float> The minimum value of the range.}
 
-\item{max}{<float/integer> The maximum value of the range.}
+\item{max}{<float> The maximum value of the range.}
 
 \item{includedMin}{<boolean> An optional argument setting if the
-minimum value should be included as valid value (true), or not (false).
-Default is true.}
+minimum value should be included as valid value (T), or not (F).
+Default is T.}
 
 \item{includedMax}{<boolean> An optional argument setting if the maximum
-value should be included as valid value (true), or not (false).
-Default is true.}
+value should be included as valid value (T), or not (F).
+Default is T.}
 }
 \value{
-Mask of timeserie entries matching criteria
+<array> of booleans, representing the outliers of input data argument.
 }
 \description{
 Detect which numerical elements are outside the min-max range.

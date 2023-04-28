@@ -190,14 +190,7 @@ PenalisedLM <- function(input_parameters){
                    maxPredictionValue=NULL, minPredictionValue=NULL,
                    weatherDependenceByCluster=NULL, clusteringResults=NULL, 
                    ...) {
-      # x<<-x
-      # y<<-y
-      # params <<- param
-      # #param <- params
-      # formulaTerms <<- formulaTerms
-      # transformationSentences <<- transformationSentences
-      # forcePositiveTerms <<- forcePositiveTerms
-      
+
       features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
       outputName <- all.vars(formulaTerms)[1]
       
@@ -397,14 +390,7 @@ ARX <- function(input_parameters){
                    maxPredictionValue=NULL, minPredictionValue=NULL,
                    weatherDependenceByCluster=NULL, clusteringResults=NULL, 
                    ...) {
-      
-      # x <<- x
-      # y <<- y
-      # transformationSentences <<- transformationSentences
-      # formulaTerms <<- formulaTerms
-      # params <<- param
-      # param <- as.data.frame(bestParamsQe)
-      
+
       features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
       outputName <- all.vars(formulaTerms)[1]
       if(paste0("AR_",outputName) %in% colnames(param)){
@@ -520,9 +506,7 @@ ARX <- function(input_parameters){
     },
     predict = function(modelFit, newdata, submodels, forceGlobalInputFeatures=NULL, forceInitInputFeatures=NULL,
                        forceInitOutputFeatures=NULL, forceOneStepPrediction=F, predictionIntervals=F) {
-      newdata <<- newdata
-      modelFit <<- modelFit
-      
+
       newdata <- as.data.frame(newdata)
       features <- modelFit$meta$features[
         !(modelFit$meta$features %in% modelFit$meta$outputName)]
@@ -751,15 +735,6 @@ GLM <- function(input_parameters){
                    weatherDependenceByCluster=NULL, clusteringResults=NULL,
                    ...) {
       
-      x2 <<- x
-      y2 <<- y
-      transformationSentences <<- transformationSentences
-      formulaTerms <<- formulaTerms
-      params <<- param
-      # x <- x2
-      # y <- y2
-      # param <- params
-      
       features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
       outputName <- all.vars(formulaTerms)[1]
       if(paste0("AR_",outputName) %in% colnames(param)){
@@ -870,8 +845,6 @@ GLM <- function(input_parameters){
     },
     predict = function(modelFit, newdata, submodels, forceGlobalInputFeatures=NULL, forceInitInputFeatures=NULL,
                        forceInitOutputFeatures=NULL, forceOneStepPrediction=F, predictionIntervals=F) {
-      # newdata <<- newdata
-      # modelFit <<- modelFit
       
       newdata <- as.data.frame(newdata)
       features <- modelFit$meta$features[
@@ -1058,7 +1031,7 @@ GLM <- function(input_parameters){
 #' Recursive Least Square model
 #' 
 #' This function is a custom model wrapper to train and predict recursive linear 
-#' models over the Caret modelling framework. 
+#' models over the modelling framework of caret R package. 
 #'
 #' @param formula -arg for train()- <formula> providing the model output feature
 #' and the model input features. Inputs can be columns defined in data argument
@@ -1067,13 +1040,15 @@ GLM <- function(input_parameters){
 #' all the raw input features used to train the model.
 #' @param transformationSentences -arg for train()- <list>. See 
 #' data_transformation_wrapper() function for details.
-#' @param logOutput -arg for train()- <boolean> indicating if 
-#' Box-Jenkins transformation is done.
-#' @param minMonthsTraining -arg for train()- <int> indicating 
+#' @param logOutput -arg for train()- <boolean> indicating if a
+#' Box-Jenkins transformation is considered in the output feature
+#' during the training of the model. When predicting, 
+#' it computes, automatically, the inverse transformation.
+#' @param minMonthsTraining -arg for train()- <integer> indicating 
 #' the minimum number of months for training.
 #' @param continuousTime -arg for train()- <boolean> indicating if the 
 #' fitting process of the model coefficients should account for the 
-#' data gaps.
+#' data gaps. Set to 
 #' @param maxPredictionValue -arg for train()- <float> defining 
 #' the maximum value of predictions.
 #' @param weatherDependenceByCluster -arg for train()- <data.frame>
@@ -1161,16 +1136,7 @@ RLS <- function(input_parameters){
                    minMonthsTraining=0, continuousTime=T,
                    maxPredictionValue=NULL, weatherDependenceByCluster=NULL,
                    clusteringResults=NULL,...
-                   #estimateTheoreticalOccupancy=F, 
-                   #theoreticalOccupancyColumnName="theoreticalOccupancy"
                    ) {
-      # x <<- x
-      # y <<- y
-      # transformationSentences <<- transformationSentences
-      # formulaTerms <<- formulaTerms
-      # params <<- param
-      # param <- params#mod$bestTune
-      print(paste(paste(colnames(param),param[1,],sep=": "),collapse=", "))
       
       features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
       outputName <- all.vars(formulaTerms)[1]
@@ -1265,7 +1231,7 @@ RLS <- function(input_parameters){
       colnames(data_matrix) <- gsub(":","_",colnames(data_matrix))
       
       # Create the model object
-      model <- forecastmodel$new()
+      model <- onlineforecast::forecastmodel$new()
       model$output <- outputName
       do.call(model$add_inputs,as.list(setNames(colnames(data_matrix),colnames(data_matrix))))
       model$add_regprm("rls_prm(lambda=0.9)")
@@ -1282,7 +1248,8 @@ RLS <- function(input_parameters){
       } else { data[,outputName] }
       if(continuousTime==F){
         data_for_rls[["t"]] <- seq(min(data$localtime),
-                                   min(data$localtime) + hours(length(data$localtime)), by="hour")
+                                   min(data$localtime) + lubridate::hours(length(data$localtime)), 
+                                   by=iso8601_period_to_text(detect_time_step(data$localtime),only_first = T))
         data_for_rls[["t"]] <- data_for_rls[["t"]][1:length(data_for_rls[[outputName]])] 
       } else {
         data_for_rls[["t"]] <- data$localtime
@@ -1290,7 +1257,7 @@ RLS <- function(input_parameters){
       data_for_rls$scoreperiod <- sample(c(F,T),length(data_for_rls$t),replace = T,prob = c(0.9,0.1))
       
       # Fit the RLS model and obtain the time-varying coefficients
-      mod_rls <- rls_fit(c("lambda"=param$lambda),model, data_for_rls, scorefun = rmse, printout = F)
+      mod_rls <- onlineforecast::rls_fit(c("lambda"=param$lambda),model, data_for_rls, scorefun = rmse, printout = F)
       if(continuousTime==F){
         mod_rls$data$t <- data$localtime
       }
@@ -1354,9 +1321,7 @@ RLS <- function(input_parameters){
                        forceInitInputFeatures=NULL, forceInitOutputFeatures=NULL, 
                        modelMinMaxHorizonInHours=1, modelWindow="%Y-%m-%d", 
                        forceOneStepPrediction=F, modelSelection="rmse") {
-      # modelFit <<- modelFit
-      # newdata <<- newdata
-      
+
       newdata <- as.data.frame(newdata)
       newdata$localtime <- lubridate::with_tz(newdata$time,
                                               lubridate::tz(modelFit$localtime))
@@ -1368,7 +1333,6 @@ RLS <- function(input_parameters){
       logOutput <- modelFit$meta$logOutput
       outputName <- modelFit$meta$outputName
       maxPredictionValue <- modelFit$meta$maxPredictionValue
-      # estimateTheoreticalOccupancy <- modelFit$meta$estimateTheoreticalOccupancy
       
       # Initialize the global input features if needed
       # Change the inputs if are specified in forceGlobalInputFeatures
@@ -1414,24 +1378,6 @@ RLS <- function(input_parameters){
             nm=unique(c(colnames(newdata),names(forceInitOutputFeatures))))[,colnames(newdata)],
             newdata)
       }
-      # if(!is.null(forceInitInputFeatures)){
-      #   factor_char_features <- names(forceInitInputFeatures)[
-      #     mapply(FUN=function(i)class(i),forceInitInputFeatures) %in% c("factor","character")]
-      #   for(fcf in factor_char_features){
-      #     aux <- fastDummies::dummy_cols(as.factor(forceInitInputFeatures[[fcf]]),remove_selected_columns = T)
-      #     colnames(aux) <- gsub(".data",fcf,colnames(aux))
-      #     forceInitInputFeatures <- c(forceInitInputFeatures, as.list(aux))
-      #   }
-      # }
-      # if(!is.null(forceInitOutputFeatures)){
-      #   factor_char_features <- names(forceInitOutputFeatures)[
-      #     mapply(FUN=function(i)class(i),forceInitOutputFeatures) %in% c("factor","character")]
-      #   for(fcf in factor_char_features){
-      #     aux <- fastDummies::dummy_cols(as.factor(forceInitOutputFeatures[[fcf]]),remove_selected_columns = T)
-      #     colnames(aux) <- gsub(".data",fcf,colnames(aux))
-      #     forceInitOutputFeatures <- c(forceInitOutputFeatures, as.list(aux))
-      #   }
-      # }
       
       # Transform input data if it is needed
       transformation <- data_transformation_wrapper(
@@ -1465,15 +1411,12 @@ RLS <- function(input_parameters){
       # Lag the components that has been initialised
       newdata <- lag_components(data = newdata, 
                                 maxLag = maxLag, 
-                                featuresNames = c(outputName,featuresAll)#modelFit$meta$features, 
-                                # forceGlobalInputFeatures = forceGlobalInputFeatures,
-                                # forceInitInputFeatures = forceInitInputFeatures,
-                                # forceInitOutputFeatures = forceInitOutputFeatures)
+                                featuresNames = c(outputName,featuresAll)
                                 )
       newdata <- newdata[(maxLag+1):nrow(newdata),]
       
       # Data transformation for RLS framework
-      model_formula <- modelFit$meta$formula#update.formula(modelFit$meta$formula,NULL~.)
+      model_formula <- modelFit$meta$formula
       newdata[,outputName] <- NA
       newdata_matrix <- model.matrix.lm(modelFit$meta$formula, newdata, na.action=na.pass)
       newdata[,outputName] <- NULL
@@ -1488,20 +1431,6 @@ RLS <- function(input_parameters){
       mod_coef <- mod_coef[order(mod_coef$localtime),]
       mod_coef <- zoo::na.locf(mod_coef)
       
-      # if(length(estimateTheoreticalOccupancy)>0){
-      #   theoretical_occupancy <- estimate_occupancy(
-      #     real = newdata[[outputName]], 
-      #     predicted = predict(estimateTheoreticalOccupancy$mod,newdata), 
-      #     minOccupancy = estimateTheoreticalOccupancy$minocc,
-      #     timestep = detect_time_step(newdata$localtime))
-      #   # ggplotly(
-      #   #   ggplot() +
-      #   #     geom_line(aes(1:length(theoretical_occupancy),theoretical_occupancy)) +
-      #   #     geom_line(aes(1:nrow(newdata),newdata$Qe/max(newdata$Qe,na.rm=T)),alpha=0.5,col="red")
-      #   #   )
-      #   newdata[,estimateTheoreticalOccupancy$columnName] <- theoretical_occupancy
-      # }
-      
       # Predict at multi-step ahead or one-step ahead prediction, 
       # depending if some AR input is considered using the output variable
       if(forceOneStepPrediction==F & (paste("AR",outputName,sep="_") %in% colnames(param))){
@@ -1509,9 +1438,7 @@ RLS <- function(input_parameters){
           newdata <- lag_components(data = newdata,
                                     maxLag = maxLag,
                                     featuresNames = featuresAll,
-                                    predictionStep = i-1#,
-                                    # forceInitInputFeatures = forceInitInputFeatures,
-                                    # forceInitOutputFeatures = forceInitOutputFeatures
+                                    predictionStep = i-1
                                     )
           newdata[i,outputName] <- sum(
             newdata_matrix[i,colnames(modelFit$coefficients)] * 
@@ -1547,7 +1474,7 @@ RLS <- function(input_parameters){
           stop("Horizons per step higher than 1 are not allowed when predicting multiple step ahead of ARX models")
         } else {
           mod_coef <- mod_coef[
-            mod_coef$localtime >= min(newdata$localtime)-hours(max(modelMinMaxHorizonInHours)) &
+            mod_coef$localtime >= min(newdata$localtime)-lubridate::hours(max(modelMinMaxHorizonInHours)) &
             mod_coef$localtime <= max(newdata$localtime),
           ]
           mod_coef$window <- strftime(mod_coef$localtime,modelWindow)
@@ -1574,19 +1501,13 @@ RLS <- function(input_parameters){
           multiple_preds <- lapply(1:nrow(mod_coef),
                  function(x){
                    mod_coef_aux <- mod_coef[x,]
-                   allowed_times <- newdata$localtime >= (mod_coef_aux[1,"localtime"]  + hours(min(modelMinMaxHorizonInHours))) & 
-                       newdata$localtime <= (mod_coef_aux[1,"localtime"] + hours(max(modelMinMaxHorizonInHours)))
+                   allowed_times <- newdata$localtime >= (mod_coef_aux[1,"localtime"]  + lubridate::hours(min(modelMinMaxHorizonInHours))) & 
+                       newdata$localtime <= (mod_coef_aux[1,"localtime"] + lubridate::hours(max(modelMinMaxHorizonInHours)))
                    result <- setNames(
                      data.frame(
                       newdata$localtime[allowed_times],
                       if (logOutput) {
                         exp(
-                          # mapply(function(i){
-                          #   sum(
-                          #     newdata_matrix[i,colnames(modelFit$coefficients)] * 
-                          #       mod_coef_aux[1,colnames(modelFit$coefficients)],
-                          #   na.rm=T)},which(allowed_times))
-                          #   
                           newdata_matrix[allowed_times,colnames(modelFit$coefficients)] %*%
                           t(mod_coef_aux[1,colnames(modelFit$coefficients)])
                         )
@@ -1610,9 +1531,6 @@ RLS <- function(input_parameters){
             function(x, y, ...) merge(x, y, all = TRUE, ...),
             multiple_preds
           )
-          # all_preds <- all_preds[all_preds$localtime %in% newdata$localtime,]
-          # all_preds <- all_preds %>% 
-          #   right_join(data.frame("localtime"=newdata$localtime),"localtime")
           timeN <- data.frame(
             "localtime"=all_preds$localtime,
             "n"=sum(!(colnames(all_preds) %in% "localtime" )) - 

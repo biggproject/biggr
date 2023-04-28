@@ -2,10 +2,7 @@
 % Please edit documentation in R/preparation.R
 \name{detect_holidays_in_tertiary_buildings}
 \alias{detect_holidays_in_tertiary_buildings}
-\title{The function detects holidays period in tertiary building time serie.
-Analysis of turnpoints in density distribution in order to identify
-"over represented" low consumption dates. Additional postprocessing is done
-in order to take care of additional constraints related to holidays period}
+\title{Detect holidays in consumption time series}
 \usage{
 detect_holidays_in_tertiary_buildings(
   data,
@@ -24,17 +21,21 @@ values}
 
 \item{timeColumn}{<string> Time column}
 
-\item{ignoreDates}{<list> Ignore list of dates in time serie}
+\item{ignoreDates}{<list> Ignore list of dates in time series.}
+
+\item{tz}{<string> specifying the local time zone related to
+the building in analysis. The format of this time zones are defined by
+the IANA Time Zone Database (https://www.iana.org/time-zones).}
 
 \item{plotDensiry}{<boolean> Plot density function used to obtain
 holidays consumption threshold}
 }
 \value{
-List of dates with classified as holidays
+<array> of dates with classified as holidays.
 }
 \description{
-The function detects holidays period in tertiary building time serie.
+The function detects holiday periods in buildings with highly seasonal patterns.
 Analysis of turnpoints in density distribution in order to identify
-"over represented" low consumption dates. Additional postprocessing is done
+"over represented" low consumption dates. Additional post-processing is done
 in order to take care of additional constraints related to holidays period
 }

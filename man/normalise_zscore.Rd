@@ -8,16 +8,16 @@ normalise_zscore(data, scalingAttr = NULL)
 }
 \arguments{
 \item{data}{<data.frame> containing serie to normalise}
+
+\item{scalingAttr}{<data.frame> setting average and standard deviation 
+thresholds for each variable. Column names: column names specified in 
+data argument; Row names: mean, sd.}
 }
 \value{
-Normalized input data using Z-score normalization method.
-Output data properties is different depending on input data properties
-If input data class is not in "matrix", "data.frame" or "tbl_df" then
-output data provides struct with normalized vector in "values" attribute
-and scaling "mean" and "sd" in "scalingAttr" attribute
-If input data class is in "matrix", "data.frame" or "tbl_df" then
-output data provides struct with normalization in "values" attribute and
-scaling "mean" and "sd" in "scalingAttr" attribute
+<list> containing two keys: "values" and "scalingAttr". The
+former consists on a <data.frame> or an <array> with the normalised values, 
+depending the class of data argument. The latter consists on the scaling 
+attributes used for normalisation.
 }
 \description{
 Normalize time serie using Zscore normalization method

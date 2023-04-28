@@ -2,27 +2,26 @@
 % Please edit documentation in R/preparation.R
 \name{clean_ts_integrate}
 \alias{clean_ts_integrate}
-\title{The function converts a cumulative (counter) or onChange (delta) measurement
-to instantaneous.}
+\title{Converts time series to instantaneous}
 \usage{
 clean_ts_integrate(data, measurementReadingType = "onChange")
 }
 \arguments{
-\item{data}{<timeSeries> The cumulative or on-change time series that has to
+\item{data}{<data.frame> of the cumulative or on-change time series that has to
 be converted to instantaneous. An instantaneous measurement is a gauge
 metric, in which the value can increase or decrease and measures a specific
-instant in time.}
+instant in time. Columns: 'time', 'value'.}
 
-\item{measurementReadingType}{<enumeration> An argument used to define the
+\item{measurementReadingType}{<string> that identifies used to define the
 measurement reading type. Supported readiny types are:
     - onChange. Delta reading type
     - cumulative. Counter reading type}
 }
 \value{
-data <timeSeries> The cumulative or onChange time series with
+<data.frame> The cumulative or onChange time series with
 the measurements converted to the instantaneous type.
 }
 \description{
-The function converts a cumulative (counter) or onChange (delta) measurement
+The function converts a cumulative or on-change measurement
 to instantaneous.
 }

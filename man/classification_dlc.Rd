@@ -27,7 +27,9 @@ needed for clustering.}
 \item{consumptionFeature}{<string> containing the column name the consumption
 feature in the data argument.}
 
-\item{localTimeZone}{<string> local time zone}
+\item{localTimeZone}{<string> specifying the local time zone related to the
+building in analysis. The format of this time zones are defined by the IANA
+Time Zone Database (https://www.iana.org/time-zones).}
 
 \item{clustering}{<object> clustering_dlc() output}
 

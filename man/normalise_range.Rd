@@ -14,29 +14,26 @@ normalise_range(
 )
 }
 \arguments{
-\item{data}{<data.frame> containing a set of time series to normalise}
+\item{data}{<data.frame> containing a set of time series to normalise
+or an <array> of numerical values to normalise.}
 
-\item{lower}{<float> lower value}
+\item{lower}{<float> lower value of the resultant range.}
 
-\item{upper}{<float> upper value}
+\item{upper}{<float> upper value of the resultant range.}
 
-\item{lowerThreshold}{<float> lower threshold value}
+\item{lowerThreshold}{<float> lower threshold value.}
 
-\item{upperThreshold}{<float> upper threshold value}
+\item{upperThreshold}{<float> upper threshold value.}
 
-\item{scalingAttr}{<struct> setting lower and upper threshold in case of
-null lowerThreshold or upperThreshold
-- min: lowerThreshold
-- max: upperThreshold}
+\item{scalingAttr}{<data.frame> setting min-max threshold for each variable.
+Column names: column names specified in data argument; Row names: min, max.
+In case of NULL (default value), lowerThreshold or upperThreshold will be used.}
 }
 \value{
-Normalized input data using range normalization method. Output
-data properties is different depending on input data properties
-If input data class is not in "matrix", "data.frame" or "tbl_df" then
-output data provides normalization 
-If input data class is in "matrix", "data.frame" or "tbl_df" then
-output data provides struct with normalization in "values" attribute and
-min-max values used in "scalingAttr" attribute
+<list> containing two keys: "values" and "scalingAttr". The
+former consists on a <data.frame> or an <array> with the normalised values, 
+depending the class of data argument. The latter consists on the scaling 
+attributes used for normalisation.
 }
 \description{
 Normalze time series using min-max range normalization method

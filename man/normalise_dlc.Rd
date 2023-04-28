@@ -21,11 +21,13 @@ normalise_dlc(
 \arguments{
 \item{data}{<timeserie>}
 
-\item{localTimeZone}{<string> timezone}
+\item{localTimeZone}{<string> specifying the local time zone related to the
+building in analysis. The format of this time zones are defined by the IANA
+Time Zone Database (https://www.iana.org/time-zones).}
 
 \item{transformation}{<string> absolute or relative}
 
-\item{inputVars}{<list of strings> Possible values: loadCurves, daysWeekend,
+\item{inputVars}{<array> of strings. Possible values: loadCurves, daysWeekend,
 daysHolidays, daysWeek, dailyTemperature, dailyConsumption, dailyHdd, dailyCdd,
 ratioDailyConsumptionHdd, ratioDailyConsumptionCdd}
 
@@ -33,7 +35,7 @@ ratioDailyConsumptionHdd, ratioDailyConsumptionCdd}
 parts of the day as "aggregation" of multiple hours. Default value 24 so
 each hour is considered a single part of the day}
 
-\item{holidays}{<list date> holidays dates ignored in clustering}
+\item{holidays}{<array> of dates. Holidays dates that are ignored in clustering phase.}
 
 \item{method}{<string> Normalization methods supported:
 - range01. Min-max normalization method
