@@ -2,7 +2,7 @@
 % Please edit documentation in R/transformation.R
 \name{normalise_range}
 \alias{normalise_range}
-\title{Normalze time series using min-max range normalization method}
+\title{Normalze time series using min-max range normalisation method}
 \usage{
 normalise_range(
   data,
@@ -36,5 +36,5 @@ depending the class of data argument. The latter consists on the scaling
 attributes used for normalisation.
 }
 \description{
-Normalze time series using min-max range normalization method
+Normalze time series using min-max range normalisation method
 }

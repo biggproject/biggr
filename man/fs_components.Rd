@@ -33,11 +33,11 @@ accounted for the transformation. The timestamps set to false will
 consider 0's for all their related sine-cosine components. By default,
 all elements of the time series are considered.}
 
-\item{normMode}{<string> normalization method to be used in features
+\item{normMode}{<string> normalisation method to be used in features
 preprocessing. Supported scaling methods
-    - divided_by_max_plus_one: Max+1 normalization method 
-    - min_max_range: Min-max normalization method
-    - NULL: No normalization applied}
+    - divided_by_max_plus_one: Max+1 normalisation method 
+    - min_max_range: Min-max normalisation method
+    - NULL: No normalisation applied}
 
 \item{inplace:}{<array> of booleans indicating if the output should be the original
 data argument, plus the transformed objects -True- , or only the transformed

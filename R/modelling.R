@@ -32,7 +32,7 @@ estimate_occupancy <- function(real=NULL, predicted, minOccupancy, timestep){
   tp <- pastecs::turnpoints(ts(density_sd_res$y))
   importance <- density_sd_res$y[tp$tppos]
   x_values <- density_sd_res$x[tp$tppos]
-  shifted_importance <- c(0,shift(importance,1)[is.finite(shift(importance,1))])
+  shifted_importance <- c(0,dplyr::lag(importance,1)[is.finite(dplyr::lag(importance,1))])
   min_max <- ifelse(importance-shifted_importance>0,"max","min")
   sd_threshold <- min(x_values[x_values > x_values[which.max(importance)] &
                                  min_max =="min"],na.rm=T)

@@ -2,9 +2,7 @@
 % Please edit documentation in R/transformation.R
 \name{normalise_dlc}
 \alias{normalise_dlc}
-\title{Normalise time serie applying pre processing transformations
-and considering multiple input variables. Ignoring specific dates if required
-and supporting multiple normalization methods}
+\title{Daily load curve normalisation}
 \usage{
 normalise_dlc(
   data,
@@ -37,12 +35,15 @@ each hour is considered a single part of the day}
 
 \item{holidays}{<array> of dates. Holidays dates that are ignored in clustering phase.}
 
-\item{method}{<string> Normalization methods supported:
-- range01. Min-max normalization method
-- znorm. Z-score normalization method}
+\item{method}{<string> Normalisation methods supported:
+- range01. Min-max normalisation method
+- znorm. Z-score normalisation method}
 
 \item{scalingAttr}{<data.frame> it includes the scaling attributes for each
 variable}
+
+\item{balanceOutdoorTemperatures}{<array> of floats with the balance temperatures 
+used in the degree days calculation. Optional.}
 }
 \value{
 normalised load <data.frame>
@@ -50,5 +51,5 @@ normalised load <data.frame>
 \description{
 Normalise time serie applying pre processing transformations
 and considering multiple input variables. Ignoring specific dates if required
-and supporting multiple normalization methods
+and supporting multiple normalisation methods
 }

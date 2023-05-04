@@ -1060,7 +1060,7 @@ detect_holidays_in_tertiary_buildings <- function(data, consumptionColumn, timeC
   # defines the local maximums and minimums
   importance <- d$y[tp$tppos]
   cons <- d$x[tp$tppos]
-  shifted_importance <- c(0,shift(importance,1)[is.finite(shift(importance,1))])
+  shifted_importance <- c(0,dplyr::lag(importance,1)[is.finite(dplyr::lag(importance,1))])
   min_max <- ifelse(importance-shifted_importance>0,"max","min")
   
   ## Estimate the cons_limit based on the day with minimum consumption of the week 

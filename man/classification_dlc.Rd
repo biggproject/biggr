@@ -2,8 +2,7 @@
 % Please edit documentation in R/transformation.R
 \name{classification_dlc}
 \alias{classification_dlc}
-\title{Classify daily load curves based on the outputs of a clustering and a
-new set of data}
+\title{Daily load curve classification}
 \usage{
 classification_dlc(
   data,

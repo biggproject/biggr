@@ -2,7 +2,7 @@
 % Please edit documentation in R/transformation.R
 \name{data_transformation_wrapper}
 \alias{data_transformation_wrapper}
-\title{Title}
+\title{Description}
 \usage{
 data_transformation_wrapper(
   data,

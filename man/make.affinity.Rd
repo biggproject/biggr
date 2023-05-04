@@ -2,11 +2,7 @@
 % Please edit documentation in R/transformation.R
 \name{make.affinity}
 \alias{make.affinity}
-\title{Calculate affinity
- Code from https://www.di.fc.ul.pt/~jpn/r/spectralclustering/spectralclustering.html
-Done applying a k-nearest neighboor filter to build a representation of a
-graph. connecting just the closest dataset points. However, to be symmetric,
-if Aij is selected as a nearest neighboor, so will Aji.}
+\title{Calculate affinity}
 \usage{
 make.affinity(S, n.neighboors = 2)
 }
@@ -19,8 +15,7 @@ make.affinity(S, n.neighboors = 2)
 Affinity matrix
 }
 \description{
-Calculate affinity
- Code from https://www.di.fc.ul.pt/~jpn/r/spectralclustering/spectralclustering.html
+Code from https://www.di.fc.ul.pt/~jpn/r/spectralclustering/spectralclustering.html
 Done applying a k-nearest neighboor filter to build a representation of a
 graph. connecting just the closest dataset points. However, to be symmetric,
 if Aij is selected as a nearest neighboor, so will Aji.

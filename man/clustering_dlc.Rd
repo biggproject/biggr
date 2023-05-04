@@ -2,8 +2,7 @@
 % Please edit documentation in R/transformation.R
 \name{clustering_dlc}
 \alias{clustering_dlc}
-\title{Cluster similar daily load curves based on the load curves itself, calendar
-variables and outdoor temperature}
+\title{Daily load curves clustering}
 \usage{
 clustering_dlc(
   data,

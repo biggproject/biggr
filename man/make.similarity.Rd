@@ -2,11 +2,7 @@
 % Please edit documentation in R/transformation.R
 \name{make.similarity}
 \alias{make.similarity}
-\title{Calculate similarity matrix
-Code from https://www.di.fc.ul.pt/~jpn/r/spectralclustering/spectralclustering.html
-Similarity Matrix, S, as the matrix that at Sij=s(xi,xj) gives the
-similarity between observations xi and xj.
-Common similarity measures are euclidean (default) an gaussian}
+\title{Calculate similarity matrix}
 \usage{
 make.similarity(my.data, similarity)
 }
@@ -19,7 +15,6 @@ make.similarity(my.data, similarity)
 Similarity matrix
 }
 \description{
-Calculate similarity matrix
 Code from https://www.di.fc.ul.pt/~jpn/r/spectralclustering/spectralclustering.html
 Similarity Matrix, S, as the matrix that at Sij=s(xi,xj) gives the
 similarity between observations xi and xj.

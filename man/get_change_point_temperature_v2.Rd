@@ -44,7 +44,7 @@ Changepoint analysis results attributes <struct>
 Calculate change point temperature by modeling temperature vs consumption
 relationship using a multi-step weather dependency signature model.
 Multi-step weather dependency signature model is based in best
-fitting penalized regression model analysis. Regression quality analysis
+fitting penalised regression model analysis. Regression quality analysis
 is used to identify wether proposed model properly describes the
 weather vs consumption relationship. Model coefficients analysis is used
 is used to identify type and amount of weather dependency.

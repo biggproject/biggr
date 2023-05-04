@@ -2,19 +2,19 @@
 % Please edit documentation in R/transformation.R
 \name{normalise_daily}
 \alias{normalise_daily}
-\title{Normalize time serie using hourly over daily relative consumption (%) normalization method}
+\title{Normalise time serie using hourly over daily relative consumption (%) normalisation method}
 \usage{
 normalise_daily(data, method = "relative", localTimeZone)
 }
 \arguments{
 \item{data}{<data.frame> containing serie to normalise}
 
-\item{method}{<string> Normalization method. 
+\item{method}{<string> Normalisation method. 
 Supported methods: relative}
 }
 \value{
 <data.frame> daily normalised time series
 }
 \description{
-Normalize time serie using hourly over daily relative consumption (%) normalization method
+Normalise time serie using hourly over daily relative consumption (%) normalisation method
 }

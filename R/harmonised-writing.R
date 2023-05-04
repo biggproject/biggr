@@ -449,7 +449,7 @@ generate_longitudinal_benchmarking_indicators <- function (
         if (indicator %in% c("HeatingDegreeDays", "CoolingDegreeDays")) { indicator
         } else { paste(indicator, measuredPropertyComponent, measuredProperty, sep = "-") }, 
         modelName, modelId, frequency, sep = "-")
-      singleKPISubjectHash <- digest(namespace_integrator(singleKPISubject, namespaces), "sha256", serialize = T)
+      singleKPISubjectHash <- digest::digest(namespace_integrator(singleKPISubject, namespaces), "sha256", serialize = T)
       singleKPIPointSubject <- paste0("biggresults:", singleKPISubjectHash)
       obj %>% add_item_to_rdf(subject = singleKPISubject, 
                               classes = c("bigg:SingleKPIAssessment", "bigg:KPIAssessment", 
@@ -719,7 +719,7 @@ generate_eem_assessment_indicators <- function(
       singleKPISubject <- paste("biggresults:SingleKPI", buildingId, projectId,
                                 paste(indicator, measuredPropertyComponent, measuredProperty, sep = "-"), 
                                 modelName, modelId, frequency, sep = "-")
-      singleKPISubjectHash <- digest(namespace_integrator(singleKPISubject, namespaces), "sha256", serialize = T)
+      singleKPISubjectHash <- digest::digest(namespace_integrator(singleKPISubject, namespaces), "sha256", serialize = T)
       singleKPIPointSubject <- paste0("biggresults:", singleKPISubjectHash)
       obj %>% add_item_to_rdf(subject = singleKPISubject, 
                               classes = c("bigg:SingleKPIAssessment", "bigg:KPIAssessment", 
@@ -811,7 +811,7 @@ generate_eem_assessment_indicators <- function(
       singleKPISubject <- paste("biggresults:SingleKPI", buildingId, projectId,
                                 paste(indicatorNABT, "Total", measuredProperty, sep = "-"), 
                                 modelName, modelId, frequency, sep = "-")
-      singleKPISubjectHash <- digest(namespace_integrator(singleKPISubject, namespaces), "sha256", serialize = T)
+      singleKPISubjectHash <- digest::digest(namespace_integrator(singleKPISubject, namespaces), "sha256", serialize = T)
       singleKPIPointSubject <- paste0("biggresults:", singleKPISubjectHash)
       obj %>% add_item_to_rdf(subject = singleKPISubject, 
                               classes = c("bigg:SingleKPIAssessment", "bigg:KPIAssessment", 

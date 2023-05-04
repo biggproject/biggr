@@ -2,7 +2,7 @@
 % Please edit documentation in R/transformation.R
 \name{normalise_zscore}
 \alias{normalise_zscore}
-\title{Normalize time serie using Zscore normalization method}
+\title{Z-Normalisation}
 \usage{
 normalise_zscore(data, scalingAttr = NULL)
 }
@@ -20,5 +20,5 @@ depending the class of data argument. The latter consists on the scaling
 attributes used for normalisation.
 }
 \description{
-Normalize time serie using Zscore normalization method
+Normalise time series using Zscore normalisation method
 }

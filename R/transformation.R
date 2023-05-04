@@ -14,7 +14,7 @@ get_local_min_from_density <- function(values,onlyPosition=NULL,minNumberValleys
   tp <- pastecs::turnpoints(ts(d$y))
   y <- d$y[tp$tppos]
   x <- d$x[tp$tppos]
-  sy <- c(0,shift(y,1)[is.finite(shift(y,1))])
+  sy <- c(0,dplyr::lag(y,1)[is.finite(dplyr::lag(y,1))])
   mins <- x[y-sy<=0]
   if(length(mins) < minNumberValleys) return(NULL)
   if(!is.null(onlyPosition)){
@@ -68,7 +68,7 @@ inverse_boxcox_transformation <- function(x, lambda){
   )
 }
 
-#' Title
+#' 
 #' 
 #' Description
 #'
@@ -191,6 +191,10 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
               "results" = transformationResults, "data" = data))
 }
 
+#
+# Time series transformations ----
+#
+
 #' Lag components
 #' 
 #' This function shift in time a set of features in order to be used in
@@ -251,11 +255,11 @@ lag_components <- function(data, maxLag, featuresNames=NULL, predictionStep=NULL
           for (l in 1:maxLag) {
             data[, paste0(f,"_l",as.character(l))] <- 
               if(is.numeric(data[,f])){
-                tryCatch(zoo::na.fill(shift(data[,f],l),"extend"),
+                tryCatch(zoo::na.fill(dplyr::lag(data[,f],l),"extend"),
                   error=function(e){rep(unique(data[is.finite(data[,f]),f])[1],
                                         nrow(data))})
               } else {
-                shift(data[,f],l)
+                dplyr::lag(data[,f],l)
               }
             if(fillInitNAs){
               data[1:l, paste0(f,"_l",as.character(l))] <- data[l+1, paste0(f,"_l",as.character(l))]
@@ -535,11 +539,11 @@ fs <- function(X, featureName, nHarmonics) {
 #' @param inplace: <array> of booleans indicating if the output should be the original
 #' data argument, plus the transformed objects -True- , or only the transformed
 #' series -False.
-#' @param normMode <string> normalization method to be used in features
+#' @param normMode <string> normalisation method to be used in features
 #' preprocessing. Supported scaling methods
-#'     - divided_by_max_plus_one: Max+1 normalization method 
-#'     - min_max_range: Min-max normalization method
-#'     - NULL: No normalization applied
+#'     - divided_by_max_plus_one: Max+1 normalisation method 
+#'     - min_max_range: Min-max normalisation method
+#'     - NULL: No normalisation applied
 #'     
 #' @return <data.frame> containing the same initial information of data
 #' input argument, plus the sine-cosine components of the Fourier Series as new
@@ -700,7 +704,7 @@ degree_days <- function(data, temperatureFeature, localTimeZone, baseTemperature
 #' Calculate change point temperature by modeling temperature vs consumption
 #' relationship using a multi-step weather dependency signature model.
 #' Multi-step weather dependency signature model is based in best
-#' fitting penalized regression model analysis. Regression quality analysis
+#' fitting penalised regression model analysis. Regression quality analysis
 #' is used to identify wether proposed model properly describes the
 #' weather vs consumption relationship. Model coefficients analysis is used
 #' is used to identify type and amount of weather dependency.
@@ -933,7 +937,7 @@ get_change_point_temperature <- function(consumptionData, weatherData,
 #' Calculate change point temperature by modeling temperature vs consumption
 #' relationship using a multi-step weather dependency signature model.
 #' Multi-step weather dependency signature model is based in best
-#' fitting penalized regression model analysis. Regression quality analysis
+#' fitting penalised regression model analysis. Regression quality analysis
 #' is used to identify wether proposed model properly describes the
 #' weather vs consumption relationship. Model coefficients analysis is used
 #' is used to identify type and amount of weather dependency.
@@ -1193,7 +1197,7 @@ get_change_point_temperature_v2 <- function(consumptionData, weatherData,
 # Daily load curves clustering and classification ----
 #
 
-#' Normalze time series using min-max range normalization method
+#' Normalze time series using min-max range normalisation method
 #'
 #' @param data <data.frame> containing a set of time series to normalise
 #' or an <array> of numerical values to normalise.
@@ -1256,10 +1260,10 @@ normalise_range <- function(data, lower = 0, upper = 1, lowerThreshold = NULL,
   }
 }
 
-#' Normalize time serie using hourly over daily relative consumption (%) normalization method
+#' Normalise time serie using hourly over daily relative consumption (%) normalisation method
 #'
 #' @param data <data.frame> containing serie to normalise
-#' @param method <string> Normalization method. 
+#' @param method <string> Normalisation method. 
 #' Supported methods: relative
 #' @return <data.frame> daily normalised time series
 
@@ -1277,7 +1281,9 @@ normalise_daily <- function(data, method = "relative", localTimeZone) {
            select(time, value))
 }
 
-#' Normalize time serie using Zscore normalization method
+#' Z-Normalisation
+#' 
+#' Normalise time series using Zscore normalisation method
 #'
 #' @param data <data.frame> containing serie to normalise
 #' @param scalingAttr <data.frame> setting average and standard deviation 
@@ -1287,6 +1293,7 @@ normalise_daily <- function(data, method = "relative", localTimeZone) {
 #' former consists on a <data.frame> or an <array> with the normalised values, 
 #' depending the class of data argument. The latter consists on the scaling 
 #' attributes used for normalisation.
+
 normalise_zscore <- function(data, scalingAttr=NULL) {
   x <- if(is.null(scalingAttr)){
     scale(data)
@@ -1306,9 +1313,11 @@ normalise_zscore <- function(data, scalingAttr=NULL) {
   }
 }
 
+#' Daily load curve normalisation
+#' 
 #' Normalise time serie applying pre processing transformations
 #' and considering multiple input variables. Ignoring specific dates if required
-#' and supporting multiple normalization methods
+#' and supporting multiple normalisation methods
 #'
 #' @param data <timeserie>
 #' @param localTimeZone <string> specifying the local time zone related to the
@@ -1322,26 +1331,18 @@ normalise_zscore <- function(data, scalingAttr=NULL) {
 #' parts of the day as "aggregation" of multiple hours. Default value 24 so
 #' each hour is considered a single part of the day
 #' @param holidays <array> of dates. Holidays dates that are ignored in clustering phase.
-#' @param method <string> Normalization methods supported:
-#'  - range01. Min-max normalization method
-#'  - znorm. Z-score normalization method
+#' @param method <string> Normalisation methods supported:
+#'  - range01. Min-max normalisation method
+#'  - znorm. Z-score normalisation method
 #' @param scalingAttr <data.frame> it includes the scaling attributes for each
 #' variable
+#' @param balanceOutdoorTemperatures <array> of floats with the balance temperatures 
+#' used in the degree days calculation. Optional. 
 #' @return normalised load <data.frame>
+
 normalise_dlc <- function(data, localTimeZone, transformation = "relative", 
                           inputVars = c("loadCurves"), nDayParts = 24, holidays = c(),
                           method = "range01", scalingAttr = NULL, balanceOutdoorTemperatures = NULL){
-  
-  # data = tmp
-  # transformation = loadCurveTransformation
-  # holidays = holidaysDates
-  # scalingAttr = NULL
-  # method = normalisationMethod
-  
-  # if (class(holidays) == "character") {
-  #   holidays <- read_csv(holidays, col_names = FALSE)
-  #   holidays <- holidays$X1
-  # }
   
   tmp <- data %>% 
     mutate(localtime = lubridate::with_tz(time, localTimeZone), 
@@ -1356,7 +1357,7 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
       isHolidays = date %in% holidays,
       month = month(date)) %>% 
     group_by(date, weekday, isWeekend, isHolidays, month) %>% 
-    summarize(
+    summarise(
       consumption = mean(consumption, na.rm=T) * n_timesteps, 
       temperature = mean(temperature, na.rm = TRUE),
       minConsumption = min(consumption, na.rm=T),
@@ -1705,7 +1706,8 @@ normalise_dlc <- function(data, localTimeZone, transformation = "relative",
 }
 
 #' Calculate affinity
-#'  Code from https://www.di.fc.ul.pt/~jpn/r/spectralclustering/spectralclustering.html
+#' 
+#' Code from https://www.di.fc.ul.pt/~jpn/r/spectralclustering/spectralclustering.html
 #' Done applying a k-nearest neighboor filter to build a representation of a
 #' graph. connecting just the closest dataset points. However, to be symmetric,
 #' if Aij is selected as a nearest neighboor, so will Aji.
@@ -1746,6 +1748,7 @@ similarity <- function(x1, x2, alpha = 1) {
 }
 
 #' Calculate similarity matrix
+#' 
 #' Code from https://www.di.fc.ul.pt/~jpn/r/spectralclustering/spectralclustering.html
 #' Similarity Matrix, S, as the matrix that at Sij=s(xi,xj) gives the
 #' similarity between observations xi and xj.
@@ -1754,6 +1757,7 @@ similarity <- function(x1, x2, alpha = 1) {
 #' @param my.data <matrix> Matrix to evaluate
 #' @param similariry <function> Similarity function
 #' @return Similarity matrix
+
 make.similarity <- function(my.data, similarity) {
   N <- nrow(my.data)
   S <- matrix(rep(NA, N^2), ncol = N)
@@ -1769,6 +1773,8 @@ make.similarity <- function(my.data, similarity) {
   S
 }
 
+#' Daily load curves clustering
+#' 
 #' Cluster similar daily load curves based on the load curves itself, calendar
 #' variables and outdoor temperature
 #'
@@ -1992,6 +1998,8 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
 }
 
 
+#' Daily load curve classification
+#' 
 #' Classify daily load curves based on the outputs of a clustering and a
 #' new set of data
 #'
@@ -2014,6 +2022,7 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
 #'   classificationModel: Based on a classification model of the calendar
 #'     features.
 #' @return dailyClassification: <data.frame>
+
 classification_dlc <- function(data, consumptionFeature, outdoorTemperatureFeature, 
                                localTimeZone, clustering, methodNormalDays="clusteringCentroids",
                                holidaysDatesFeature = NULL, abnormalDaysFeature = NULL,
