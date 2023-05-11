@@ -14,28 +14,28 @@ detect_holidays_in_tertiary_buildings(
 )
 }
 \arguments{
-\item{data}{<timeSeries> Time serie with potential anomalies in
+\item{data}{<data.frame> Time series with potential anomalies in
 values}
 
 \item{consumptionColumn}{<string> Value column}
 
 \item{timeColumn}{<string> Time column}
 
+\item{plotDensity}{<boolean> Plot density function used to obtain
+holidays consumption threshold}
+
 \item{ignoreDates}{<list> Ignore list of dates in time series.}
 
 \item{tz}{<string> specifying the local time zone related to
 the building in analysis. The format of this time zones are defined by
 the IANA Time Zone Database (https://www.iana.org/time-zones).}
-
-\item{plotDensiry}{<boolean> Plot density function used to obtain
-holidays consumption threshold}
 }
 \value{
 <array> of dates with classified as holidays.
 }
 \description{
 The function detects holiday periods in buildings with highly seasonal patterns.
-Analysis of turnpoints in density distribution in order to identify
+An analysis of turnpoints in density function is performed to identify
 "over represented" low consumption dates. Additional post-processing is done
 in order to take care of additional constraints related to holidays period
 }
