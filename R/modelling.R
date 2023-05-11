@@ -1321,7 +1321,7 @@ RLS <- function(input_parameters){
                        forceInitInputFeatures=NULL, forceInitOutputFeatures=NULL, 
                        modelMinMaxHorizonInHours=1, modelWindow="%Y-%m-%d", 
                        forceOneStepPrediction=F, modelSelection="rmse") {
-
+      
       newdata <- as.data.frame(newdata)
       newdata$localtime <- lubridate::with_tz(newdata$time,
                                               lubridate::tz(modelFit$localtime))

@@ -1863,13 +1863,13 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
                             nDayParts, balanceOutdoorTemperatures, nNeighboursAffinity = 7,
                             ignoreDates = c(), holidaysDates = c(), normalisationMethod = "range01") {
   # data = df
-  # consumptionFeature = "Qe" 
-  # outdoorTemperatureFeature = "temperature" 
+  # consumptionFeature = "Qe"
+  # outdoorTemperatureFeature = "temperature"
   # localTimeZone = tz
-  # kMax = settings$DailyLoadCurveClustering$kMax 
+  # kMax = settings$DailyLoadCurveClustering$kMax
   # kMin = settings$DailyLoadCurveClustering$kMin
   # nNeighboursAffinity = settings$DailyLoadCurveClustering$nNeighboursAffinity
-  # inputVars = settings$DailyLoadCurveClustering$inputVars 
+  # inputVars = settings$DailyLoadCurveClustering$inputVars
   # loadCurveTransformation = settings$DailyLoadCurveClustering$loadCurveTransformation
   # balanceOutdoorTemperatures = settings$DailyLoadCurveClustering$balanceOutdoorTemperatures
   # ignoreDates =
@@ -1878,7 +1878,7 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
   #       outliers==T
   #     } else {
   #       outliers==T | (date >= maxDateForClustering)
-  #     }) %>% select(date) %>% 
+  #     }) %>% select(date) %>%
   #   unlist %>% as.Date
   # holidaysDates = holidaysDates
   # nDayParts = settings$DailyLoadCurveClustering$nDayParts
@@ -1892,8 +1892,8 @@ clustering_dlc <- function (data, consumptionFeature, outdoorTemperatureFeature,
   data[,outdoorTemperatureFeature] <-
     na.locf(na.locf(
         na.approx(data[,outdoorTemperatureFeature],na.rm = F),
-        fromLast = T,na.rm = T
-      ),na.rm=T)
+        fromLast = T,na.rm = F
+      ),na.rm=F)
   tmp <- data %>%
     select(time, all_of(consumptionFeature), all_of(outdoorTemperatureFeature)) %>%
     filter(!(lubridate::date(time) %in% ignoreDates)) %>%
