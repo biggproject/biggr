@@ -14,8 +14,8 @@ and/or features described in transformationSentences argument.}
 \item{data}{-arg for train()- <data.frame> containing the output feature and 
 all the raw input features used to train the model.}
 
-\item{transformationSentences}{-arg for train()- <list>. See 
-data_transformation_wrapper() function for details.}
+\item{transformationSentences}{-arg for train()- <list>. Run 
+?data_transformation_wrapper() for details.}
 
 \item{logOutput}{-arg for train()- <boolean> indicating if a
 Box-Jenkins transformation is considered in the output feature
@@ -31,6 +31,9 @@ data gaps. Set to}
 
 \item{maxPredictionValue}{-arg for train()- <float> defining 
 the maximum value of predictions.}
+
+\item{minPredictionValue}{-arg for train()- <float> defining 
+the minimum value of predictions.}
 
 \item{weatherDependenceByCluster}{-arg for train()- <data.frame>
 containing the columns 's', 'heating', 'cooling', 'tbalh', 'tbalc';
@@ -71,17 +74,31 @@ When forceOneStepPrediction is TRUE, this argument is not used.}
 \item{modelSelection}{-arg for biggr::predict.train()- <string> defining 
 the model selection mode for selecting the best model at every timeframe. 
 Default: 'rmse' or 'random'. When forceOneStepPrediction is TRUE, 
-this argument is not used.
-
-It should be launched using the train() function for training, and 
-biggr::predict.train() function for predicting. 
-An example to train a model is :
+this argument is not used.}
+}
+\value{
+When training: <list> containing the model, when predicting: <array> of the predicted results.
+}
+\description{
+This function is a custom model wrapper for caret R-package to train 
+and predict linear models fitted using the Recursive Least Square 
+method. The model coefficients of this kind of model are 
+time-varying; thus, the relation between inputs and output changes 
+over time to better fit the data.
+}
+\examples{
+# It should be launched using the train() function for training, and 
+# biggr::predict.train() function for predicting. 
+# An example for model training is:
 train(
  formula = Qe ~ daily_seasonality,
  data = df, # data.frame with three columns: 
             #  'time','Qe', and 'hour'; 
-            #  corresponding to time, electricity consumption, 
-            #  and hour of the day.
+            # corresponding to time, electricity consumption, 
+            # and hour of the day. 
+            # 200 rows of data are needed considering 
+            # the training control strategy that was selected 
+            # in argument trControl. 
  method = RLS(
    data.frame(parameter = "nhar",
               class = "discrete")
@@ -96,12 +113,30 @@ train(
         "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
         "weekday")
    )
- )}
-}
-\value{
-When training: <list> containing the model, when predicting: <array> of the predicted results.
-}
-\description{
-This function is a custom model wrapper to train and predict recursive linear 
-models over the modelling framework of caret R package.
+ )
+ # An example for model prediction is:
+ predictor <- crate(function(x, forceGlobalInputFeatures = NULL,modelMinMaxHorizonInHours=1,
+ modelWindow="\%Y-\%m-\%d", modelSelection="rmse"){
+   biggr::predict.train(
+     object = !!mod,
+     newdata = x,
+     forceGlobalInputFeatures = forceGlobalInputFeatures,
+     modelMinMaxHorizonInHours = modelMinMaxHorizonInHours,
+     modelWindow = modelWindow,
+     modelSelection = modelSelection
+   )
+ })
+ # An example call of the predictor function to predict Qe at certain time is:
+ predictor(
+     data.frame(
+         time=as.POSIXct("2020-01-01 14:00:00",tz="UTC"),
+         hour=15
+     )
+ )
+ # An additional nice feature of predictors is that this object 
+ # can be directly stored to MLFlow infrastructure using:
+ mlflow_log_model(predictor,"example_name")
+ # Last instance can only be executed if an MLFlow run was started, see:
+ ?mlflow::mlflow_start_run()
+ 
 }

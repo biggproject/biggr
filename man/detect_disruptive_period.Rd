@@ -48,11 +48,11 @@ Possible values: decrement, increment, incrementAndDecrement.}
 
 \item{minDecrementPercentualAffectation}{<float> indicating the minimum
 decrement of consumption (vs. baseline) to be considered as abnormal.
-Default 30%.}
+Default 30\%.}
 
 \item{minIncrementPercentualAffectation}{<float> indicating the minimum
 increment of consumption (vs. baseline) to be considered as abnormal.
-Default 60%.}
+Default 60\%.}
 }
 \value{
 <data.frame> with the period of time (min-max) with abnormal 

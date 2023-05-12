@@ -2,7 +2,7 @@
 % Please edit documentation in R/transformation.R
 \name{normalise_daily}
 \alias{normalise_daily}
-\title{Normalise time serie using hourly over daily relative consumption (%) normalisation method}
+\title{Normalise time series by sum of the day}
 \usage{
 normalise_daily(data, method = "relative", localTimeZone)
 }
@@ -16,5 +16,5 @@ Supported methods: relative}
 <data.frame> daily normalised time series
 }
 \description{
-Normalise time serie using hourly over daily relative consumption (%) normalisation method
+Normalise time series using daily relative normalisation method
 }

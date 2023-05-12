@@ -822,10 +822,10 @@ align_time_grid <- function(data,
 #' Possible values: decrement, increment, incrementAndDecrement.
 #' @param minDecrementPercentualAffectation <float> indicating the minimum
 #' decrement of consumption (vs. baseline) to be considered as abnormal.
-#' Default 30%.
+#' Default 30\%.
 #' @param minIncrementPercentualAffectation <float> indicating the minimum
 #' increment of consumption (vs. baseline) to be considered as abnormal.
-#' Default 60%.
+#' Default 60\%.
 #' @return <data.frame> with the period of time (min-max) with abnormal 
 #' consumption.
 

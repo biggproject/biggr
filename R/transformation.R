@@ -1260,11 +1260,14 @@ normalise_range <- function(data, lower = 0, upper = 1, lowerThreshold = NULL,
   }
 }
 
-#' Normalise time serie using hourly over daily relative consumption (%) normalisation method
+#' Normalise time series by sum of the day
+#' 
+#' Normalise time series using daily relative normalisation method
 #'
 #' @param data <data.frame> containing serie to normalise
 #' @param method <string> Normalisation method. 
 #' Supported methods: relative
+#' 
 #' @return <data.frame> daily normalised time series
 
 normalise_daily <- function(data, method = "relative", localTimeZone) {

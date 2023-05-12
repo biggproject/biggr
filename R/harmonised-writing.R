@@ -58,6 +58,7 @@ write_rdf <- function(object, file){
 #' It consists on links to other items of the RDF.
 #' @param namespaces named <array> that relates simple namespaces and complete 
 #' ones.
+#' 
 #' @return <rdf> object with the new item added.
 
 add_item_to_rdf <- function(object, subject, classes = NULL, dataProperties = NULL, 
@@ -106,6 +107,7 @@ add_item_to_rdf <- function(object, subject, classes = NULL, dataProperties = NU
 #'
 #' @param lifespans a named <array> defining the default lifespans to consider for each type of EEM.
 #' @param eemTypes an <array> that defines the EEM types.
+#' 
 #' @return <array> of lifespans for each EEM type.
 
 get_eem_lifespan <- function(lifespans=NULL, eemTypes){
@@ -136,23 +138,27 @@ get_eem_lifespan <- function(lifespans=NULL, eemTypes){
   )
 }
 
-#' Calculate a Key Performance Indicator (KPI) not aggregable by time.
+#' Calculate a KPI not aggregable by time.
 #' 
-#' This function computes the value of a certain indicator that is not aggregable by time 
-#' (normally, those related to financial). 
+#' This function computes the value of a certain indicator that is not aggregable by time (normally, those related to financial). 
 #'
-#' @param indicator <string> defining the KPI to calculate. Possible values: NormalisedInvestmentCost,
-#' AvoidanceCost, SimplePayback, NetPresentValue, ProfitabilityIndex, NetPresentValueQuotient,
-#' InternalRateOfReturn.
-#' @param annualEnergySavings <float> definining the accumulated energy saving for a whole year.
-#' @param annualCostSavings <float> definining the accumulated cost saving for a whole year.
-#' @param affectedBuildingArea <float> definining building area affected by the EEM, or project of EEMs.
-#' @param investment <float> defining the total initial investment cost of EEM, or project of EEMs.
-#' @param discountRate <float> defining the discount rate for the Net Present value. Unit: %.
+#' @param indicator <string> defining the KPI to calculate. Possible values: 
+#' NormalisedInvestmentCost, AvoidanceCost, SimplePayback, NetPresentValue, 
+#' ProfitabilityIndex, NetPresentValueQuotient, InternalRateOfReturn.
+#' @param annualEnergySavings <float> definining the accumulated energy saving for a 
+#' whole year.
+#' @param annualCostSavings <float> definining the accumulated cost saving for a 
+#' whole year.
+#' @param affectedBuildingArea <float> definining building area affected by the EEM, 
+#' or project of EEMs.
+#' @param investment <float> defining the total initial investment cost of EEM, or 
+#' project of EEMs.
+#' @param discountRate <float> defining the discount rate for the Net Present value. 
+#' Unit: \%.
 #' @param lifespan <int> defining the lifespan of a EEM, or a project of EEMs.
 #' 
 #' @return <float> with the value of the KPI.
-
+#' 
 calculate_indicator_not_aggregable_by_time <- function(indicator, annualEnergySavings, annualCostSavings, affectedBuildingArea, 
                                                        investment, discountRate, lifespan){
   
@@ -188,7 +194,7 @@ calculate_indicator_not_aggregable_by_time <- function(indicator, annualEnergySa
   return(valueInd)
 }
 
-#' Calculate time series Key Performance Indicators (KPI).
+#' Calculate time series KPI.
 #' 
 #' This function calculates a large list of energy-related KPIs considering a set predicted and real energy measurements.
 #' It only accounts for KPI that can be time-aggregable, so input and output data are time series.

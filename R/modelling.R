@@ -700,12 +700,120 @@ ARX <- function(input_parameters){
   return(modelFramework)
 }
 
-#' Title
+#' Generalised Linear Model
 #' 
-#' Description
+#' This function is a custom model wrapper for caret R-package to train 
+#' and predict Generalised Linear Models.
 #'
-#' @param arg <> 
-#' @return 
+#' @param formula -arg for train()- <formula> providing the model output feature
+#' and the model input features. Inputs can be columns defined in data argument
+#' and/or features described in transformationSentences argument.
+#' @param data -arg for train()- <data.frame> containing the output feature and 
+#' all the raw input features used to train the model.
+#' @param trainMask -agr for train()- <array> providing the mask 
+#' (TRUE if yes, FALSE if no) for the dataset used for model training.
+#' This mask will be considered after all transformation procedures.
+#' The array must be the same length as the number of rows in the data argument. 
+#' @param numericStatusVariable -arg for train()- <string> defining the name of 
+#' the column in data that contains the numerical status information 
+#' (normally 0 and 1) of the output variable.
+#' If it is not NULL (default), all model coefficients are fitted considering 
+#' as model input the transformed input values multiplied by this numeric 
+#' status variable.
+#' @param characterStatusVariable -arg for train()- <string> defining the name of 
+#' the column in data that contains the discrete status information of the 
+#' output variable.
+#' If it is not NULL (default), all model coefficients are fitted considering 
+#' each one of the possible status defined in the character status variable.
+#' @param transformationSentences -arg for train()- <list>. Run 
+#' ?data_transformation_wrapper() for details.
+#' @param familyGLM -arg for train()- <function> indicating the link function 
+#' to be used in the model. For GLM this can be a character string naming a 
+#' family function, a family function or the result of a call to a family 
+#' function. Execute ?stats::family for details.
+#' @param continuousTime -arg for train()- <boolean> indicating if the 
+#' fitting process of the model coefficients should account for the 
+#' data gaps. Set to 
+#' @param maxPredictionValue -arg for train()- <float> defining 
+#' the maximum value of predictions.
+#' @param minPredictionValue -arg for train()- <float> defining 
+#' the minimum value of predictions.
+#' @param weatherDependenceByCluster -arg for train()- <data.frame>
+#' containing the columns 's', 'heating', 'cooling', 'tbalh', 'tbalc';
+#' corresponding to the daily load curve cluster, the heating dependence 
+#' (TRUE or FALSE), the cooling dependance (TRUE or FALSE), the balance 
+#' heating temperature, and the balance cooling temperature, respectively.
+#' @param clusteringResults -arg for train()- <list> from the 
+#' output produced by clustering_dlc().
+#' @param newdata -arg for biggr::predict.train()- <data.frame> containing
+#' the input data to consider in a model prediction.
+#' @param forceGlobalInputFeatures -arg for biggr::predict.train()- <list> 
+#' containing the input model features to overwrite in newdata. 
+#' Each input feature must have length 1, or equal to the newdata's 
+#' number of rows.
+#' @param forceInitInputFeatures -arg for biggr::predict.train()- <list>
+#' containing the last timesteps of the input features.
+#' @param forceInitOutputFeatures -arg for biggr::predict.train()- <list>
+#' containing the last timesteps of the output feature.
+#' @param forceOneStepPrediction -arg for biggr::predict.train()- 
+#' <boolean> indicating if the prediction mode should be done in one step 
+#' prediction mode. 
+#' @param predictionIntervals -arg for biggr::predict.train()- 
+#' <boolean> describing if the prediction should be of the average value 
+#' or the prediction interval.
+#' 
+#' @examples 
+#' # It should be launched using the train() function for training, and 
+#' # biggr::predict.train() function for predicting. 
+#' # An example for model training is:
+#' train(
+#'  formula = Qe ~ daily_seasonality,
+#'  data = df, # data.frame with three columns: 
+#'             #  'time','Qe', and 'hour'; 
+#'             # corresponding to time, electricity consumption, 
+#'             # and hour of the day. 
+#'             # 200 rows of data are needed considering 
+#'             # the training control strategy that was selected 
+#'             # in argument trControl. 
+#'  method = GLM(
+#'    data.frame(parameter = "nhar",
+#'               class = "discrete")
+#'  ),
+#'  tuneGrid = data.frame("nhar"=4:6),
+#'  trControl = trainControl(method="timeslice", initialWindow = 100,
+#'                           horizon = 10, skip = 10, fixedWindow = T),
+#'  minPredictionValue = 0,
+#'  maxPredictionValue = max(df$Qe,na.rm=T) * 1.1,
+#'  familyGLM = quasipoisson(),
+#'  transformationSentences = list(
+#'     "daily_seasonality" = c(
+#'         "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
+#'         "weekday")
+#'    )
+#'  )
+#'  # An example for model prediction is:
+#'  predictor <- crate(function(x, forceGlobalInputFeatures = NULL, predictionIntervals=F){
+#'    biggr::predict.train(
+#'      object = !!mod,
+#'      newdata = x,
+#'      forceGlobalInputFeatures = forceGlobalInputFeatures,
+#'      predictionIntervals = predictionIntervals
+#'    )
+#'  })
+#'  # An example call of the predictor function to predict Qe at certain time is:
+#'  predictor(
+#'      data.frame(
+#'          time=as.POSIXct("2020-01-01 14:00:00",tz="UTC"),
+#'          hour=15
+#'      )
+#'  )
+#'  # An additional nice feature of predictors is that this object 
+#'  # can be directly stored to MLFlow infrastructure using:
+#'  mlflow_log_model(predictor,"example_name")
+#'  # Last instance can only be executed if an MLFlow run was started, see:
+#'  ?mlflow::mlflow_start_run()
+#'  
+#' @return When training: <list> containing the model, when predicting: <array> of the predicted results.
 
 GLM <- function(input_parameters){
   input_parameters$label <- input_parameters$parameter
@@ -1030,16 +1138,19 @@ GLM <- function(input_parameters){
 
 #' Recursive Least Square model
 #' 
-#' This function is a custom model wrapper to train and predict recursive linear 
-#' models over the modelling framework of caret R package. 
+#' This function is a custom model wrapper for caret R-package to train 
+#' and predict linear models fitted using the Recursive Least Square 
+#' method. The model coefficients of this kind of model are 
+#' time-varying; thus, the relation between inputs and output changes 
+#' over time to better fit the data. 
 #'
 #' @param formula -arg for train()- <formula> providing the model output feature
 #' and the model input features. Inputs can be columns defined in data argument
 #' and/or features described in transformationSentences argument.
 #' @param data -arg for train()- <data.frame> containing the output feature and 
 #' all the raw input features used to train the model.
-#' @param transformationSentences -arg for train()- <list>. See 
-#' data_transformation_wrapper() function for details.
+#' @param transformationSentences -arg for train()- <list>. Run 
+#' ?data_transformation_wrapper() for details.
 #' @param logOutput -arg for train()- <boolean> indicating if a
 #' Box-Jenkins transformation is considered in the output feature
 #' during the training of the model. When predicting, 
@@ -1051,6 +1162,8 @@ GLM <- function(input_parameters){
 #' data gaps. Set to 
 #' @param maxPredictionValue -arg for train()- <float> defining 
 #' the maximum value of predictions.
+#' @param minPredictionValue -arg for train()- <float> defining 
+#' the minimum value of predictions.
 #' @param weatherDependenceByCluster -arg for train()- <data.frame>
 #' containing the columns 's', 'heating', 'cooling', 'tbalh', 'tbalc';
 #' corresponding to the daily load curve cluster, the heating dependence 
@@ -1083,15 +1196,19 @@ GLM <- function(input_parameters){
 #' Default: 'rmse' or 'random'. When forceOneStepPrediction is TRUE, 
 #' this argument is not used.
 #' 
-#' It should be launched using the train() function for training, and 
-#' biggr::predict.train() function for predicting. 
-#' An example to train a model is :
+#' @examples 
+#' # It should be launched using the train() function for training, and 
+#' # biggr::predict.train() function for predicting. 
+#' # An example for model training is:
 #' train(
 #'  formula = Qe ~ daily_seasonality,
 #'  data = df, # data.frame with three columns: 
 #'             #  'time','Qe', and 'hour'; 
-#'             #  corresponding to time, electricity consumption, 
-#'             #  and hour of the day.
+#'             # corresponding to time, electricity consumption, 
+#'             # and hour of the day. 
+#'             # 200 rows of data are needed considering 
+#'             # the training control strategy that was selected 
+#'             # in argument trControl. 
 #'  method = RLS(
 #'    data.frame(parameter = "nhar",
 #'               class = "discrete")
@@ -1107,7 +1224,31 @@ GLM <- function(input_parameters){
 #'         "weekday")
 #'    )
 #'  )
-#' 
+#'  # An example for model prediction is:
+#'  predictor <- crate(function(x, forceGlobalInputFeatures = NULL,modelMinMaxHorizonInHours=1,
+#'  modelWindow="%Y-%m-%d", modelSelection="rmse"){
+#'    biggr::predict.train(
+#'      object = !!mod,
+#'      newdata = x,
+#'      forceGlobalInputFeatures = forceGlobalInputFeatures,
+#'      modelMinMaxHorizonInHours = modelMinMaxHorizonInHours,
+#'      modelWindow = modelWindow,
+#'      modelSelection = modelSelection
+#'    )
+#'  })
+#'  # An example call of the predictor function to predict Qe at certain time is:
+#'  predictor(
+#'      data.frame(
+#'          time=as.POSIXct("2020-01-01 14:00:00",tz="UTC"),
+#'          hour=15
+#'      )
+#'  )
+#'  # An additional nice feature of predictors is that this object 
+#'  # can be directly stored to MLFlow infrastructure using:
+#'  mlflow_log_model(predictor,"example_name")
+#'  # Last instance can only be executed if an MLFlow run was started, see:
+#'  ?mlflow::mlflow_start_run()
+#'  
 #' @return When training: <list> containing the model, when predicting: <array> of the predicted results.
 
 RLS <- function(input_parameters){
@@ -1133,7 +1274,7 @@ RLS <- function(input_parameters){
     loop = NULL,
     fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, 
                    transformationSentences=NULL, logOutput=F, 
-                   minMonthsTraining=0, continuousTime=T,
+                   minMonthsTraining=0, continuousTime=T,minPredictionValue=NULL,
                    maxPredictionValue=NULL, weatherDependenceByCluster=NULL,
                    clusteringResults=NULL,...
                    ) {
@@ -1290,6 +1431,7 @@ RLS <- function(input_parameters){
         logOutput = logOutput,
         minMonthsTraining = minMonthsTraining,
         maxPredictionValue = maxPredictionValue,
+        minPredictionValue = minPredictionValue,
         # estimateTheoreticalOccupancy = if(estimateTheoreticalOccupancy){
         #   list("mod" = mod_lm, "minocc"=param$minocc, 
         #        "columnName" = theoreticalOccupancyColumnName)
@@ -1333,6 +1475,7 @@ RLS <- function(input_parameters){
       logOutput <- modelFit$meta$logOutput
       outputName <- modelFit$meta$outputName
       maxPredictionValue <- modelFit$meta$maxPredictionValue
+      minPredictionValue <- modelFit$meta$minPredictionValue
       
       # Initialize the global input features if needed
       # Change the inputs if are specified in forceGlobalInputFeatures
@@ -1463,11 +1606,13 @@ RLS <- function(input_parameters){
           } else { 
             newdata[,outputName] 
           }
-        if (!is.null(maxPredictionValue)){
+        result <- if (!is.null(maxPredictionValue)){
           ifelse(result > maxPredictionValue, maxPredictionValue, result)
-        } else {
-          result
         }
+        result <- if (!is.null(minPredictionValue)){
+          ifelse(result < minPredictionValue, minPredictionValue, result)
+        }
+        result
       } else {
         # When predicting a fixed horizon with each model coefficients set
         if(paste("AR",outputName,sep="_") %in% colnames(param)){
@@ -1525,6 +1670,11 @@ RLS <- function(input_parameters){
                                          maxPredictionValue, 
                                          result[,2])
                    }
+                   if(!is.null(minPredictionValue)){
+                     result[,2] <- ifelse(result[,2] < minPredictionValue, 
+                                          minPredictionValue, 
+                                          result[,2])
+                   }
                    result
                  })
           all_preds <- Reduce(
@@ -1546,6 +1696,11 @@ RLS <- function(input_parameters){
           if(!is.null(maxPredictionValue)){
             timePred[,"pred"] <- ifelse(timePred[,"pred"] > maxPredictionValue, 
                                         maxPredictionValue, 
+                                        timePred[,"pred"])
+          }
+          if(!is.null(minPredictionValue)){
+            timePred[,"pred"] <- ifelse(timePred[,"pred"] < minPredictionValue, 
+                                        minPredictionValue, 
                                         timePred[,"pred"])
           }
           probs <- c(0.025,0.05,0.1,0.25,0.375,0.5,0.625,0.75,0.9,0.95,0.975)
