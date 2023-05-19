@@ -3,7 +3,9 @@
 #
 
 bigg_namespaces <- c("bigg" = "http://bigg-project.eu/ontology#",
-                     "unit" = "http://qudt.org/vocab/unit/")
+                     "unit" = "http://qudt.org/vocab/unit/",
+                     "xsd" =  "http://www.w3.org/2001/XMLSchema#"
+)
 
 #' Parse datetime to ISO 8601 format
 #' 
