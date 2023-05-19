@@ -1608,10 +1608,10 @@ RLS <- function(input_parameters){
           }
         result <- if (!is.null(maxPredictionValue)){
           ifelse(result > maxPredictionValue, maxPredictionValue, result)
-        }
+        } else {result}
         result <- if (!is.null(minPredictionValue)){
           ifelse(result < minPredictionValue, minPredictionValue, result)
-        }
+        } else {result}
         result
       } else {
         # When predicting a fixed horizon with each model coefficients set

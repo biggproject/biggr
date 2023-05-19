@@ -5,6 +5,17 @@
 bigg_namespaces <- c("bigg" = "http://bigg-project.eu/ontology#",
                      "unit" = "http://qudt.org/vocab/unit/")
 
+#' Parse datetime to ISO 8601 format
+#' 
+#' This function parses the format of a POSIXct object to ISO 8601 with Zulu as UTC timezone definition. 
+#' For instance: 2020-01-01 03:00:00 Europe/Madrid --> "2020-01-01T02:00:00Z"
+#' 
+#' @param datetimes <array> of POSIXct in any timezone.
+#' 
+#' @return <array> of string with ISO 8601 format.
+
+format_iso_8601z <- function(datetimes){gsub("+00:00","Z",parsedate::format_iso_8601(datetimes),fixed = T)}
+
 #' Namespace integrator
 #' 
 #' This function converts the simplified namespace subtring of multiple URIs to his complete URI namespace.
@@ -80,7 +91,7 @@ add_item_to_rdf <- function(object, subject, classes = NULL, dataProperties = NU
         object %>% rdf_add(
           subject = subject,
           predicate = namespace_integrator(names(dataProperties)[i],namespaces),
-          object = if(datetimeDetected){parsedate::format_iso_8601(value)} else {value},
+          object = if(datetimeDetected){format_iso_8601z(value)} else {value},
           subjectType = "uri",objectType = "literal",
           datatype_uri = if(datetimeDetected){"xsd:dateTime"
           } else {as.character(NA)}
@@ -385,7 +396,7 @@ generate_longitudinal_benchmarking_indicators <- function (
       obj <- obj %>% add_item_to_rdf(subject = modelSubject, 
                                      classes = c("bigg:AnalyticalModel"), dataProperties = c(
                                        list(`bigg:modelLocation` = modelLocation, 
-                                            `bigg:modelTrainedDate` = parsedate::format_iso_8601(lubridate::now("UTC")), 
+                                            `bigg:modelTrainedDate` = format_iso_8601z(lubridate::now("UTC")), 
                                             `bigg:modelName` = modelName),
                                        if (!is.null(modelBaselineYear)) {
                                          list(`bigg:modelBaselineYear` = modelBaselineYear)
@@ -467,9 +478,7 @@ generate_longitudinal_benchmarking_indicators <- function (
                                 `bigg:timeSeriesStart` = min(indDfAux$start, na.rm = T), 
                                 `bigg:timeSeriesEnd` = max(indDfAux$end,  na.rm = T), 
                                 `bigg:timeSeriesFrequency` = frequency, 
-                                `bigg:timeSeriesTimeAggregationFunction` = "SUM"),
-                                if (!(indicator %in% c("HeatingDegreeDays", "CoolingDegreeDays"))) { list(
-                                  `bigg:measuredPropertyComponent` = measuredPropertyComponent) }), 
+                                `bigg:timeSeriesTimeAggregationFunction` = "SUM")), 
                               objectProperties = c(list(
                                 `bigg:hasKPIUnit` = indicatorsUnitsSubjects[[indicator]], 
                                 `bigg:hasSingleKPIPoint` = singleKPIPointSubject, 
@@ -479,13 +488,17 @@ generate_longitudinal_benchmarking_indicators <- function (
                                 },
                                 if (!(indicator %in% c("HeatingDegreeDays", "CoolingDegreeDays"))) { list(
                                   `bigg:hasMeasuredProperty` = if(startsWith(measuredProperty,"bigg:")){ measuredProperty
-                                  } else {paste0("bigg:",measuredProperty)}) }
+                                  } else {paste0("bigg:",measuredProperty)}) },
+                                if (!(indicator %in% c("HeatingDegreeDays", "CoolingDegreeDays"))) { list(
+                                  `bigg:hasMeasuredPropertyComponent` = paste0("bigg:",measuredPropertyComponent)) }
                               ), namespaces = namespaces)
+      obj %>% add_item_to_rdf(subject = singleKPIPointSubject,
+                              classes = c("bigg:TimeSeriesPoint","bigg:SingleKPIAssessmentPoint"))
       obj %>% add_item_to_rdf(subject = buildingSubject, 
                               objectProperties = list(`bigg:assessesSingleKPI` = singleKPISubject), 
                               namespaces = namespaces)
-      indDfAux$start <- parsedate::format_iso_8601(indDfAux$start)
-      indDfAux$end <- parsedate::format_iso_8601(indDfAux$end)
+      indDfAux$start <- format_iso_8601z(indDfAux$start)
+      indDfAux$end <- format_iso_8601z(indDfAux$end)
       
       results_ts[[singleKPISubjectHash]] <- list()
       results_ts[[singleKPISubjectHash]]$basic <- indDfAux
@@ -497,22 +510,29 @@ generate_longitudinal_benchmarking_indicators <- function (
           `measuredPropertyComponent` = namespace_integrator(paste0("bigg:",measuredPropertyComponent), namespaces),
           `unit` = namespace_integrator(indicatorsUnitsSubjects[[indicator]], namespaces),
           `frequency` = frequency,
-          `modelSubject` = namespace_integrator(modelSubject, namespaces)
+          `modelSubject` = namespace_integrator(modelSubject, namespaces),
+          `modelName` = if(is.na(modelSubject)){NA}else{namespace_integrator(paste0("bigg:",modelName), namespaces)},
+          `modelBased` = !is.na(modelSubject)
         )
         results_ts[[singleKPISubjectHash]]$full <- cbind(indDfAux,indDfAuxMeta)
         results_ts[[singleKPISubjectHash]]$full <- 
-          results_ts[[singleKPISubjectHash]]$full %>% filter(is.finite(value)) %>%
+          results_ts[[singleKPISubjectHash]]$full %>% 
+          filter(is.finite(value)) %>%
+          mutate(
+            start = parsedate::parse_iso_8601(start),
+            end = parsedate::parse_iso_8601(end)
+          ) %>%
           {
             if(lubridate::as.period(frequency)>=lubridate::as.period("P1Y")){
               mutate(
                 .,
-                year = year(lubridate::with_tz(parsedate::parse_iso_8601(start), localTimeZone))
+                year = year(lubridate::with_tz(start, localTimeZone))
               )
             } else {
               mutate(
                 .,
-                year = year(lubridate::with_tz(parsedate::parse_iso_8601(start), localTimeZone)),
-                month = month(lubridate::with_tz(parsedate::parse_iso_8601(start), localTimeZone))
+                year = year(lubridate::with_tz(start, localTimeZone)),
+                month = month(lubridate::with_tz(start, localTimeZone))
               )
             }
           }
@@ -609,10 +629,10 @@ generate_eem_assessment_indicators <- function(
                                      `bigg:projectName` = sprintf("Project %s",projectId),
                                      `bigg:projectDescription` = "Automatically created by the EEM assessment pipeline",
                                      `bigg:projectAutoGenerated` = T,
-                                     `bigg:projectGenerationDate` = parsedate::format_iso_8601(lubridate::now("UTC")),
-                                     `bigg:projectOperationalDate` = parsedate::format_iso_8601(lubridate::with_tz(max(eemProjectDf$Date),"UTC")),
-                                     `bigg:projectStartDate` = parsedate::format_iso_8601(lubridate::with_tz(min(eemProjectDf$Date),"UTC")),
-                                     `bigg:projectEndDate` = parsedate::format_iso_8601(lubridate::with_tz(max(eemProjectDf$Date),"UTC")),
+                                     `bigg:projectGenerationDate` = format_iso_8601z(lubridate::now("UTC")),
+                                     `bigg:projectOperationalDate` = format_iso_8601z(lubridate::with_tz(max(eemProjectDf$Date),"UTC")),
+                                     `bigg:projectStartDate` = format_iso_8601z(lubridate::with_tz(min(eemProjectDf$Date),"UTC")),
+                                     `bigg:projectEndDate` = format_iso_8601z(lubridate::with_tz(max(eemProjectDf$Date),"UTC")),
                                      `bigg:projectNumberEEMs` = nrow(eemProjectDf)),
                                      if(length(unique(eemProjectDf$Currency))==1){
                                        list(`bigg:projectInvestment` = sum(eemProjectDf$Investment,na.rm=T))
@@ -634,11 +654,11 @@ generate_eem_assessment_indicators <- function(
       obj <- obj %>% add_item_to_rdf(subject = modelSubject, 
                                      classes = c("bigg:AnalyticalModel"), dataProperties =
                                        list(`bigg:modelLocation` = modelLocation, 
-                                            `bigg:modelTrainedDate` = parsedate::format_iso_8601(lubridate::now("UTC")), 
+                                            `bigg:modelTrainedDate` = format_iso_8601z(lubridate::now("UTC")), 
                                             `bigg:modelName` = modelName), 
                                      objectProperties = list(
                                        `bigg:hasModelStorageInfrastructure` = modelStorageInfrastructureSubject, 
-                                       `bigg:hasModelType` = "bigg:MODELTYPE-BaselineModel"), namespaces = namespaces)
+                                       `bigg:hasModelType` = "bigg:BaselineModel"), namespaces = namespaces)
       obj <- obj %>% add_item_to_rdf(subject = buildingSubject, 
                                      objectProperties = list(`bigg:hasAnalyticalModel` = modelSubject), 
                                      namespaces = namespaces)
@@ -752,12 +772,14 @@ generate_eem_assessment_indicators <- function(
                                   `bigg:isEstimatedByModel` = modelSubject)
                                 }
                               ), namespaces = namespaces)
+      obj %>% add_item_to_rdf(singleKPIPointSubject, 
+                              classes=c("bigg:TimeSeriesPoint","bigg:SingleKPIAssessmentPoint"))
       obj %>% add_item_to_rdf(subject = projectSubject, 
                               classes = "bigg:KPICalculationItem",
                               objectProperties = list(`bigg:assessesSingleKPI` = singleKPISubject), 
                               namespaces = namespaces)
-      indDfAux$start <- parsedate::format_iso_8601(indDfAux$start)
-      indDfAux$end <- parsedate::format_iso_8601(indDfAux$end)
+      indDfAux$start <- format_iso_8601z(indDfAux$start)
+      indDfAux$end <- format_iso_8601z(indDfAux$end)
       
       results_ts[[singleKPISubjectHash]] <- list()
       results_ts[[singleKPISubjectHash]]$basic <- indDfAux
@@ -827,12 +849,12 @@ generate_eem_assessment_indicators <- function(
                                 `bigg:timeSeriesIsOnChange` = F, 
                                 `bigg:timeSeriesIsCumulative` = F, 
                                 `bigg:timeSeriesStart` = min(indDfAux$start, na.rm = T), 
-                                `bigg:timeSeriesEnd` = max(indDfAux$end,  na.rm = T),
-                                `bigg:measuredPropertyComponent` = "Total"),
+                                `bigg:timeSeriesEnd` = max(indDfAux$end,  na.rm = T)),
                               objectProperties = c(list(
                                 `bigg:hasKPIUnit` = indicatorsUnitsSubjects[[indicatorNABT]], 
                                 `bigg:hasSingleKPIPoint` = singleKPIPointSubject, 
                                 `bigg:quantifiesKPI` = keyPerformanceIndicatorSubject,
+                                `bigg:hasMeasuredPropertyComponent` = "bigg:Total",
                                 `bigg:hasMeasuredProperty` = if(startsWith(measuredProperty,"bigg:")){ 
                                   measuredProperty
                                 } else {paste0("bigg:",measuredProperty)}),
@@ -840,12 +862,14 @@ generate_eem_assessment_indicators <- function(
                                   `bigg:isEstimatedByModel` = modelSubject)
                                 }
                               ), namespaces = namespaces)
+      obj %>% add_item_to_rdf(singleKPIPointSubject, 
+                              classes=c("bigg:TimeSeriesPoint","bigg:SingleKPIAssessmentPoint"))
       obj %>% add_item_to_rdf(subject = projectSubject, 
                               classes = "bigg:KPICalculationItem",
                               objectProperties = list(`bigg:assessesSingleKPI` = singleKPISubject), 
                               namespaces = namespaces)
-      indDfAux$start <- parsedate::format_iso_8601(indDfAux$start)
-      indDfAux$end <- parsedate::format_iso_8601(indDfAux$end)
+      indDfAux$start <- format_iso_8601z(indDfAux$start)
+      indDfAux$end <- format_iso_8601z(indDfAux$end)
       
       results_ts[[singleKPISubjectHash]] <- list()
       results_ts[[singleKPISubjectHash]]$basic <- indDfAux
@@ -857,11 +881,18 @@ generate_eem_assessment_indicators <- function(
           `measuredPropertyComponent` = namespace_integrator("bigg:Total", namespaces),
           `unit` = namespace_integrator(indicatorsUnitsSubjects[[indicatorNABT]], namespaces),
           `frequency` = frequency,
-          `modelSubject` = namespace_integrator(modelSubject, namespaces)
+          `modelSubject` = namespace_integrator(modelSubject, namespaces),
+          `modelName` = namespace_integrator(paste0("bigg:",modelName), namespaces),
+          `modelBased` = !is.na(modelSubject)
         )
         results_ts[[singleKPISubjectHash]]$full <- cbind(indDfAux,indDfAuxMeta)
         results_ts[[singleKPISubjectHash]]$full <- 
-          results_ts[[singleKPISubjectHash]]$full %>% filter(is.finite(value))
+          results_ts[[singleKPISubjectHash]]$full %>% 
+          filter(is.finite(value)) %>%
+          mutate(
+            start = parsedate::parse_iso_8601(start),
+            end = parsedate::parse_iso_8601(end)
+          )
       }
     }
   }

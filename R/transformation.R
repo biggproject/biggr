@@ -85,13 +85,11 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
     transformationSentences <- list()
   }
   for (feature in unique(c(names(transformationSentences), features))){
-    #feature <- unique(c(names(transformationSentences), features))[3]
     trFields <- list()
     trData <- NULL
     attach(data,warn.conflicts = F)
     if(feature %in% names(transformationSentences)){
       for (trFunc in transformationSentences[[feature]]){
-        #trFunc <- transformationSentences[[feature]][1]
         trFuncName <- if(length(transformationSentences[[feature]])>1){
           trFunc } else { feature }
         if(grepl("[.]{3}",trFunc)){trFunc <- gsub("[.]{3}","data=data",trFunc)}
@@ -126,7 +124,6 @@ data_transformation_wrapper <- function(data, features, transformationSentences,
         if(feature %in% features){
           trFields[[length(trFields)+1]] <- colnames(trDataElem)
         }
-        # trData <- trData[,(ncol(data)+1):(ncol(trData))]
       }
     } else {
       trData <- tryCatch({
