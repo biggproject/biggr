@@ -45,9 +45,13 @@ namespace_integrator <- function(items, namespaces=NULL){
 
 write_rdf <- function(object, file){
   tryCatch({
-    rdf_serialize(object, file,
-                  namespace = bigg_namespaces,
-                  format = "turtle")}, 
+    serialized <- rdf_serialize(object,
+                    namespace = bigg_namespaces,
+                    format = "turtle")
+    #correct xsd:datetime rdflib error
+    serialized <- gsub("\\^\\^<xsd:dateTime>", "^^xsd:dateTime", serialized)
+    write(serialized, file)
+    }, 
     error=function(e){
       return(F)
     })
