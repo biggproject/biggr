@@ -499,7 +499,8 @@ generate_longitudinal_benchmarking_indicators <- function (
                                   `bigg:hasMeasuredPropertyComponent` = paste0("bigg:",measuredPropertyComponent)) }
                               ), namespaces = namespaces)
       obj %>% add_item_to_rdf(subject = singleKPIPointSubject,
-                              classes = c("bigg:TimeSeriesPoint","bigg:SingleKPIAssessmentPoint"))
+                              classes = c("bigg:TimeSeriesPoint","bigg:SingleKPIAssessmentPoint"),
+                              namespaces=namespaces)
       obj %>% add_item_to_rdf(subject = buildingSubject, 
                               objectProperties = list(`bigg:assessesSingleKPI` = singleKPISubject), 
                               namespaces = namespaces)
