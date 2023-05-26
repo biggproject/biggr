@@ -780,7 +780,8 @@ generate_eem_assessment_indicators <- function(
                                 }
                               ), namespaces = namespaces)
       obj %>% add_item_to_rdf(singleKPIPointSubject, 
-                              classes=c("bigg:TimeSeriesPoint","bigg:SingleKPIAssessmentPoint"))
+                              classes=c("bigg:TimeSeriesPoint","bigg:SingleKPIAssessmentPoint"),
+                              namespaces = namespaces)
       obj %>% add_item_to_rdf(subject = projectSubject, 
                               classes = "bigg:KPICalculationItem",
                               objectProperties = list(`bigg:assessesSingleKPI` = singleKPISubject), 
@@ -870,7 +871,8 @@ generate_eem_assessment_indicators <- function(
                                 }
                               ), namespaces = namespaces)
       obj %>% add_item_to_rdf(singleKPIPointSubject, 
-                              classes=c("bigg:TimeSeriesPoint","bigg:SingleKPIAssessmentPoint"))
+                              classes=c("bigg:TimeSeriesPoint","bigg:SingleKPIAssessmentPoint"),
+                              namespaces = namespaces)
       obj %>% add_item_to_rdf(subject = projectSubject, 
                               classes = "bigg:KPICalculationItem",
                               objectProperties = list(`bigg:assessesSingleKPI` = singleKPISubject), 
