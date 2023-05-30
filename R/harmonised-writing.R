@@ -51,7 +51,7 @@ write_rdf <- function(object, file){
                     namespace = bigg_namespaces,
                     format = "turtle")
     #correct xsd:datetime rdflib error
-    serialized <- gsub("\\^\\^<xsd:dateTime>", "^^xsd:dateTime", serialized)
+    #serialized <- gsub("\\^\\^<xsd:dateTime>", "^^xsd:dateTime", serialized)
     write(serialized, file)
     }, 
     error=function(e){
@@ -99,7 +99,7 @@ add_item_to_rdf <- function(object, subject, classes = NULL, dataProperties = NU
           predicate = namespace_integrator(names(dataProperties)[i],namespaces),
           object = if(datetimeDetected){format_iso_8601z(value)} else {value},
           subjectType = "uri",objectType = "literal",
-          datatype_uri = if(datetimeDetected){"xsd:dateTime"
+          datatype_uri = if(datetimeDetected){"http://www.w3.org/2001/XMLSchema#dateTime"
           } else {as.character(NA)}
         )
       }
