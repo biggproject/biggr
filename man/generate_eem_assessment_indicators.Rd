@@ -16,6 +16,7 @@ generate_eem_assessment_indicators(
   timeColumn,
   localTimeZone,
   eemProjectDf,
+  forceAssessmentSingleEEM,
   consumptionColumn,
   indicatorsTimeAggregationFunctions,
   indicatorsUnitsSubjects,
@@ -66,6 +67,9 @@ the IANA Time Zone Database (https://www.iana.org/time-zones).}
 \item{eemProjectDf}{<data.frame> defining the single EEMs applied to the project. 
 Columns that must be available: eemSubject, ExchangeRate, Investment, Date, Currency, 
 Type, AffectationShare, buildingSubject, buildingElement, Lifespan, DiscountRate, eemProjectId}
+
+\item{forceAssessmentSingleEEM}{<boolean> defining whether the EEM assessment should be 
+done by single EEMs or by EMM projects.}
 
 \item{consumptionColumn}{<string> defining the energy consumption column name in data.}
 

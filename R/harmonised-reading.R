@@ -136,6 +136,12 @@ get_building_identifiers <- function(buildingSubjects){
   )
 }
 
+uri_to_identifier <- function(uris){
+  return(
+    setNames(gsub("http://|https://||#||\\.","",uris),nm = uris)
+  )
+}
+
 #' Get all building subjects
 #' 
 #' This function get all building subjects available from a BIGG-harmonised dataset.
