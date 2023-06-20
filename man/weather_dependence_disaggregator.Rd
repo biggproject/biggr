@@ -9,6 +9,7 @@ weather_dependence_disaggregator(
   df,
   forceNoCooling,
   forceNoHeating,
+  forceNoCoolingAndHeating = NULL,
   ...
 )
 }

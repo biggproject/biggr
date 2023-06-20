@@ -878,8 +878,8 @@ generate_eem_assessment_indicators <- function(
       }
     }
   }
-  if(any(is.na(frequencies)) && is.finite(annualEnergySavings) && 
-     is.finite(annualCostSavings) && measuredPropertyComponent=="Total" ){
+  if(any(is.na(frequencies) | frequencies=="") && is.finite(annualEnergySavings) && 
+    is.finite(annualCostSavings) && measuredPropertyComponent=="Total" ){
     frequency <- ""
     for (indicatorNABT in indicatorsNotAggregableByTime){
       indDfAux <- data.frame(
@@ -1134,7 +1134,7 @@ generate_eem_assessment_indicators <- function(
         }
       }
       # Indicators that aren't aggregable by time
-      if(any(is.na(frequencies)) && is.finite(annualEnergySavings) && 
+      if(any(is.na(frequencies) | frequencies=="") && is.finite(annualEnergySavings) && 
          is.finite(annualCostSavings) && measuredPropertyComponent=="Total"){
         frequency <- ""
         for (indicatorNABT in indicatorsNotAggregableByTime){
