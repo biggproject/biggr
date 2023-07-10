@@ -345,6 +345,11 @@ calculate_indicator <-  function(data, indicator, consumptionColumn, baselineCon
 #' not based by any model.
 #' @param estimateWhenAggregate <boolean> defining if a linear estimation should be made 
 #' when gaps are found in the time-aggregation of the results. By default, the estimation is done.
+#' #' @param minRatioToTimeAggregateIndicators <float> [0-1] defining the minimum ratio of data 
+#' (real vs. theoretical) that should be considered for time-aggregation operations in the results. 
+#' By default, 75%. Thus, if less than 75% of real data, in respect to theorical, is available that
+#' timestep is not considered in the results. This will avoid yearly and monthly results with very 
+#' rough results. 
 #' @param prevResults <list> with the previous results of this function. By default, no 
 #' previous results are considered.
 #' @return <list> containing a knowledge graph with all resultant metadata and time series 
@@ -359,7 +364,8 @@ generate_longitudinal_benchmarking_indicators <- function (
   carbonEmissionsColumn = NULL, energyPriceColumn = NULL, 
   modelName = NULL, modelId = NULL, modelLocation = NULL, 
   modelStorageInfrastructureSubject = NULL, modelTypeSubject = NULL, 
-  modelBaselineYear = NULL, estimateWhenAggregate = T,
+  modelBaselineYear = NULL, estimateWhenAggregate = T, 
+  minRatioToTimeAggregateIndicators = 0.75,
   prevResults = NULL) {
   
   buildingNamespace <- paste0(strsplit(buildingSubject, "#")[[1]][1], "#")
@@ -423,9 +429,12 @@ generate_longitudinal_benchmarking_indicators <- function (
                             originalDataPeriod)
       indDfAux <- indDf %>% 
         group_by(start = lubridate::floor_date(time, lubridate::as.period(frequency), 
-                  week_start = getOption("lubridate.week.start", 1))) %>% 
-        summarise(estimated = mean(ind, na.rm = T) * n, 
+                  week_start = getOption("lubridate.week.start", 1))) %>%
+        summarise(count = length(ind) > (n*minRatioToTimeAggregateIndicators) ,
+                  estimated = mean(ind, na.rm = T) * n, 
                   real = sum(ind)) %>% 
+        filter(count) %>%
+        select(-count) %>%
         mutate(
           value = if (estimateWhenAggregate == T) { estimated } else { real }, 
           isReal = if (is.null(modelId)) {
@@ -434,6 +443,7 @@ generate_longitudinal_benchmarking_indicators <- function (
             ifelse(is.finite(value), F, NA)
           }) %>% 
         select(-real, -estimated)
+      if(nrow(indDfAux)==0){next}
       indDfAux$start <- lubridate::with_tz(indDfAux$start, "UTC")
       if (lubridate::as.period(frequency) >= lubridate::as.period("P1D")) {
         indDfAux$end <- lubridate::with_tz(lubridate::with_tz(indDfAux$start, 
@@ -567,6 +577,11 @@ generate_longitudinal_benchmarking_indicators <- function (
 #' By default results are not based by any model.
 #' @param estimateWhenAggregate <boolean> defining if a linear estimation should be made when 
 #' gaps are found in the time-aggregation of the results. By default, the estimation is done.
+#' @param minRatioToTimeAggregateIndicators <float> [0-1] defining the minimum ratio of data 
+#' (real vs. theoretical) that should be considered for time-aggregation operations in the results. 
+#' By default, 75%. Thus, if less than 75% of real data, in respect to theorical, is available that
+#' timestep is not considered in the results. This will avoid yearly and monthly results with very 
+#' rough results. 
 #' @param prevResults <list> with the previous results of this function. By default, no previous 
 #' results are considered.
 #' @return <list> containing a knowledge graph with all resultant metadata and time series 
@@ -578,7 +593,8 @@ generate_eem_assessment_indicators <- function(
     consumptionColumn, indicatorsTimeAggregationFunctions, indicatorsUnitsSubjects, baselineConsumptionColumn = NULL, 
     buildingGrossFloorArea = NA, carbonEmissionsColumn = NULL, energyPriceColumn = NULL, 
     modelName = NULL, modelId = NULL, modelLocation = NULL, modelStorageInfrastructureSubject = NULL, 
-    estimateWhenAggregate = T, prevResults = NULL) {
+    estimateWhenAggregate = T, minRatioToTimeAggregateIndicators = 0.75, 
+    prevResults = NULL) {
   
   buildingNamespace <- paste0(strsplit(buildingSubject, "#")[[1]][1], "#")
   namespaces <- bigg_namespaces
@@ -673,16 +689,21 @@ generate_eem_assessment_indicators <- function(
           }
         } %>% {
           if(indicatorsTimeAggregationFunctions[[indicator]]=="SUM") {
-            summarise(., estimated = mean(ind, na.rm = T) * n, real = sum(ind, na.rm = T))
+            summarise(., count = length(ind) > (n*minRatioToTimeAggregateIndicators) ,
+                      estimated = mean(ind, na.rm = T) * n, real = sum(ind, na.rm = T))
           } else if(indicatorsTimeAggregationFunctions[[indicator]]=="AVG"){
-            summarise(., estimated = mean(ind, na.rm = T), real = mean(ind, na.rm = T))
+            summarise(., count = length(ind) > (n*minRatioToTimeAggregateIndicators) ,
+                      estimated = mean(ind, na.rm = T), real = mean(ind, na.rm = T))
           } else if(indicatorsTimeAggregationFunctions[[indicator]]=="WEIGHTED-AVG"){
-            summarise(., estimated = weighted.mean(ind, weights, na.rm = T), 
+            summarise(., count = length(ind) > (n*minRatioToTimeAggregateIndicators) ,
+                      estimated = weighted.mean(ind, weights, na.rm = T), 
                          real = weighted.mean(ind, weights, na.rm = T))
           } else {
             .
           }
-        } %>% 
+        } %>%
+        filter(count) %>%
+        select(-count) %>%
         mutate(
           value = if (estimateWhenAggregate == T) { estimated } else { real }, 
           isReal = if (is.null(modelId)) {
@@ -691,6 +712,7 @@ generate_eem_assessment_indicators <- function(
             ifelse(is.finite(value), F, NA)
           }) %>% 
         select(-real, -estimated)
+      if(nrow(indDfAux)==0){next}
       indDfAux$start <- lubridate::with_tz(indDfAux$start, "UTC")
       if(frequency==""){
         indDfAux$end <- last(indDf$time)
