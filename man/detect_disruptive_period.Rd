@@ -20,8 +20,10 @@ detect_disruptive_period(
 )
 }
 \arguments{
-\item{data}{<timeSeries> Time serie with potential anomalies in
-values}
+\item{data}{<data.frame> Time series with potential anomalies in
+values. It should contain a time column, a consumption column and a temperature column.}
+
+\item{consumptionColumn}{<string> Consumption column in data time series}
 
 \item{timeColumn}{<string> Time column in data time series}
 
@@ -46,21 +48,22 @@ Possible values: decrement, increment, incrementAndDecrement.}
 
 \item{minDecrementPercentualAffectation}{<float> indicating the minimum
 decrement of consumption (vs. baseline) to be considered as abnormal.
-Default 30%.}
+Default 30\%.}
 
 \item{minIncrementPercentualAffectation}{<float> indicating the minimum
 increment of consumption (vs. baseline) to be considered as abnormal.
-Default 60%.}
-
-\item{consumptionValue}{<string> Consumption column in data time series}
+Default 60\%.}
 }
 \value{
 <data.frame> with the period of time (min-max) with abnormal 
 consumption.
 }
 \description{
-The function detects periods of time with abnormal consumption.
-It evaluates multiple time periods in order to find the best one
-fitting a model which considers the relationship of consumption 
-against weekday and temperature.
+This function detects a disruptive period in a consumption time series. 
+It evaluates different date ranges to find the most suitable one containing a 
+disruptive period that should not be considered in the training phases of 
+statistical models. An example of a disruptive period could be the Covid lockdown 
+when building consumption radically changes due to the different occupancy and 
+activity patterns. The model used to detect the disruptive period considers the 
+consumption relationship between weekdays and temperature.
 }

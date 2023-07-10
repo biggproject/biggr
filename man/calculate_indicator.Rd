@@ -2,7 +2,7 @@
 % Please edit documentation in R/harmonised-writing.R
 \name{calculate_indicator}
 \alias{calculate_indicator}
-\title{Calculate time series Key Performance Indicators (KPI).}
+\title{Calculate time series KPI.}
 \usage{
 calculate_indicator(
   data,

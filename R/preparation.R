@@ -796,14 +796,17 @@ align_time_grid <- function(data,
 
 #' Detect disruptive periods in consumption time series.
 #' 
-#' The function detects periods of time with abnormal consumption.
-#' It evaluates multiple time periods in order to find the best one
-#' fitting a model which considers the relationship of consumption 
-#' against weekday and temperature.
+#' This function detects a disruptive period in a consumption time series. 
+#' It evaluates different date ranges to find the most suitable one containing a 
+#' disruptive period that should not be considered in the training phases of 
+#' statistical models. An example of a disruptive period could be the Covid lockdown 
+#' when building consumption radically changes due to the different occupancy and 
+#' activity patterns. The model used to detect the disruptive period considers the 
+#' consumption relationship between weekdays and temperature. 
 #'
-#' @param data <timeSeries> Time serie with potential anomalies in
-#' values
-#' @param consumptionValue <string> Consumption column in data time series
+#' @param data <data.frame> Time series with potential anomalies in
+#' values. It should contain a time column, a consumption column and a temperature column.
+#' @param consumptionColumn <string> Consumption column in data time series
 #' @param timeColumn <string> Time column in data time series
 #' @param temperatureColumn <string> Temperature column in data time series
 #' @param tz <string> specifying the local time zone related to
@@ -819,10 +822,10 @@ align_time_grid <- function(data,
 #' Possible values: decrement, increment, incrementAndDecrement.
 #' @param minDecrementPercentualAffectation <float> indicating the minimum
 #' decrement of consumption (vs. baseline) to be considered as abnormal.
-#' Default 30%.
+#' Default 30\%.
 #' @param minIncrementPercentualAffectation <float> indicating the minimum
 #' increment of consumption (vs. baseline) to be considered as abnormal.
-#' Default 60%.
+#' Default 60\%.
 #' @return <data.frame> with the period of time (min-max) with abnormal 
 #' consumption.
 
@@ -1024,15 +1027,15 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
 #' Detect holidays in consumption time series
 #' 
 #' The function detects holiday periods in buildings with highly seasonal patterns.
-#' Analysis of turnpoints in density distribution in order to identify
+#' An analysis of turnpoints in density function is performed to identify
 #' "over represented" low consumption dates. Additional post-processing is done
 #' in order to take care of additional constraints related to holidays period
 #'
-#' @param data <timeSeries> Time serie with potential anomalies in
+#' @param data <data.frame> Time series with potential anomalies in
 #' values
 #' @param consumptionColumn <string> Value column
 #' @param timeColumn <string> Time column
-#' @param plotDensiry <boolean> Plot density function used to obtain
+#' @param plotDensity <boolean> Plot density function used to obtain
 #'  holidays consumption threshold
 #' @param ignoreDates <list> Ignore list of dates in time series.
 #' @param tz <string> specifying the local time zone related to

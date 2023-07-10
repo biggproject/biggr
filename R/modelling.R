@@ -700,12 +700,445 @@ ARX <- function(input_parameters){
   return(modelFramework)
 }
 
-#' Title
+RandomForest <- function(input_parameters){
+  input_parameters$label <- input_parameters$parameter
+  modelFramework <- list(
+    label = "RandomForest",
+    library = NULL,
+    type = "Regression",
+    ## Define the ARX parameters
+    parameters = input_parameters,
+    grid = 
+      function(x, y, len = NULL, search = "grid") {
+        p <- ncol(x)
+        r <- nrow(x)
+        if(search == "grid") {
+          grid <- expand.grid(mapply(function(k)1:len,1:r))
+          colnames(grid) <- colnames(x)
+        } else {
+          grid <- expand.grid(mapply(function(k)sample(1:p, size = len),1:r))
+          colnames(grid) <- colnames(x)
+        }
+      },
+    loop = NULL,
+    fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, 
+                   transformationSentences=NULL, trainMask=NULL,
+                   maxPredictionValue=NULL, minPredictionValue=NULL,
+                   clusteringResults=NULL, 
+                   ...) {
+      
+      x <<- x
+      y <<- y
+      params <<- param
+      param <- params
+      formulaTerms <<- formulaTerms
+      transformationSentences <<- transformationSentences
+      maxPredictionValue <<- maxPredictionValue
+      minPredictionValue <<- minPredictionValue
+      clusteringResults <<- clusteringResults
+      trainMask <<- trainMask
+      
+      features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
+      outputName <- all.vars(formulaTerms)[1]
+      if(paste0("AR_",outputName) %in% colnames(param)){
+        if(as.logical(param[paste0("AR_",outputName)]==0)){
+          param <- param[,-which(colnames(param) %in% paste0("AR_",outputName))]
+        }
+        features <- c(outputName, features)
+      }
+      # Join x and y in a single data.frame
+      data <- if(is.data.frame(x)) x else as.data.frame(x)
+      data[,outputName] <- y
+      
+      # Transform input data if it is needed
+      transformation <- data_transformation_wrapper(
+        data=data, features=features, transformationSentences = transformationSentences, 
+        param = param, weatherDependenceByCluster = weatherDependenceByCluster,
+        clusteringResults = clusteringResults)
+      data <- transformation$data
+      features <- transformation$features
+      featuresAll <- transformation$featuresAll
+      transformationItems <- transformation$items
+      transformationResults <- transformation$results
+      
+      # Generate the lags, if needed
+      if(any(grepl("^AR_",names(param)))){
+        maxLag <- max(param[grepl("^AR_",names(param))])
+      } else {
+        maxLag <- 0
+      }
+      data <- lag_components(data,maxLag,featuresAll)
+      data <- data[complete.cases(data[,featuresAll]),]
+      
+      # Generate the lagged formula for the ARX
+      ARX_form <- as.formula(
+        sprintf("%s ~ %s",
+                outputName,
+                paste(
+                  "0",
+                  paste0(do.call(
+                    c,
+                    lapply(
+                      features,
+                      function(f){
+                        f_ <- f
+                        if(f %in% names(transformationItems)){
+                          f <- transformationItems[[f]]$formula
+                        }
+                        AR_term(features = f, 
+                                if(!(paste0("AR_",f_) %in% colnames(param))){
+                                  0
+                                } else if(f[1]==outputName){
+                                  1:param[,paste0("AR_",f_)]
+                                } else {
+                                  0:param[,paste0("AR_",f_)]
+                                },
+                                suffix = NULL)
+                      }
+                    )
+                  ),
+                  collapse="+"),
+                sep=" + ")
+        )
+      )
+      
+      # Train the model
+      if(!is.null(trainMask)){
+        data <- data[trainMask,]
+      }
+      
+      data_matrix <- model.matrix(ARX_form,data)
+      colnames(data_matrix) <- gsub(":","_",colnames(data_matrix))
+      
+      mod <- ranger(x = data_matrix, y=y, data = data, num.trees = 500,num.threads = 1,min.node.size = 6,
+                    mtry = sqrt(ncol(data_matrix)), num.random.splits = 6,splitrule = 'extratrees')
+      
+      # Store the meta variables
+      mod$meta <- list(
+        formula = ARX_form,
+        features = features,
+        outputName = outputName,
+        maxPredictionValue = maxPredictionValue,
+        minPredictionValue = minPredictionValue,
+        outputInit = setNames(
+          list(data[min(nrow(data),nrow(data)-maxLag+1):nrow(data),outputName]),
+          outputName
+        ),
+        inputInit = setNames(
+          lapply(features[!(features %in% outputName)],function(f){data[min(nrow(data),nrow(data)-maxLag+1):nrow(data),f]}),
+          features[!(features %in% outputName)]
+        ),
+        param = param,
+        maxLag = maxLag,
+        transformationSentences = transformationSentences,
+        transformationResults = transformationResults,
+        clusteringResults = clusteringResults
+      )
+      mod
+      
+    },
+    predict = function(modelFit, newdata, submodels, forceGlobalInputFeatures=NULL, forceInitInputFeatures=NULL,
+                       forceInitOutputFeatures=NULL, forceOneStepPrediction=F, predictionIntervals=F) {
+      
+      modelFit <<- modelFit
+      newdata <<- newdata
+      
+      newdata <- as.data.frame(newdata)
+      features <- modelFit$meta$features[
+        !(modelFit$meta$features %in% modelFit$meta$outputName)]
+      param <- modelFit$meta$param
+      maxLag <- modelFit$meta$maxLag
+      outputName <- modelFit$meta$outputName
+      maxPredictionValue <- modelFit$meta$maxPredictionValue
+      minPredictionValue <- modelFit$meta$minPredictionValue
+      clusteringResults <- modelFit$meta$clusteringResults
+      
+      # Initialize the global input features if needed
+      # Change the inputs if are specified in forceGlobalInputFeatures
+      if (!is.null(forceGlobalInputFeatures)){
+        for (f in names(forceGlobalInputFeatures)){
+          if(!(length(forceGlobalInputFeatures[[f]])==1 || 
+               length(forceGlobalInputFeatures[[f]])==nrow(newdata))){
+            stop(sprintf("forceGlobalInputFeatures[[%s]] needs to have a length of 1 
+                     or equal to the number of rows of newdata argument (%s).",f, nrow(newdata)))
+          }
+          newdata[,f] <- forceGlobalInputFeatures[[f]]
+        }
+      }
+      
+      # Load the model input and output initialisation features directly from the model
+      forceInitInputFeatures <- if(is.null(forceInitInputFeatures)){modelFit$meta$inputInit}else{forceInitInputFeatures}
+      forceInitOutputFeatures <- if(is.null(forceInitOutputFeatures)){modelFit$meta$outputInit}else{forceInitOutputFeatures}
+      transformationSentences <- modelFit$meta$transformationSentences
+      transformationResults <- modelFit$meta$transformationResults
+      
+      newdata <- if(any(!(names(forceInitOutputFeatures) %in% colnames(newdata)))){
+        cbind(newdata,do.call(cbind,setNames(
+          lapply(FUN = function(i){
+            rep(NA,nrow(newdata))
+            }, names(forceInitOutputFeatures)[!(names(forceInitOutputFeatures) %in% colnames(newdata))]),
+          nm= names(forceInitOutputFeatures)[!(names(forceInitOutputFeatures) %in% colnames(newdata))]
+          )))
+      } else {newdata}
+      
+      if(maxLag>0){
+        newdata <- 
+          rbind(
+            setNames(data.frame(lapply(FUN = function(f){
+              initItem <- if(f %in% names(forceInitInputFeatures)) {
+                forceInitInputFeatures[[f]]
+              } else if(f %in% names(forceInitOutputFeatures)) {
+                forceInitOutputFeatures[[f]]
+              } else {
+                rep(newdata[1,f],maxLag)
+              }
+              c(rep(initItem[1],max(0,maxLag-length(initItem))),tail(initItem,maxLag))
+            },unique(c(colnames(newdata),names(forceInitOutputFeatures))))),
+            nm=unique(c(colnames(newdata),names(forceInitOutputFeatures))))[,colnames(newdata)],
+            newdata)
+      }
+      # if(!is.null(forceInitInputFeatures)){
+      #   factor_char_features <- names(forceInitInputFeatures)[
+      #     mapply(FUN=function(i)class(i),forceInitInputFeatures) %in% c("factor","character")]
+      #   for(fcf in factor_char_features){
+      #     aux <- fastDummies::dummy_cols(as.factor(forceInitInputFeatures[[fcf]]),remove_selected_columns = T)
+      #     colnames(aux) <- gsub(".data",fcf,colnames(aux))
+      #     forceInitInputFeatures <- c(forceInitInputFeatures, as.list(aux))
+      #   }
+      # }
+      # if(!is.null(forceInitOutputFeatures)){
+      #   factor_char_features <- names(forceInitOutputFeatures)[
+      #     mapply(FUN=function(i)class(i),forceInitOutputFeatures) %in% c("factor","character")]
+      #   for(fcf in factor_char_features){
+      #     aux <- fastDummies::dummy_cols(as.factor(forceInitOutputFeatures[[fcf]]),remove_selected_columns = T)
+      #     colnames(aux) <- gsub(".data",fcf,colnames(aux))
+      #     forceInitOutputFeatures <- c(forceInitOutputFeatures, as.list(aux))
+      #   }
+      # }
+      
+      # Transform input data if it is needed
+      transformation <- data_transformation_wrapper(
+        data=newdata, features=features, transformationSentences = transformationSentences, 
+        transformationResults = transformationResults, param = param, 
+        clusteringResults = clusteringResults)
+      newdata <- transformation$data
+      features <- transformation$features
+      featuresAll <- transformation$featuresAll
+      
+      # Change the transformed inputs if are specified in forceGlobalInputFeatures
+      if (!is.null(forceGlobalInputFeatures)){
+        for (f in names(forceGlobalInputFeatures)[
+          names(forceGlobalInputFeatures) %in% names(modelFit$meta$transformationSentences)]
+        ){
+          if(!(length(forceGlobalInputFeatures[[f]])==1 ||
+               length(forceGlobalInputFeatures[[f]])==(nrow(newdata)+maxLag))){
+            stop(sprintf("forceGlobalInputFeatures[[%s]] needs to have a length of 1
+                     or equal to the number of rows of newdata argument (%s).",f, nrow(newdata)))
+          }
+          if(length(forceGlobalInputFeatures[[f]])==1){
+            newdata[,f] <- c(rep(NA,maxLag),rep(forceGlobalInputFeatures[[f]],
+                                                nrow(newdata)-maxLag))
+          } else {
+            newdata[,f] <- c(rep(NA,maxLag),forceGlobalInputFeatures[[f]])
+          }
+        }
+      }
+      
+      # Lag the components that has been initialised
+      newdata <- lag_components(data = newdata, 
+                                maxLag = maxLag, 
+                                featuresNames = c(outputName,featuresAll)#modelFit$meta$features, 
+                                # forceGlobalInputFeatures = forceGlobalInputFeatures,
+                                # forceInitInputFeatures = forceInitInputFeatures,
+                                # forceInitOutputFeatures = forceInitOutputFeatures
+      )
+      newdata <- newdata[(maxLag+1):nrow(newdata),]
+      
+      # Predict at multi-step ahead or one-step ahead prediction, 
+      # depending if some AR input is considered using the output variable
+      if(forceOneStepPrediction==F && paste("AR",outputName,sep="_") %in% colnames(param)){
+        for (i in 1:nrow(newdata)){
+          newdata <- lag_components(data = newdata,
+                                    maxLag = maxLag,
+                                    featuresNames = outputName,
+                                    predictionStep = i-1#,
+                                    # forceInitInputFeatures = forceInitInputFeatures,
+                                    # forceInitOutputFeatures = forceInitOutputFeatures
+          )
+          if(predictionIntervals){
+            # prediction_results <- as.data.frame(
+            #   predict(object = modelFit, newdata = newdata[i,], interval = "prediction",
+            #           level = 0.93-0.07)) %>%
+            #   rename("average"="fit")
+            # prediction_results$sigma <- (prediction_results$upr - prediction_results$lwr)/
+            #   (qnorm(0.93)-qnorm(0.07))
+            # newdata[i,paste0(outputName,"_",colnames(prediction_results))] <- prediction_results
+          } else {
+            newdata[i,outputName] <- predict(modelFit,newdata[i,])$predictions
+          }
+        }
+      } else {
+        if(predictionIntervals){
+          # prediction_results <- as.data.frame(
+          #   predict(object = modelFit, newdata = newdata, interval = "prediction",
+          #           level = 0.93-0.07)) %>%
+          #   rename("average"="fit")
+          # prediction_results$sigma <- (prediction_results$upr - prediction_results$lwr)/
+          #   (qnorm(0.93)-qnorm(0.07))
+          # newdata[,paste0(outputName,"_",colnames(prediction_results))] <- prediction_results
+        } else {
+          newdata[,outputName] <- predict(modelFit,newdata)$predictions
+        }
+      }
+      result <- 
+          if(predictionIntervals){
+            newdata[,paste0(outputName,"_",colnames(prediction_results))]
+          } else {
+            newdata[,outputName]
+          }
+      if (!is.null(maxPredictionValue)){
+        if(predictionIntervals){
+          mapply(function(r){
+            ifelse(result[,r] > maxPredictionValue, maxPredictionValue, result[,r])},
+            colnames(result))
+        } else {
+          ifelse(result > maxPredictionValue, maxPredictionValue, result)
+        }
+      }
+      if (!is.null(minPredictionValue)){
+        if(predictionIntervals){
+          mapply(function(r){
+            ifelse(result[,r] < minPredictionValue, minPredictionValue, result[,r])},
+            colnames(result))
+        } else {
+          ifelse(result < minPredictionValue, minPredictionValue, result)
+        }
+      }
+      result
+    },
+    prob = NULL,
+    varImp = NULL,
+    predictors = function(x, ...) predictors(x$terms),
+    levels = NULL,
+    sort = function(x) x)
+  
+  return(modelFramework)
+}
+
+#' Generalised Linear Model
 #' 
-#' Description
+#' This function is a custom model wrapper for caret R-package to train 
+#' and predict Generalised Linear Models.
 #'
-#' @param arg <> 
-#' @return 
+#' @param formula -arg for train()- <formula> providing the model output feature
+#' and the model input features. Inputs can be columns defined in data argument
+#' and/or features described in transformationSentences argument.
+#' @param data -arg for train()- <data.frame> containing the output feature and 
+#' all the raw input features used to train the model.
+#' @param trainMask -agr for train()- <array> providing the mask 
+#' (TRUE if yes, FALSE if no) for the dataset used for model training.
+#' This mask will be considered after all transformation procedures.
+#' The array must be the same length as the number of rows in the data argument. 
+#' @param numericStatusVariable -arg for train()- <string> defining the name of 
+#' the column in data that contains the numerical status information 
+#' (normally 0 and 1) of the output variable.
+#' If it is not NULL (default), all model coefficients are fitted considering 
+#' as model input the transformed input values multiplied by this numeric 
+#' status variable.
+#' @param characterStatusVariable -arg for train()- <string> defining the name of 
+#' the column in data that contains the discrete status information of the 
+#' output variable.
+#' If it is not NULL (default), all model coefficients are fitted considering 
+#' each one of the possible status defined in the character status variable.
+#' @param transformationSentences -arg for train()- <list>. Run 
+#' ?data_transformation_wrapper() for details.
+#' @param familyGLM -arg for train()- <function> indicating the link function 
+#' to be used in the model. For GLM this can be a character string naming a 
+#' family function, a family function or the result of a call to a family 
+#' function. Execute ?stats::family for details.
+#' @param continuousTime -arg for train()- <boolean> indicating if the 
+#' fitting process of the model coefficients should account for the 
+#' data gaps. Set to 
+#' @param maxPredictionValue -arg for train()- <float> defining 
+#' the maximum value of predictions.
+#' @param minPredictionValue -arg for train()- <float> defining 
+#' the minimum value of predictions.
+#' @param weatherDependenceByCluster -arg for train()- <data.frame>
+#' containing the columns 's', 'heating', 'cooling', 'tbalh', 'tbalc';
+#' corresponding to the daily load curve cluster, the heating dependence 
+#' (TRUE or FALSE), the cooling dependance (TRUE or FALSE), the balance 
+#' heating temperature, and the balance cooling temperature, respectively.
+#' @param clusteringResults -arg for train()- <list> from the 
+#' output produced by clustering_dlc().
+#' @param newdata -arg for biggr::predict.train()- <data.frame> containing
+#' the input data to consider in a model prediction.
+#' @param forceGlobalInputFeatures -arg for biggr::predict.train()- <list> 
+#' containing the input model features to overwrite in newdata. 
+#' Each input feature must have length 1, or equal to the newdata's 
+#' number of rows.
+#' @param forceInitInputFeatures -arg for biggr::predict.train()- <list>
+#' containing the last timesteps of the input features.
+#' @param forceInitOutputFeatures -arg for biggr::predict.train()- <list>
+#' containing the last timesteps of the output feature.
+#' @param forceOneStepPrediction -arg for biggr::predict.train()- 
+#' <boolean> indicating if the prediction mode should be done in one step 
+#' prediction mode. 
+#' @param predictionIntervals -arg for biggr::predict.train()- 
+#' <boolean> describing if the prediction should be of the average value 
+#' or the prediction interval.
+#' 
+#' @examples 
+#' # It should be launched using the train() function for training, and 
+#' # biggr::predict.train() function for predicting. 
+#' # An example for model training is:
+#' train(
+#'  formula = Qe ~ daily_seasonality,
+#'  data = df, # data.frame with three columns: 
+#'             #  'time','Qe', and 'hour'; 
+#'             # corresponding to time, electricity consumption, 
+#'             # and hour of the day. 
+#'             # 200 rows of data are needed considering 
+#'             # the training control strategy that was selected 
+#'             # in argument trControl. 
+#'  method = GLM(
+#'    data.frame(parameter = "nhar",
+#'               class = "discrete")
+#'  ),
+#'  tuneGrid = data.frame("nhar"=4:6),
+#'  trControl = trainControl(method="timeslice", initialWindow = 100,
+#'                           horizon = 10, skip = 10, fixedWindow = T),
+#'  minPredictionValue = 0,
+#'  maxPredictionValue = max(df$Qe,na.rm=T) * 1.1,
+#'  familyGLM = quasipoisson(),
+#'  transformationSentences = list(
+#'     "daily_seasonality" = c(
+#'         "fs_components(...,featuresName='hour',nHarmonics=param$nhar,inplace=F)",
+#'         "weekday")
+#'    )
+#'  )
+#'  # An example for model prediction is:
+#'  predictor <- crate(function(x, forceGlobalInputFeatures = NULL, predictionIntervals=F){
+#'    biggr::predict.train(
+#'      object = !!mod,
+#'      newdata = x,
+#'      forceGlobalInputFeatures = forceGlobalInputFeatures,
+#'      predictionIntervals = predictionIntervals
+#'    )
+#'  })
+#'  # An example call of the predictor function to predict Qe at certain time is:
+#'  predictor(
+#'      data.frame(
+#'          time=as.POSIXct("2020-01-01 14:00:00",tz="UTC"),
+#'          hour=15
+#'      )
+#'  )
+#'  # An additional nice feature of predictors is that this object 
+#'  # can be directly stored to MLFlow infrastructure using:
+#'  mlflow_log_model(predictor,"example_name")
+#'  # Last instance can only be executed if an MLFlow run was started, see:
+#'  ?mlflow::mlflow_start_run()
+#'  
+#' @return When training: <list> containing the model, when predicting: <array> of the predicted results.
 
 GLM <- function(input_parameters){
   input_parameters$label <- input_parameters$parameter
@@ -1030,16 +1463,19 @@ GLM <- function(input_parameters){
 
 #' Recursive Least Square model
 #' 
-#' This function is a custom model wrapper to train and predict recursive linear 
-#' models over the modelling framework of caret R package. 
+#' This function is a custom model wrapper for caret R-package to train 
+#' and predict linear models fitted using the Recursive Least Square 
+#' method. The model coefficients of this kind of model are 
+#' time-varying; thus, the relation between inputs and output changes 
+#' over time to better fit the data. 
 #'
 #' @param formula -arg for train()- <formula> providing the model output feature
 #' and the model input features. Inputs can be columns defined in data argument
 #' and/or features described in transformationSentences argument.
 #' @param data -arg for train()- <data.frame> containing the output feature and 
 #' all the raw input features used to train the model.
-#' @param transformationSentences -arg for train()- <list>. See 
-#' data_transformation_wrapper() function for details.
+#' @param transformationSentences -arg for train()- <list>. Run 
+#' ?data_transformation_wrapper() for details.
 #' @param logOutput -arg for train()- <boolean> indicating if a
 #' Box-Jenkins transformation is considered in the output feature
 #' during the training of the model. When predicting, 
@@ -1051,6 +1487,8 @@ GLM <- function(input_parameters){
 #' data gaps. Set to 
 #' @param maxPredictionValue -arg for train()- <float> defining 
 #' the maximum value of predictions.
+#' @param minPredictionValue -arg for train()- <float> defining 
+#' the minimum value of predictions.
 #' @param weatherDependenceByCluster -arg for train()- <data.frame>
 #' containing the columns 's', 'heating', 'cooling', 'tbalh', 'tbalc';
 #' corresponding to the daily load curve cluster, the heating dependence 
@@ -1083,15 +1521,19 @@ GLM <- function(input_parameters){
 #' Default: 'rmse' or 'random'. When forceOneStepPrediction is TRUE, 
 #' this argument is not used.
 #' 
-#' It should be launched using the train() function for training, and 
-#' biggr::predict.train() function for predicting. 
-#' An example to train a model is :
+#' @examples 
+#' # It should be launched using the train() function for training, and 
+#' # biggr::predict.train() function for predicting. 
+#' # An example for model training is:
 #' train(
 #'  formula = Qe ~ daily_seasonality,
 #'  data = df, # data.frame with three columns: 
 #'             #  'time','Qe', and 'hour'; 
-#'             #  corresponding to time, electricity consumption, 
-#'             #  and hour of the day.
+#'             # corresponding to time, electricity consumption, 
+#'             # and hour of the day. 
+#'             # 200 rows of data are needed considering 
+#'             # the training control strategy that was selected 
+#'             # in argument trControl. 
 #'  method = RLS(
 #'    data.frame(parameter = "nhar",
 #'               class = "discrete")
@@ -1107,7 +1549,31 @@ GLM <- function(input_parameters){
 #'         "weekday")
 #'    )
 #'  )
-#' 
+#'  # An example for model prediction is:
+#'  predictor <- crate(function(x, forceGlobalInputFeatures = NULL,modelMinMaxHorizonInHours=1,
+#'  modelWindow="%Y-%m-%d", modelSelection="rmse"){
+#'    biggr::predict.train(
+#'      object = !!mod,
+#'      newdata = x,
+#'      forceGlobalInputFeatures = forceGlobalInputFeatures,
+#'      modelMinMaxHorizonInHours = modelMinMaxHorizonInHours,
+#'      modelWindow = modelWindow,
+#'      modelSelection = modelSelection
+#'    )
+#'  })
+#'  # An example call of the predictor function to predict Qe at certain time is:
+#'  predictor(
+#'      data.frame(
+#'          time=as.POSIXct("2020-01-01 14:00:00",tz="UTC"),
+#'          hour=15
+#'      )
+#'  )
+#'  # An additional nice feature of predictors is that this object 
+#'  # can be directly stored to MLFlow infrastructure using:
+#'  mlflow_log_model(predictor,"example_name")
+#'  # Last instance can only be executed if an MLFlow run was started, see:
+#'  ?mlflow::mlflow_start_run()
+#'  
 #' @return When training: <list> containing the model, when predicting: <array> of the predicted results.
 
 RLS <- function(input_parameters){
@@ -1133,7 +1599,7 @@ RLS <- function(input_parameters){
     loop = NULL,
     fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, 
                    transformationSentences=NULL, logOutput=F, 
-                   minMonthsTraining=0, continuousTime=T,
+                   minMonthsTraining=0, continuousTime=T,minPredictionValue=NULL,
                    maxPredictionValue=NULL, weatherDependenceByCluster=NULL,
                    clusteringResults=NULL,...
                    ) {
@@ -1290,6 +1756,7 @@ RLS <- function(input_parameters){
         logOutput = logOutput,
         minMonthsTraining = minMonthsTraining,
         maxPredictionValue = maxPredictionValue,
+        minPredictionValue = minPredictionValue,
         # estimateTheoreticalOccupancy = if(estimateTheoreticalOccupancy){
         #   list("mod" = mod_lm, "minocc"=param$minocc, 
         #        "columnName" = theoreticalOccupancyColumnName)
@@ -1333,6 +1800,7 @@ RLS <- function(input_parameters){
       logOutput <- modelFit$meta$logOutput
       outputName <- modelFit$meta$outputName
       maxPredictionValue <- modelFit$meta$maxPredictionValue
+      minPredictionValue <- modelFit$meta$minPredictionValue
       
       # Initialize the global input features if needed
       # Change the inputs if are specified in forceGlobalInputFeatures
@@ -1463,11 +1931,13 @@ RLS <- function(input_parameters){
           } else { 
             newdata[,outputName] 
           }
-        if (!is.null(maxPredictionValue)){
+        result <- if (!is.null(maxPredictionValue)){
           ifelse(result > maxPredictionValue, maxPredictionValue, result)
-        } else {
-          result
-        }
+        } else {result}
+        result <- if (!is.null(minPredictionValue)){
+          ifelse(result < minPredictionValue, minPredictionValue, result)
+        } else {result}
+        result
       } else {
         # When predicting a fixed horizon with each model coefficients set
         if(paste("AR",outputName,sep="_") %in% colnames(param)){
@@ -1525,6 +1995,11 @@ RLS <- function(input_parameters){
                                          maxPredictionValue, 
                                          result[,2])
                    }
+                   if(!is.null(minPredictionValue)){
+                     result[,2] <- ifelse(result[,2] < minPredictionValue, 
+                                          minPredictionValue, 
+                                          result[,2])
+                   }
                    result
                  })
           all_preds <- Reduce(
@@ -1546,6 +2021,11 @@ RLS <- function(input_parameters){
           if(!is.null(maxPredictionValue)){
             timePred[,"pred"] <- ifelse(timePred[,"pred"] > maxPredictionValue, 
                                         maxPredictionValue, 
+                                        timePred[,"pred"])
+          }
+          if(!is.null(minPredictionValue)){
+            timePred[,"pred"] <- ifelse(timePred[,"pred"] < minPredictionValue, 
+                                        minPredictionValue, 
                                         timePred[,"pred"])
           }
           probs <- c(0.025,0.05,0.1,0.25,0.375,0.5,0.625,0.75,0.9,0.95,0.975)
@@ -1892,14 +2372,16 @@ hyperparameters_tuning <- optimize
 #' @param arg <> 
 #' @return 
 
-weather_dependence_disaggregator <- function(predictor, df, forceNoCooling, forceNoHeating, ...){
+weather_dependence_disaggregator <- function(predictor, df, forceNoCooling, forceNoHeating, 
+                                             forceNoCoolingAndHeating=NULL,...){
   
   # Forcing only heating and only cooling dependency
   baseload_and_cooling <- predictor( df, forceGlobalInputFeatures = forceNoHeating, ...)
   baseload_and_heating <- predictor( df, forceGlobalInputFeatures = forceNoCooling, ...)
   
   # Estimate the baseload consumption along the period
-  baseload <- predictor( df, forceGlobalInputFeatures = c(forceNoCooling,forceNoHeating), ...)
+  if(is.null(forceNoCoolingAndHeating)) forceNoCoolingAndHeating <- c(forceNoCooling,forceNoHeating)
+  baseload <- predictor( df, forceGlobalInputFeatures = forceNoCoolingAndHeating, ...)
   
   # Disaggregated predicted components and actual consumption
   disaggregated_df <- data.frame(
@@ -1954,6 +2436,49 @@ weather_dependence_disaggregator <- function(predictor, df, forceNoCooling, forc
   disaggregated_df$real_ <- NULL
   
   return(disaggregated_df)
+}
+
+
+# Calculate the balance temperature
+compute_tbal_using_model_predictions <- function(df, predictor, dep_vars){
+  
+  expand.grid.df <- function(...) Reduce(function(...) merge(..., by=NULL), list(...))
+  
+  dep_vars_df <- df[,dep_vars]
+  dep_vars_df <- dep_vars_df[!duplicated(dep_vars_df),]
+  dep_vars_df <- data.frame(dep_vars_df, case=1:nrow(dep_vars_df))
+  all_vars_df <- expand.grid.df(
+    dep_vars_df,
+    data.frame("temperature"=seq(ceiling(quantile(df$temperature,0.05,na.rm=T)),
+                                 floor(quantile(df$temperature,0.95,na.rm=T)),by=1))
+  )
+  aux <- predictor(all_vars_df,forceGlobalInputFeatures = list(temperature=all_vars_df$temperature,temperatureLpf=all_vars_df$temperature))
+  all_vars_df$value <- aux
+  for (i in unique(dep_vars_df$case)){
+    df_case <- all_vars_df[all_vars_df$case==i,]
+    loess_mod <- as.data.frame(loess.smooth(df_case$temperature,df_case$value,degree=2))
+    colnames(loess_mod) <- c("temperature","smoothed_value")
+    loess_mod$smoothed_slope <- c(diff(loess_mod$smoothed_value),NA)
+    if(sum(abs(loess_mod$smoothed_slope) < 0,na.rm=T) <= nrow(loess_mod)*0.8){
+      loess_mod <- loess_mod[abs(loess_mod$smoothed_slope) <= quantile(abs(loess_mod$smoothed_slope),0.1,na.rm=T),]
+      tbal <- loess_mod[which.min(loess_mod$smoothed_value),"temperature"]
+      wdep <- T 
+    } else {
+      tbal <- NA
+      wdep <- F
+    }
+    dep_vars_df$tbal[dep_vars_df$case==i] <- tbal
+  }
+  # ggplot(all_vars_df[order(all_vars_df$monthInt),]) + 
+  #   geom_line(aes(temperature,value,group=case,col=monthInt),alpha=0.3) +
+  #   scale_color_gradientn(colours = c("darkblue", "lightblue","lightpink","red4","lightpink","lightblue","darkblue")) + 
+  #   facet_grid(weekdayNum~hour)
+  # ggplot(dep_vars_df) +
+  #   geom_point(aes(hour,tbal),col="black",size=0.6) + 
+  #   ylim(c(min(all_vars_df$temperature),max(all_vars_df$temperature))) +
+  #   facet_grid(monthInt~weekdayNum)
+  
+  return(merge(df,dep_vars_df[,!(colnames(dep_vars_df) %in% c("case","value"))]))
 }
 
 
@@ -2061,6 +2586,7 @@ train.formula <- function (form, data, weights, subset, na.action = na.fail,
     }
   }
   m$data <- data
+  
   if("weatherDependenceByCluster" %in% names(m$...)){
     weatherDependenceByCluster <- eval(m$...$weatherDependenceByCluster, envir = parent.frame())
   } else {
@@ -2074,13 +2600,15 @@ train.formula <- function (form, data, weights, subset, na.action = na.fail,
   }
   
   # continue caret official source code...
+  
   if (is.matrix(eval.parent(m$data)))
     m$data <- as.data.frame(m$data, stringsAsFactors = TRUE)
   m$... <- m$contrasts <- NULL
   caret:::check_na_conflict(match.call(expand.dots = TRUE))
   if (!("na.action" %in% names(m)))
-    m$na.action <- quote(na.fail)
+    m$na.action <- quote(na.pass)
   m[[1]] <- quote(stats::model.frame)
+  
   m <- eval.parent(m)
   if (nrow(m) < 1)
     stop("Every row has at least one missing value were found", 
@@ -2094,6 +2622,7 @@ train.formula <- function (form, data, weights, subset, na.action = na.fail,
     x <- x[, !int_flag, drop = FALSE]
   w <- as.vector(model.weights(m))
   y <- model.response(m,type="any")
+  
   # Force the inclusion of all data columns, they might be needed by some transformation procedure
   if(sum(!(colnames(data) %in% colnames(x))) > 0){
     x <- cbind(
@@ -2126,7 +2655,7 @@ train.formula <- function (form, data, weights, subset, na.action = na.fail,
   res
 }
 
-predict.train <- function (object, newdata = NULL, type = "raw", na.action = na.omit, ...){
+predict.train <- function (object, newdata = NULL, type = "raw", na.action = na.pass, ...){
   if (all(names(object) != "modelInfo")) {
     object <- update(object, param = NULL)
   }

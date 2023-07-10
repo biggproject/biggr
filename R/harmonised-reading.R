@@ -136,6 +136,12 @@ get_building_identifiers <- function(buildingSubjects){
   )
 }
 
+uri_to_identifier <- function(uris){
+  return(
+    setNames(gsub("http://|https://||#||\\.","",uris),nm = uris)
+  )
+}
+
 #' Get all building subjects
 #' 
 #' This function get all building subjects available from a BIGG-harmonised dataset.
@@ -871,8 +877,8 @@ get_eem_details <- function(buildingsRdf, eemSubjects=NULL){
 #' @param timeseriesObject <array> of strings with paths to JSON files containing time series,
 #' or <list> of time series. It must be harmonised to BIGG Ontology.
 #' @param buildingSubject <uri> of the building subject in buildingsRdf.
-#' @name <string> defining the indicator name to be retrieved. 
-#' @fromModel <boolean> defining if the time series should be real (FALSE), or estimated (TRUE)
+#' @param name <string> defining the indicator name to be retrieved. 
+#' @param fromModel <boolean> defining if the time series should be real (FALSE), or estimated (TRUE)
 #' @param frequency <string> defining the frequency to be retrieved. 
 #' It must follow ISO 8601 format representing the time step. 
 #' Examples: 'P1D' (One day), P1Y' (One year), 'P1M' (One month)

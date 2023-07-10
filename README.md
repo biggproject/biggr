@@ -8,20 +8,20 @@ Once R is installed (>=4.1 is recommended), execute the following sentences to i
 install.packages(c("devtools","pastecs","purrr","arules","glmnet","ranger","rdflib",
 "magrittr","parsedate","lubridate","readr","dplyr","tidyr","tibble","zoo",
 "roll","padr","quantreg","testthat","kernlab","fastDummies","caret","penalized",
-"GA","parallel","FinCal","mgcv","qgam"))
+"GA","parallel","mgcv","qgam","FinCal"))
 devtools::install_version(onlineforecast,version="1.0.0")
 ```
 Then, install the package through the GitHub installer if you want to use the last version of the code, or install an stable release located in the [releases repository](https://www.github.com/biggproject/biggr/releases) directly using the install.packages command.
 
 ```
-# Install from GitHub
+# Install development version from GitHub 
 devtools::install_github("biggproject/biggr")
-# Install from a source package (*.tar.gz)
+# Install stable version from the source package (*.tar.gz) 
 install.packages(<.tar.gz file>, repos = NULL, type ="source")
 ```
 
-## Documentation
-This package is still not well-documented, but the authors will solve this issue by the end of the BIGG project (november 2023).
+## Documentation and updates
+The functions implemented in this package are well documented, but end-users should know that authors could make minor refinements until the end of the BIGG project (november 2023). Some minor changes in code could occur.
 
 ## License
 This R package is licensed under the MIT License. It also depends on other popular open-source R libraries, from which it will retain their licenses.
