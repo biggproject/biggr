@@ -243,7 +243,7 @@ calculate_indicator_not_aggregable_by_time <- function(indicator, annualEnergySa
   else if(indicator == "ProfitabilityIndex"){
     (FinCal::npv(
       c(-investment, rep(-annualCostSavings, lifespan)), r = discountRate/100
-    ) - investment) / investment
+    ) + investment) / investment
   }
   else if(indicator == "NetPresentValueQuotient"){
     FinCal::npv(
