@@ -29,6 +29,7 @@ generate_eem_assessment_indicators(
   modelLocation = NULL,
   modelStorageInfrastructureSubject = NULL,
   estimateWhenAggregate = T,
+  minRatioToTimeAggregateIndicators = 0.75,
   prevResults = NULL
 )
 }
@@ -104,6 +105,12 @@ By default results are not based by any model.}
 
 \item{estimateWhenAggregate}{<boolean> defining if a linear estimation should be made when 
 gaps are found in the time-aggregation of the results. By default, the estimation is done.}
+
+\item{minRatioToTimeAggregateIndicators}{<float> [0-1] defining the minimum ratio of data 
+(real vs. theoretical) that should be considered for time-aggregation operations in the results. 
+By default, 75%. Thus, if less than 75% of real data, in respect to theorical, is available that
+timestep is not considered in the results. This will avoid yearly and monthly results with very 
+rough results.}
 
 \item{prevResults}{<list> with the previous results of this function. By default, no previous 
 results are considered.}

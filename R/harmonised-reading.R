@@ -348,13 +348,8 @@ get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz,
     metadata_emissions <- data.frame()
   }
   
-  # Override condition if the estimated values should be used considering the 
-  # estimation method defined in the sensor metadata
-  if(metadata$considerEstimatedValues==T && useEstimatedValues==F)
-    useEstimatedValues <- T
-  
   # If timeseriesObject is NULL, read certain sensor
-  timeseriesObject_ <- get_sensor_file(timeseriesObject,metadata$sensorId) 
+  timeseriesObject_ <- get_sensor_file(timeseriesObject,metadata$sensorId)
   
   if(is.null(timeseriesObject_)) return(NULL)
   timeseriesSensor <- timeseriesObject_[sensorId][[1]]
@@ -376,10 +371,8 @@ get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz,
     }
     
     timesteps <- data.frame(
-      secs = c(1,60,3600,86400,604800,2419200,2505600,2592000,2678400,
-               31536000,31622400),
-      freq = c("PT1S","PT1M","PT1H","PT1D","PT7D","P1M","P1M","P1M","P1M",
-               "P1Y","P1Y"))
+      secs = c(1,60,3600,86400),
+      freq = c("PT1S","PT1M","PT1H","P1D"))
     
     # If values are on change, reconsider the start and end timestamps
     if(metadata$timeSeriesIsOnChange){
@@ -394,12 +387,13 @@ get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz,
                  0.1,na.rm=T)))
     } else {
       # Calculate the minimum frequency for series interpolation
-      interpolateFrequency <- 
-        timesteps[timesteps$secs>
-                    as.numeric(lubridate::as.period(
-                      quantile(difftime(timeseriesSensor$end, timeseriesSensor$start,
-                                        tz = "UTC",units = "secs"), 0.1, na.rm=T)
-                    )),"freq"][1]
+      i_timestep <- which(timesteps$secs>=
+              as.numeric(lubridate::as.period(
+                quantile(difftime(timeseriesSensor$end, timeseriesSensor$start,
+                                  tz = "UTC",units = "secs"), 0.1, na.rm=T)
+              )))
+      i_timestep <- if(length(i_timestep)==0){nrow(timesteps)}else{i_timestep[1]-1}
+      interpolateFrequency <- timesteps[i_timestep,"freq"]
     }
     metadata$timeSeriesFrequency <- interpolateFrequency
     # Detect the subsets with no internal gaps
@@ -409,6 +403,7 @@ get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz,
     timeseriesSensor$gapAfter <- cumsum(ifelse(is.na(timeseriesSensor$gapAfter),0,timeseriesSensor$gapAfter))
     # Resample the original irregular series to a regular series, among the detected subsets
     dfs <- lapply(split(timeseriesSensor,timeseriesSensor$gapAfter), function(tsChunk){
+      # tsChunk <- split(timeseriesSensor,timeseriesSensor$gapAfter)[[1]]
       if("AVG" %in% aggFunctions){
         tsChunk$iniValue <- tsChunk$value
         tsChunk$iniIsReal <- tsChunk$isReal
@@ -416,28 +411,28 @@ get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz,
         tsChunk$value <- cumsum(tsChunk$value)
         tsChunk$iniValue <- lag(tsChunk$value,1)
         tsChunk$iniIsReal <- lag(tsChunk$isReal,1)
-        tsChunk$isReal[which.max(tsChunk$isReal)] <- useEstimatedValues
-        tsChunk$iniIsReal[1] <- (useEstimatedValues || metadata$timeSeriesIsCumulative)
-        tsChunk$iniValue[1] <- if (useEstimatedValues || metadata$timeSeriesIsCumulative) {0} else {NA}
+        tsChunk$iniValue[1] <- 0
+        tsChunk <- tsChunk[cumsum(tsChunk$isReal)!=0 &
+          rev(cumsum(rev(tsChunk$isReal))!=0),]
       }
       if(nrow(tsChunk)==1 && is.na(tsChunk$iniValue)){
         return(NULL)
       }
       tsChunk <- rbind(
-        data.frame("time"=tsChunk$start,"value"=tsChunk$iniValue,"isReal"=tsChunk$iniIsReal),
+        data.frame("time"=tsChunk$start,"value"=tsChunk$iniValue,"isReal"=tsChunk$isReal),
         data.frame("time"=tsChunk$end,"value"=tsChunk$value,"isReal"=tsChunk$isReal))
-      tsChunk$time <- lubridate::round_date(
+      tsChunk$time <- lubridate::force_tz(lubridate::round_date(
         tsChunk$time,
         unit = iso8601_period_to_text(interpolateFrequency,only_first = T),
-        week_start = getOption("lubridate.week.start", 7))
+        week_start = getOption("lubridate.week.start", 7)),tz)
       tsChunk <- tsChunk[!duplicated(tsChunk$time),]
       tsChunk <- tsChunk[order(tsChunk$time),]
-      if(useEstimatedValues==F) tsChunk <- tsChunk[tsChunk$isReal==T,]
+      if(metadata$considerEstimatedValues==F || useEstimatedValues==F) tsChunk <- tsChunk[tsChunk$isReal==T,]
       tsChunk <- tsChunk %>% 
         padr::pad(interval = iso8601_period_to_text(interpolateFrequency,only_first = T),
                   by = "time") %>%
         mutate(#time=as.POSIXct(lubridate::with_tz(time,"UTC"),tz="UTC"),
-          value=zoo::na.approx(value),
+          value=zoo::na.approx(value,na.rm = F),
           isReal=zoo::na.locf(isReal))
       if(!("AVG" %in% aggFunctions)){
         tsChunk$value <- c(diff(tsChunk$value),NA)
@@ -454,9 +449,10 @@ get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz,
     timeseriesSensor <- padr::pad(
       do.call(rbind,dfs) %>% 
         group_by(time) %>%
-        summarise(value = func(value))
+        summarise(value = func(value),
+                  isReal = any(isReal,na.rm = T))
     )
-    timeseriesSensor$isReal <- ifelse(!is.na(timeseriesSensor$value),T,F)
+    timeseriesSensor$isReal <- ifelse(is.finite(timeseriesSensor$isReal),timeseriesSensor$isReal,F)
     
     # Regular timeseries
   } else {
@@ -491,7 +487,7 @@ get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz,
     # } else { 
     #   aggFunctions[aggFunctions %in% c("SUM","AVG","MIN","MAX")] 
     # },
-    useEstimatedValues = useEstimatedValues,
+    useEstimatedValues = metadata$considerEstimatedValues==T || useEstimatedValues==T,
     tz = metadata$tz
   )
   
@@ -589,7 +585,7 @@ get_device_aggregators_metadata <- function(buildingsRdf){
 compute_device_aggregator_formula <- function(buildingsRdf, timeseriesObject, 
                                             buildingSubject, formula, 
                                             outputFrequency, aggFunctions,
-                                            useEstimatedValues, ratioCorrection=F){
+                                            useEstimatedValues, ratioCorrection=F, minRatioCorrection=0.7){
   
   result <- data.frame()
   op <- NULL
@@ -612,7 +608,9 @@ compute_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
       if(ratioCorrection){
         if(any(grepl("^SUM",colnames(aux_result)))){
           for (sum_col in colnames(aux_result)[grepl("^SUM",colnames(aux_result))]){
-            aux_result[,sum_col] <- aux_result[,sum_col] / aux_result$RATIO
+            aux_result[,sum_col] <- ifelse(aux_result$RATIO >= minRatioCorrection, 
+                                           unlist(aux_result[,sum_col] / aux_result$RATIO), NA)
+            aux_result <- aux_result[is.finite(unlist(aux_result[,sum_col])),]
           }
         }
       }
@@ -711,7 +709,7 @@ get_device_aggregators <- function(
                       aux <- devagg_buildings[devagg_buildings$buildingSubject==buildingSubject,]
                       aux$deviceAggregatorFrequency <- ifelse(
                         is.na(aux$deviceAggregatorFrequency), 
-                        "P1Y", aux$deviceAggregatorFrequency)
+                        "P1M", aux$deviceAggregatorFrequency)
                       largerFrequency <-
                         aux$deviceAggregatorFrequency[
                           which.max(lubridate::seconds(lubridate::period(aux$deviceAggregatorFrequency)))]

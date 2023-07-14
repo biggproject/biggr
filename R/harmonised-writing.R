@@ -230,29 +230,29 @@ calculate_indicator_not_aggregable_by_time <- function(indicator, annualEnergySa
     investment / affectedBuildingArea
   }
   else if(indicator == "AvoidanceCost"){
-    investment / (-annualEnergySavings * lifespan)
+    investment / (annualEnergySavings * lifespan)
   }
   else if(indicator == "SimplePayback"){
-    investment / -annualCostSavings
+    investment / annualCostSavings
   }
   else if(indicator == "NetPresentValue"){
     FinCal::npv(
-      c(-investment, rep(-annualCostSavings, lifespan)), r = discountRate/100
+      c(-investment, rep(annualCostSavings, lifespan)), r = discountRate/100
     )
   }
   else if(indicator == "ProfitabilityIndex"){
     (FinCal::npv(
-      c(-investment, rep(-annualCostSavings, lifespan)), r = discountRate/100
+      c(-investment, rep(annualCostSavings, lifespan)), r = discountRate/100
     ) + investment) / investment
   }
   else if(indicator == "NetPresentValueQuotient"){
     FinCal::npv(
-      c(-investment, rep(-annualCostSavings, lifespan)), r = discountRate/100
+      c(-investment, rep(annualCostSavings, lifespan)), r = discountRate/100
     ) / investment
   }
   else if(indicator == "InternalRateOfReturn"){
     FinCal::irr(
-      c(-investment, rep(-annualCostSavings, lifespan))
+      c(-investment, rep(annualCostSavings, lifespan))
     ) * 100
   }
   return(valueInd)
@@ -289,15 +289,15 @@ calculate_indicator <-  function(data, indicator, consumptionColumn, baselineCon
     valueInd <- data.frame("ind"=data[, consumptionColumn]/buildingGrossFloorArea)
   }
   else if (indicator == "EnergyUseSavings") {
-    valueInd <- data.frame("ind"=data[, consumptionColumn] - data[, baselineConsumptionColumn])
+    valueInd <- data.frame("ind"=data[, baselineConsumptionColumn] - data[, consumptionColumn])
   }
   else if (indicator == "EnergyUseSavingsRelative") {
     valueInd <- data.frame(
-      "ind"=(data[, consumptionColumn] - data[, baselineConsumptionColumn])*100 / data[, baselineConsumptionColumn],
+      "ind"=(data[, baselineConsumptionColumn] - data[, consumptionColumn])*100 / data[, consumptionColumn],
       "weights"=data[, baselineConsumptionColumn])
   }
   else if (indicator == "EnergyUseSavingsIntensity") {
-    valueInd <- data.frame("ind"=(data[, consumptionColumn] - data[, baselineConsumptionColumn]) / buildingGrossFloorArea)
+    valueInd <- data.frame("ind"=(data[, baselineConsumptionColumn] - data[, consumptionColumn]) / buildingGrossFloorArea)
   }
   else if (indicator == "EnergyCost" && !is.null(energyPriceColumn)) {
     valueInd <- data.frame("ind"=(data[, consumptionColumn] * data[, energyPriceColumn]))
@@ -306,18 +306,18 @@ calculate_indicator <-  function(data, indicator, consumptionColumn, baselineCon
     valueInd <- data.frame("ind"=(data[, consumptionColumn] * data[, energyPriceColumn])/buildingGrossFloorArea)
   }
   else if (indicator == "EnergyCostSavings" && !is.null(energyPriceColumn)) {
-    valueInd <- data.frame("ind"=((data[, consumptionColumn] - data[, baselineConsumptionColumn]) * 
+    valueInd <- data.frame("ind"=((data[, baselineConsumptionColumn] - data[, consumptionColumn]) * 
                            data[, energyPriceColumn]))
   }
   else if (indicator == "EnergyCostSavingsRelative" && !is.null(energyPriceColumn)) {
     valueInd <- data.frame(
-      "ind"=((data[, consumptionColumn] - data[, baselineConsumptionColumn]) * 
-                           data[, energyPriceColumn])*100 / (data[, baselineConsumptionColumn] * data[, energyPriceColumn]),
-      "weights"=data[, baselineConsumptionColumn] * data[, energyPriceColumn])
+      "ind"=((data[, baselineConsumptionColumn] - data[, consumptionColumn]) * 
+                           data[, energyPriceColumn])*100 / (data[, consumptionColumn] * data[, energyPriceColumn]),
+      "weights"=data[, consumptionColumn] * data[, energyPriceColumn])
   }
   else if (indicator == "EnergyCostSavingsIntensity" && 
            !is.null(energyPriceColumn)) {
-    valueInd <- data.frame("ind"=((data[, consumptionColumn] - data[, baselineConsumptionColumn]) * 
+    valueInd <- data.frame("ind"=((data[, baselineConsumptionColumn] - data[, consumptionColumn]) * 
                            data[, energyPriceColumn])/buildingGrossFloorArea)
   }
   else if (indicator == "EnergyEmissions" && !is.null(carbonEmissionsColumn)) {
@@ -328,17 +328,17 @@ calculate_indicator <-  function(data, indicator, consumptionColumn, baselineCon
     valueInd <- data.frame("ind"=(data[, consumptionColumn] * data[, carbonEmissionsColumn])/buildingGrossFloorArea)
   }
   else if (indicator == "EnergyEmissionsSavingsRelative" && !is.null(carbonEmissionsColumn)) {
-    valueInd <- data.frame("ind"=((data[, consumptionColumn] - data[, baselineConsumptionColumn]) * 
-                           data[, carbonEmissionsColumn])*100 / (data[, baselineConsumptionColumn] * data[, carbonEmissionsColumn]),
-    "weights" = data[, baselineConsumptionColumn] * data[, carbonEmissionsColumn])
+    valueInd <- data.frame("ind"=((data[, baselineConsumptionColumn] - data[, consumptionColumn]) * 
+                           data[, carbonEmissionsColumn])*100 / (data[, consumptionColumn] * data[, carbonEmissionsColumn]),
+    "weights" = data[, consumptionColumn] * data[, carbonEmissionsColumn])
   }
   else if (indicator == "EnergyEmissionsSavings" && !is.null(carbonEmissionsColumn)) {
-    valueInd <- data.frame("ind"=((data[, consumptionColumn] - data[, baselineConsumptionColumn]) * 
+    valueInd <- data.frame("ind"=((data[, baselineConsumptionColumn] - data[, consumptionColumn]) * 
                            data[, carbonEmissionsColumn]))
   }
   else if (indicator == "EnergyEmissionsSavingsIntensity" && 
            !is.null(carbonEmissionsColumn)) {
-    valueInd <- data.frame("ind"=((data[, consumptionColumn] - data[, baselineConsumptionColumn]) * 
+    valueInd <- data.frame("ind"=((data[, baselineConsumptionColumn] - data[, consumptionColumn]) * 
                            data[, carbonEmissionsColumn])/buildingGrossFloorArea)
   }
   else if (indicator == "HeatingDegreeDays" && !is.null(heatingDegreeDays18Column)) {

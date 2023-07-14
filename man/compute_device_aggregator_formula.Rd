@@ -12,7 +12,8 @@ compute_device_aggregator_formula(
   outputFrequency,
   aggFunctions,
   useEstimatedValues,
-  ratioCorrection = F
+  ratioCorrection = F,
+  minRatioCorrection = 0.7
 )
 }
 \arguments{
