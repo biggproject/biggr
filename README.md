@@ -8,8 +8,9 @@ Once R is installed (>=4.1 is recommended), execute the following sentences to i
 install.packages(c("devtools","pastecs","purrr","arules","glmnet","ranger","rdflib",
 "magrittr","parsedate","lubridate","readr","dplyr","tidyr","tibble","zoo",
 "roll","padr","quantreg","testthat","kernlab","fastDummies","caret","penalized",
-"GA","parallel","mgcv","qgam","FinCal"))
-devtools::install_version(onlineforecast,version="1.0.0")
+"GA","parallel","mgcv","qgam","FinCal","onlineforecast","matrixStats")
+# Additionally, is recommended to install libraries that are often used in pipelines based on 'biggr' functions
+install.packages(c("plotly","ggplot2","carrier","mlflow","mongolite"))
 ```
 Then, install the package through the GitHub installer if you want to use the last version of the code, or install an stable release located in the [releases repository](https://www.github.com/biggproject/biggr/releases) directly using the install.packages command.
 
