@@ -163,7 +163,13 @@ relative_out_of_boundaries_in_periodogram <- function(ts, taper = 0.1){
 #' @param arg <> 
 #' @return 
 
-PenalisedLM <- function(input_parameters){
+PenalisedLM <- function(input_parameters=NULL){
+  input_parameters_ini <- input_parameters
+  if(is.null(input_parameters)){
+    input_parameters <- data.frame(
+      parameter = "parameter",
+      class = "character")
+  }
   input_parameters$label <- input_parameters$parameter
   modelFramework <- list(
     label = "penalisedRegression",
@@ -171,7 +177,11 @@ PenalisedLM <- function(input_parameters){
     type = "Regression",
     ## Define the ARX parameters
     parameters = input_parameters,
-    grid = 
+    grid = if(is.null(input_parameters_ini)){
+      function(x, y, len = NULL, search = "grid") {
+        data.frame(parameter = "none")
+      }
+    } else {
       function(x, y, len = NULL, search = "grid") {
         p <- ncol(x)
         r <- nrow(x)
@@ -182,7 +192,8 @@ PenalisedLM <- function(input_parameters){
           grid <- expand.grid(mapply(function(k)sample(1:p, size = len),1:r))
           colnames(grid) <- colnames(x)
         }
-      },
+      }
+    },
     loop = NULL,
     fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, 
                    transformationSentences=NULL, forcePositiveTerms=NULL, logOutput=F,
@@ -363,7 +374,13 @@ PenalisedLM <- function(input_parameters){
 #' @param arg <> 
 #' @return 
 
-ARX <- function(input_parameters){
+ARX <- function(input_parameters=NULL){
+  input_parameters_ini <- input_parameters
+  if(is.null(input_parameters)){
+    input_parameters <- data.frame(
+      parameter = "parameter",
+      class = "character")
+  }
   input_parameters$label <- input_parameters$parameter
   modelFramework <- list(
     label = "ARX",
@@ -371,7 +388,11 @@ ARX <- function(input_parameters){
     type = "Regression",
     ## Define the ARX parameters
     parameters = input_parameters,
-    grid = 
+    grid = if(is.null(input_parameters_ini)){
+      function(x, y, len = NULL, search = "grid") {
+        data.frame(parameter = "none")
+      }
+    } else {
       function(x, y, len = NULL, search = "grid") {
         p <- ncol(x)
         r <- nrow(x)
@@ -382,7 +403,8 @@ ARX <- function(input_parameters){
           grid <- expand.grid(mapply(function(k)sample(1:p, size = len),1:r))
           colnames(grid) <- colnames(x)
         }
-      },
+      }
+    },
     loop = NULL,
     fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, 
                    transformationSentences=NULL, logOutput=T, trainMask=NULL,
@@ -700,7 +722,13 @@ ARX <- function(input_parameters){
   return(modelFramework)
 }
 
-RandomForest <- function(input_parameters){
+RandomForest <- function(input_parameters=NULL){
+  input_parameters_ini <- input_parameters
+  if(is.null(input_parameters)){
+    input_parameters <- data.frame(
+      parameter = "parameter",
+      class = "character")
+  }
   input_parameters$label <- input_parameters$parameter
   modelFramework <- list(
     label = "RandomForest",
@@ -708,7 +736,11 @@ RandomForest <- function(input_parameters){
     type = "Regression",
     ## Define the ARX parameters
     parameters = input_parameters,
-    grid = 
+    grid = if(is.null(input_parameters_ini)){
+      function(x, y, len = NULL, search = "grid") {
+        data.frame(parameter = "none")
+      }
+    } else {
       function(x, y, len = NULL, search = "grid") {
         p <- ncol(x)
         r <- nrow(x)
@@ -719,7 +751,8 @@ RandomForest <- function(input_parameters){
           grid <- expand.grid(mapply(function(k)sample(1:p, size = len),1:r))
           colnames(grid) <- colnames(x)
         }
-      },
+      }
+    },
     loop = NULL,
     fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, 
                    transformationSentences=NULL, trainMask=NULL,
@@ -1140,7 +1173,13 @@ RandomForest <- function(input_parameters){
 #'  
 #' @return When training: <list> containing the model, when predicting: <array> of the predicted results.
 
-GLM <- function(input_parameters){
+GLM <- function(input_parameters=NULL){
+  input_parameters_ini <- input_parameters
+  if(is.null(input_parameters)){
+    input_parameters <- data.frame(
+      parameter = "parameter",
+      class = "character")
+  }
   input_parameters$label <- input_parameters$parameter
   modelFramework <- list(
     label = "GLM",
@@ -1148,7 +1187,11 @@ GLM <- function(input_parameters){
     type = "Regression",
     ## Define the ARX parameters
     parameters = input_parameters,
-    grid = 
+    grid = if(is.null(input_parameters_ini)){
+      function(x, y, len = NULL, search = "grid") {
+        data.frame(parameter = "none")
+      }
+    } else {
       function(x, y, len = NULL, search = "grid") {
         p <- ncol(x)
         r <- nrow(x)
@@ -1159,7 +1202,8 @@ GLM <- function(input_parameters){
           grid <- expand.grid(mapply(function(k)sample(1:p, size = len),1:r))
           colnames(grid) <- colnames(x)
         }
-      },
+      }
+    },
     loop = NULL,
     fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, familyGLM,
                    transformationSentences=NULL, trainMask=NULL,
@@ -1576,7 +1620,13 @@ GLM <- function(input_parameters){
 #'  
 #' @return When training: <list> containing the model, when predicting: <array> of the predicted results.
 
-RLS <- function(input_parameters){
+RLS <- function(input_parameters=NULL){
+  input_parameters_ini <- input_parameters
+  if(is.null(input_parameters)){
+    input_parameters <- data.frame(
+      parameter = "parameter",
+      class = "character")
+  }
   input_parameters$label <- input_parameters$parameter
   modelFramework <- list(
     label = "RLS",
@@ -1584,7 +1634,11 @@ RLS <- function(input_parameters){
     type = "Regression",
     ## Define the ARX parameters
     parameters = input_parameters,
-    grid = 
+    grid = if(is.null(input_parameters_ini)){
+      function(x, y, len = NULL, search = "grid") {
+        data.frame(parameter = "none")
+      }
+    } else {
       function(x, y, len = NULL, search = "grid") {
         p <- ncol(x)
         r <- nrow(x)
@@ -1595,7 +1649,8 @@ RLS <- function(input_parameters){
           grid <- expand.grid(mapply(function(k)sample(1:p, size = len),1:r))
           colnames(grid) <- colnames(x)
         }
-      },
+      }
+    },
     loop = NULL,
     fit = function(x, y, wts, param, lev, last, classProbs, formulaTerms, 
                    transformationSentences=NULL, logOutput=F, 
@@ -2440,11 +2495,25 @@ weather_dependence_disaggregator <- function(predictor, df, forceNoCooling, forc
 
 
 # Calculate the balance temperature
-compute_tbal_using_model_predictions <- function(df, predictor, dep_vars){
+compute_tbal_using_model_predictions <- function(df, predictor, dep_vars, simplify=T,...){
   
   expand.grid.df <- function(...) Reduce(function(...) merge(..., by=NULL), list(...))
   
+  dep_vars_ini <- dep_vars
+  if(simplify==T){
+    for(dep_var in dep_vars_ini){
+      if(length(unique(df[,dep_var]))>24){
+        df[,paste0(dep_var,"_simplified")] <- 
+          ave(df[,dep_var], cut(df[,dep_var], 12),
+              FUN=function(x)floor(mean(x,na.rm=T)))
+      } else { df[,paste0(dep_var,"_simplified")] <- df[,dep_var] }
+    }
+    dep_vars <- paste0(dep_vars_ini,"_simplified")
+  }
+  
   dep_vars_df <- df[,dep_vars]
+  colnames(dep_vars_df)[colnames(dep_vars_df) %in% dep_vars] <-
+    dep_vars_ini
   dep_vars_df <- dep_vars_df[!duplicated(dep_vars_df),]
   dep_vars_df <- data.frame(dep_vars_df, case=1:nrow(dep_vars_df))
   all_vars_df <- expand.grid.df(
@@ -2452,10 +2521,18 @@ compute_tbal_using_model_predictions <- function(df, predictor, dep_vars){
     data.frame("temperature"=seq(ceiling(quantile(df$temperature,0.05,na.rm=T)),
                                  floor(quantile(df$temperature,0.95,na.rm=T)),by=1))
   )
-  aux <- predictor(all_vars_df,forceGlobalInputFeatures = list(temperature=all_vars_df$temperature,temperatureLpf=all_vars_df$temperature))
+  
+  aux <- predictor(all_vars_df,
+                   forceGlobalInputFeatures = list(temperature=all_vars_df$temperature,
+                                                   temperatureLpf=all_vars_df$temperature), 
+                   ...)
   all_vars_df$value <- aux
+  
   for (i in unique(dep_vars_df$case)){
     df_case <- all_vars_df[all_vars_df$case==i,]
+    # if(nrow(df_case)>14){
+    #   df_case <- df_case[sample(1:nrow(df_case),size = 14,replace=F),]
+    # }
     loess_mod <- as.data.frame(loess.smooth(df_case$temperature,df_case$value,degree=2))
     colnames(loess_mod) <- c("temperature","smoothed_value")
     loess_mod$smoothed_slope <- c(diff(loess_mod$smoothed_value),NA)
@@ -2469,16 +2546,16 @@ compute_tbal_using_model_predictions <- function(df, predictor, dep_vars){
     }
     dep_vars_df$tbal[dep_vars_df$case==i] <- tbal
   }
-  # ggplot(all_vars_df[order(all_vars_df$monthInt),]) + 
-  #   geom_line(aes(temperature,value,group=case,col=monthInt),alpha=0.3) +
-  #   scale_color_gradientn(colours = c("darkblue", "lightblue","lightpink","red4","lightpink","lightblue","darkblue")) + 
-  #   facet_grid(weekdayNum~hour)
-  # ggplot(dep_vars_df) +
-  #   geom_point(aes(hour,tbal),col="black",size=0.6) + 
-  #   ylim(c(min(all_vars_df$temperature),max(all_vars_df$temperature))) +
-  #   facet_grid(monthInt~weekdayNum)
   
-  return(merge(df,dep_vars_df[,!(colnames(dep_vars_df) %in% c("case","value"))]))
+  unique_cases <- dep_vars_df
+  colnames(dep_vars_df)[colnames(dep_vars_df) %in% dep_vars_ini] <-
+    dep_vars
+  
+  return(list(
+    "df"=merge(df,dep_vars_df[,!(colnames(dep_vars_df) %in% c("case","value"))]),
+    "uniqueCases"=unique_cases,
+    "casesPredicted"=all_vars_df
+  ))
 }
 
 

@@ -4,7 +4,7 @@
 \alias{ARX}
 \title{Title}
 \usage{
-ARX(input_parameters)
+ARX(input_parameters = NULL)
 }
 \arguments{
 \item{arg}{<>}

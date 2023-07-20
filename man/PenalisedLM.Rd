@@ -4,7 +4,7 @@
 \alias{PenalisedLM}
 \title{Title}
 \usage{
-PenalisedLM(input_parameters)
+PenalisedLM(input_parameters = NULL)
 }
 \arguments{
 \item{arg}{<>}

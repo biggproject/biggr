@@ -218,7 +218,7 @@ get_eem_measured_property_components <- function(componentsPerEem=NULL, eemTypes
 #' @param investment <float> defining the total initial investment cost of EEM, or 
 #' project of EEMs.
 #' @param discountRate <float> defining the discount rate for the Net Present value. 
-#' Unit: \%.
+#' Unit: ratio.
 #' @param lifespan <int> defining the lifespan of a EEM, or a project of EEMs.
 #' 
 #' @return <float> with the value of the KPI.
@@ -237,23 +237,23 @@ calculate_indicator_not_aggregable_by_time <- function(indicator, annualEnergySa
   }
   else if(indicator == "NetPresentValue"){
     FinCal::npv(
-      c(-investment, rep(annualCostSavings, lifespan)), r = discountRate/100
+      c(-investment, rep(annualCostSavings, lifespan)), r = discountRate
     )
   }
   else if(indicator == "ProfitabilityIndex"){
     (FinCal::npv(
-      c(-investment, rep(annualCostSavings, lifespan)), r = discountRate/100
+      c(-investment, rep(annualCostSavings, lifespan)), r = discountRate
     ) + investment) / investment
   }
   else if(indicator == "NetPresentValueQuotient"){
     FinCal::npv(
-      c(-investment, rep(annualCostSavings, lifespan)), r = discountRate/100
+      c(-investment, rep(annualCostSavings, lifespan)), r = discountRate
     ) / investment
   }
   else if(indicator == "InternalRateOfReturn"){
-    FinCal::irr(
+    tryCatch(FinCal::irr(
       c(-investment, rep(annualCostSavings, lifespan))
-    ) * 100
+    ) * 100, error=function(x) NA)
   }
   return(valueInd)
 }
@@ -294,7 +294,7 @@ calculate_indicator <-  function(data, indicator, consumptionColumn, baselineCon
   else if (indicator == "EnergyUseSavingsRelative") {
     valueInd <- data.frame(
       "ind"=(data[, baselineConsumptionColumn] - data[, consumptionColumn])*100 / data[, consumptionColumn],
-      "weights"=data[, baselineConsumptionColumn])
+      "weights"=data[, consumptionColumn])
   }
   else if (indicator == "EnergyUseSavingsIntensity") {
     valueInd <- data.frame("ind"=(data[, baselineConsumptionColumn] - data[, consumptionColumn]) / buildingGrossFloorArea)
@@ -682,6 +682,8 @@ generate_eem_assessment_indicators <- function(
   namespaces <- bigg_namespaces
   namespaces["biggresults"] <- buildingNamespace
   
+  data <- data[order(data[,timeColumn]),]
+  
   if (is.null(prevResults)) {
     prevResults <- list(results_rdf=rdf(), results_ts=list()) 
   }
@@ -757,6 +759,7 @@ generate_eem_assessment_indicators <- function(
     } else {
       next
     }
+    rm(valueInd)
     
     for (frequency in frequencies) {
       if(frequency!=""){
@@ -769,7 +772,7 @@ generate_eem_assessment_indicators <- function(
       }
       indDfAux <- indDf %>%  {
           if(frequency==""){
-            group_by(., start = dplyr::first(time))
+            group_by(., start = min(time))
           } else {
             group_by(., start = lubridate::floor_date(time, lubridate::as.period(frequency), 
                         week_start = getOption("lubridate.week.start", 1)))
@@ -802,7 +805,7 @@ generate_eem_assessment_indicators <- function(
       if(nrow(indDfAux)==0){next}
       indDfAux$start <- lubridate::with_tz(indDfAux$start, "UTC")
       if(frequency==""){
-        indDfAux$end <- last(indDf$time)
+        indDfAux$end <- max(indDf$time)
       } else {
         if (lubridate::as.period(frequency) >= lubridate::as.period("P1D")) {
           indDfAux$end <- lubridate::with_tz(lubridate::with_tz(indDfAux$start, 
@@ -909,13 +912,13 @@ generate_eem_assessment_indicators <- function(
         "end" = annualEndTimestamp,
         "value" = calculate_indicator_not_aggregable_by_time(
           indicator = indicatorNABT,
-          annualEnergySavings = annualEnergySavings, 
-          annualCostSavings = annualCostSavings, 
+          annualEnergySavings = ifelse(annualEnergySavings>0, annualEnergySavings, 0), 
+          annualCostSavings = ifelse(annualCostSavings>0, annualCostSavings, 0), 
           affectedBuildingArea = buildingGrossFloorArea * 
             weighted.mean(eemProjectDf$AffectationShare/100,
                           w = eemProjectDf$Investment, na.rm=T), 
           investment = sum(eemProjectDf$Investment, na.rm=T), 
-          discountRate = weighted.mean(eemProjectDf$DiscountRate,
+          discountRate = weighted.mean(eemProjectDf$DiscountRate/100,
                                        w = eemProjectDf$Investment,na.rm=T), 
           lifespan = ceiling(weighted.mean(eemProjectDf$Lifespan,
                                            w = eemProjectDf$Investment,na.rm=T))),
@@ -988,7 +991,7 @@ generate_eem_assessment_indicators <- function(
   # Assessment by Single EEM
   if(forceAssessmentSingleEEM){
     
-    eemProjectDf$AffectedInvestment <- eemProjectDf$Investment * eemProjectDf$AffectationShare *
+    eemProjectDf$AffectedInvestment <- eemProjectDf$Investment * eemProjectDf$AffectationShare/100 *
       as.numeric(eemProjectDf[,paste0("MeasuredPropertyComponent_",measuredPropertyComponent)])
     eemProjectDf$ratioSingle <- eemProjectDf$AffectedInvestment / sum(eemProjectDf$AffectedInvestment)
     if(!all(is.finite(eemProjectDf$ratioSingle))){
@@ -1030,7 +1033,7 @@ generate_eem_assessment_indicators <- function(
           }
           indDfAux <- indDf %>%  {
             if(frequency==""){
-              group_by(., start = dplyr::first(time))
+              group_by(., start = min(time))
             } else {
               group_by(., start = lubridate::floor_date(time, lubridate::as.period(frequency), 
                                                         week_start = getOption("lubridate.week.start", 1)))
@@ -1057,7 +1060,7 @@ generate_eem_assessment_indicators <- function(
             select(-real, -estimated)
           indDfAux$start <- lubridate::with_tz(indDfAux$start, "UTC")
           if(frequency==""){
-            indDfAux$end <- last(indDf$time)
+            indDfAux$end <- max(indDf$time)
           } else {
             if (lubridate::as.period(frequency) >= lubridate::as.period("P1D")) {
               indDfAux$end <- lubridate::with_tz(lubridate::with_tz(indDfAux$start, 
@@ -1165,11 +1168,11 @@ generate_eem_assessment_indicators <- function(
             "end" = annualEndTimestamp,
             "value" = calculate_indicator_not_aggregable_by_time(
               indicator = indicatorNABT,
-              annualEnergySavings = annualEnergySavings, 
-              annualCostSavings = annualCostSavings, 
-              affectedBuildingArea = buildingGrossFloorArea * eemSingleDf$AffectationShare, 
+              annualEnergySavings = ifelse(annualEnergySavings>0,annualEnergySavings,0),
+              annualCostSavings = ifelse(annualCostSavings>0, annualCostSavings,0),
+              affectedBuildingArea = buildingGrossFloorArea * eemSingleDf$AffectationShare/100, 
               investment = sum(eemSingleDf$Investment, na.rm=T), 
-              discountRate = eemSingleDf$DiscountRate, 
+              discountRate = eemSingleDf$DiscountRate/100, 
               lifespan = eemSingleDf$Lifespan),
             "isReal" = F)
           if(!any(is.finite(indDfAux$value))){next}

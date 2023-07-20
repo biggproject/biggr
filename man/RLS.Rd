@@ -4,7 +4,7 @@
 \alias{RLS}
 \title{Recursive Least Square model}
 \usage{
-RLS(input_parameters)
+RLS(input_parameters = NULL)
 }
 \arguments{
 \item{formula}{-arg for train()- <formula> providing the model output feature

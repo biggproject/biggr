@@ -32,7 +32,7 @@ or project of EEMs.}
 project of EEMs.}
 
 \item{discountRate}{<float> defining the discount rate for the Net Present value. 
-Unit: \%.}
+Unit: ratio.}
 
 \item{lifespan}{<int> defining the lifespan of a EEM, or a project of EEMs.}
 }

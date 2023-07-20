@@ -4,7 +4,7 @@
 \alias{GLM}
 \title{Generalised Linear Model}
 \usage{
-GLM(input_parameters)
+GLM(input_parameters = NULL)
 }
 \arguments{
 \item{formula}{-arg for train()- <formula> providing the model output feature
