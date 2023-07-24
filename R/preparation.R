@@ -341,7 +341,9 @@ detect_profiled_data <- function(data, timeColumn = "localtime", valueColumn = "
                                tz = attr(time[1],"tzone"))
       ) %>%
       group_by(hourly_lt) %>%
-      summarise(value=sum(value),valueMin=min(value,na.rm=T),valueMax=max(value,na.rm=T),
+      summarise(value=sum(value,na.rm=T),
+                valueMin=min(value,na.rm=T),
+                valueMax=max(value,na.rm=T),
                 date=dplyr::first(date),
                 hour=dplyr::first(hour)) %>%
       filter((valueMax-valueMax)>1) %>%
@@ -1046,11 +1048,14 @@ detect_disruptive_period <- function(data, consumptionColumn, timeColumn,
 detect_holidays_in_tertiary_buildings <- function(data, consumptionColumn, timeColumn, plotDensity=T, 
                                                   ignoreDates=c(), tz="UTC"){
   
-  data <- data[is.finite(data[,consumptionColumn]),]
+  #data <- data[is.finite(data[,consumptionColumn]),]
+  n_timesteps <- hourly_timesteps(24,detect_time_step(data))
   data <- aggregate(setNames(data.frame(data[,consumptionColumn]),consumptionColumn),
                     by=setNames(list(as.Date(data[,timeColumn], tz=tz)),timeColumn),
-                    FUN=function(x)sum(x,na.rm=T))
+                    FUN=function(x)mean(x,na.rm=T)*n_timesteps)
   data$dayweek <- strftime(data[,timeColumn],"%u")
+  data_ini <- data
+  data <- data[!(data$time %in% ignoreDates),]
   
   # Estimate the cons_limit using the density function
   summarise_per_day <- data %>% group_by(dayweek) %>%
@@ -1069,7 +1074,7 @@ detect_holidays_in_tertiary_buildings <- function(data, consumptionColumn, timeC
   ## Estimate the cons_limit based on the day with minimum consumption of the week 
   data_dayweek <-
     mapply(function(i){
-      na.locf(zoo::rollapply(ifelse(data$dayweek==i,data[,consumptionColumn],NA),
+      na.locf(zoo::rollapply(ifelse(data_ini$dayweek==i,data_ini[,consumptionColumn],NA),
                      width=30*3,partial=T,align="center",fill=c(NA,NA,NA),
                      FUN=function(x){max(x,na.rm=T)}))
     },sort(unique(data$dayweek)))
@@ -1077,9 +1082,26 @@ detect_holidays_in_tertiary_buildings <- function(data, consumptionColumn, timeC
   cons_max <- matrixStats::rowMaxs(data_dayweek)
   cons_limit <- ifelse(((cons_max-cons_min)/cons_min) > 0.5, cons_min, 0)
    
-  days_detected <- as.Date(data[
-    !(as.Date(data[,timeColumn],tz=tz) %in% ignoreDates) &
-      data[,consumptionColumn] <= cons_limit & is.finite(data[,consumptionColumn]), timeColumn], tz=tz)
+  days_detected <- as.Date(data_ini[
+    !(as.Date(data_ini[,timeColumn],tz=tz) %in% ignoreDates) &
+      data_ini[,consumptionColumn] <= cons_limit & is.finite(data_ini[,consumptionColumn]), timeColumn], tz=tz)
+  
+  # Add common holidays in ignored days.
+  if(length(ignoreDates)>0){
+    data_ini[,"holidays"] <- ifelse(data_ini$time %in% days_detected, 1, 0)
+    data_ini <- calendar_components(data_ini,localTimeZone = tz)
+    days_detected <- c(
+      days_detected,
+      data_ini$time[data_ini$time %in% ignoreDates][
+        ranger::predictions(
+          predict(
+            ranger::ranger( holidays~.,
+              data = data_ini[!(data_ini$time %in% ignoreDates), 
+                            c("holidays","month","dayYear","weekday")]),
+              data_ini[(data_ini$time %in% ignoreDates), 
+                       c("holidays","month","dayYear","weekday")]
+        ))>0.5])
+  }
   
   # plot the PDF and the local extremes
   if(plotDensity==T){

@@ -442,7 +442,7 @@ generate_longitudinal_benchmarking_indicators <- function (
   namespaces <- bigg_namespaces
   namespaces["biggresults"] <- buildingNamespace
   
-  if (is.null(prevResults)) {
+  if (is.null(prevResults) | length(prevResults)==0) {
     prevResults <- list(results_rdf=rdf(), results_ts=list()) 
   }
   
@@ -684,7 +684,7 @@ generate_eem_assessment_indicators <- function(
   
   data <- data[order(data[,timeColumn]),]
   
-  if (is.null(prevResults)) {
+  if (is.null(prevResults) | length(prevResults)==0) {
     prevResults <- list(results_rdf=rdf(), results_ts=list()) 
   }
   
