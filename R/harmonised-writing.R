@@ -842,8 +842,7 @@ generate_eem_assessment_indicators <- function(
                                 `bigg:timeSeriesIsCumulative` = F, 
                                 `bigg:timeSeriesStart` = min(indDfAux$start, na.rm = T), 
                                 `bigg:timeSeriesEnd` = max(indDfAux$end,  na.rm = T),
-                                `bigg:timeSeriesTimeAggregationFunction` = indicatorsTimeAggregationFunctions[[indicator]],
-                                `bigg:measuredPropertyComponent` = measuredPropertyComponent),
+                                `bigg:timeSeriesTimeAggregationFunction` = indicatorsTimeAggregationFunctions[[indicator]]),
                               if(frequency!=""){list(
                                 `bigg:timeSeriesFrequency` = frequency
                               )}), 
@@ -853,7 +852,10 @@ generate_eem_assessment_indicators <- function(
                                 `bigg:quantifiesKPI` = keyPerformanceIndicatorSubject,
                                 `bigg:hasMeasuredProperty` = if(startsWith(measuredProperty,"bigg:")){ 
                                   measuredProperty
-                                } else {paste0("bigg:",measuredProperty)}),
+                                } else {paste0("bigg:",measuredProperty)},
+                                `bigg:hasMeasuredPropertyComponent` = if(startsWith(measuredPropertyComponent,"bigg:")){ 
+                                  measuredPropertyComponent
+                                } else {paste0("bigg:",measuredPropertyComponent)}),
                                 if (!is.null(modelId)) { list(
                                   `bigg:isEstimatedByModel` = modelSubject)
                                 }
@@ -1097,8 +1099,7 @@ generate_eem_assessment_indicators <- function(
                                     `bigg:timeSeriesIsCumulative` = F, 
                                     `bigg:timeSeriesStart` = min(indDfAux$start, na.rm = T), 
                                     `bigg:timeSeriesEnd` = max(indDfAux$end,  na.rm = T),
-                                    `bigg:timeSeriesTimeAggregationFunction` = indicatorsTimeAggregationFunctions[[indicator]],
-                                    `bigg:measuredPropertyComponent` = measuredPropertyComponent),
+                                    `bigg:timeSeriesTimeAggregationFunction` = indicatorsTimeAggregationFunctions[[indicator]]),
                                     if(frequency!=""){list(
                                       `bigg:timeSeriesFrequency` = frequency
                                     )}), 
@@ -1108,7 +1109,10 @@ generate_eem_assessment_indicators <- function(
                                     `bigg:quantifiesKPI` = keyPerformanceIndicatorSubject,
                                     `bigg:hasMeasuredProperty` = if(startsWith(measuredProperty,"bigg:")){ 
                                       measuredProperty
-                                    } else {paste0("bigg:",measuredProperty)}),
+                                    } else {paste0("bigg:",measuredProperty)},
+                                    `bigg:hasMeasuredPropertyComponent` = if(startsWith(measuredPropertyComponent,"bigg:")){ 
+                                      measuredPropertyComponent
+                                    } else {paste0("bigg:",measuredPropertyComponent)}),
                                     if (!is.null(modelId)) { list(
                                       `bigg:isEstimatedByModel` = modelSubject)
                                     }
