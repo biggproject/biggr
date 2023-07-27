@@ -230,7 +230,7 @@ calculate_indicator_not_aggregable_by_time <- function(indicator, annualEnergySa
     investment / affectedBuildingArea
   }
   else if(indicator == "AvoidanceCost"){
-    investment / (annualEnergySavings * lifespan)
+    investment / (annualCostSavings * lifespan)
   }
   else if(indicator == "SimplePayback"){
     investment / annualCostSavings
