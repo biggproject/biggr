@@ -30,7 +30,8 @@ Depends:
     fastDummies,
     caret,
     penalized,
-    onlineforecast (== 1.0.0),
+    onlineforecast,
+    matrixStats,
     qgam,
     GA,
     parallel,
@@ -42,5 +43,9 @@ License: ""
 RoxygenNote: 7.1.2
 Suggests: 
     rmarkdown,
-    knitr
+    knitr,
+    plotly,
+    carrier,
+    mlflow,
+    mongolite
 VignetteBuilder: knitr

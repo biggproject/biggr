@@ -341,7 +341,9 @@ detect_profiled_data <- function(data, timeColumn = "localtime", valueColumn = "
                                tz = attr(time[1],"tzone"))
       ) %>%
       group_by(hourly_lt) %>%
-      summarise(value=sum(value),valueMin=min(value,na.rm=T),valueMax=max(value,na.rm=T),
+      summarise(value=sum(value,na.rm=T),
+                valueMin=min(value,na.rm=T),
+                valueMax=max(value,na.rm=T),
                 date=dplyr::first(date),
                 hour=dplyr::first(hour)) %>%
       filter((valueMax-valueMax)>1) %>%
