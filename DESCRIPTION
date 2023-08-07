@@ -38,13 +38,16 @@ Depends:
     jsonlite,
     digest,
     matrixStats,
+    gratia,
+    ggplot2,
+    gridExtra,
+    FNN,
     R (>= 4.1.2)
 License: "" 
 RoxygenNote: 7.1.2
 Suggests: 
     rmarkdown,
     knitr,
-    ggplot2,
     plotly,
     mlflow,
     carrier
