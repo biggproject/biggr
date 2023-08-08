@@ -62,7 +62,7 @@ containing the last timesteps of the output feature.}
 <boolean> indicating if the prediction mode should be done in one step 
 prediction mode.}
 
-\item{modelMinMaxHorizonInHours}{-arg for biggr::predict.train()- 
+\item{predictionHorizonInHours}{-arg for biggr::predict.train()- 
 <array> considering the minimum and maximum horizon in hours for each 
 prediction timestep. When forceOneStepPrediction is TRUE, this argument
 is not used.}
@@ -115,13 +115,13 @@ train(
    )
  )
  # An example for model prediction is:
- predictor <- crate(function(x, forceGlobalInputFeatures = NULL,modelMinMaxHorizonInHours=1,
+ predictor <- crate(function(x, forceGlobalInputFeatures = NULL,predictionHorizonInHours=1,
  modelWindow="\%Y-\%m-\%d", modelSelection="rmse"){
    biggr::predict.train(
      object = !!mod,
      newdata = x,
      forceGlobalInputFeatures = forceGlobalInputFeatures,
-     modelMinMaxHorizonInHours = modelMinMaxHorizonInHours,
+     predictionHorizonInHours = predictionHorizonInHours,
      modelWindow = modelWindow,
      modelSelection = modelSelection
    )

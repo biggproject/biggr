@@ -712,6 +712,8 @@ degree_days <- function(data, temperatureFeature, localTimeZone, baseTemperature
 #' The time zone of the datetimes must be UTC.
 #' @param consumptionFeature <string> with the name of consumption column.
 #' @param temperatureFeature <string> with the name of temperature column.
+#' @param consumptionGroupFeature <string> with the name of column in consumptionData
+#' that describes the grouping feature used. By default, no group is
 #' @param localTimeZone <string> specifying the local time zone related to
 #' the building in analysis. The format of this time zones are defined by
 #' the IANA Time Zone Database (https://www.iana.org/time-zones). This
@@ -720,250 +722,17 @@ degree_days <- function(data, temperatureFeature, localTimeZone, baseTemperature
 #' @param plot <boolean> Plot change point model describing load vs
 #' temperature relationship in order to identify breakpoints
 #' @return Changepoint analysis results attributes <struct>
-#      - tbal. Change point temperature 
-#      - heating. Heating dependency detected
-#      - cooling. Cooling dependency detected
+#'     - group. Group unique identifier
+#'     - tbalh. Change point temperature in heating season
+#'     - tbalh. Change point temperature in cooling season
+#'     - heating. Heating dependency detected
+#'     - cooling. Cooling dependency detected
 
 get_change_point_temperature <- function(consumptionData, weatherData, 
-                                         consumptionFeature, 
-                                         temperatureFeature,
-                                         localTimeZone, plot = F){
-  # consumptionFeature <- "Qe"
-  # temperatureFeature <- "temperature"
-  # weatherData <- data[,c("time",temperatureFeature)]
-  # consumptionData <- data[,c("time",consumptionFeature)]
-  timestepOriginalData <- detect_time_step(consumptionData$time)
-  weatherData <- weatherData[,c("time",temperatureFeature)]
-  colnames(weatherData) <- c("time","temperature")
-  weatherData$time <- as.Date(weatherData$time, localTimeZone)
-  # weatherDataD <- smartAgg(weatherData, by="time",
-  #                              args=list(
-  #                                function(x){mean(x,na.rm=T)},"temperature"
-  #                              ))
-  weatherDataD <- weatherData %>% 
-    group_by(time) %>% 
-    summarise(across(c(temperature), function(x){mean(x,na.rm=T)}),
-              .groups = 'drop')
-  
-  consumptionData <- consumptionData[,c("time",consumptionFeature)]
-  colnames(consumptionData) <- c("time","consumption")
-  consumptionData$time <- as.Date(consumptionData$time, localTimeZone)
-  # consumptionDataD <- smartAgg(consumptionData, by="time",
-  #                              args=list(
-  #                                function(x)sum(x,na.rm=T),"consumption"
-  #                              ))
-  n_timesteps <- hourly_timesteps(24,timestepOriginalData)
-  consumptionDataD <- consumptionData %>% 
-    group_by(time) %>% 
-    summarise(across(c(consumption), function(x){mean(x,na.rm=T)*
-        n_timesteps}),
-              .groups = 'drop')
-  
-  estimate_signature <- function(par, weatherData, consumptionData, localTimeZone){
-    newdata <- consumptionData %>% mutate(time=lubridate::force_tz(time,localTimeZone))
-    newdata <- newdata %>% 
-      left_join(weatherData, by="time") %>% 
-      left_join(
-        degree_days(
-          data = weatherData, 
-          temperatureFeature = "temperature", 
-          outputFrequency = "D", 
-          localTimeZone = localTimeZone,
-          baseTemperature = par["tbalh"], 
-          mode = "heating",
-          hysteresisBaseTemperature = 0,
-          outputFeaturesName = "hdd",
-          fixedOutputFeaturesName=T),
-        by="time") %>%
-      left_join(
-        degree_days(
-          data = weatherData, 
-          temperatureFeature = "temperature", 
-          outputFrequency = "D", 
-          localTimeZone = localTimeZone,
-          baseTemperature = par["tbalc"], 
-          mode = "cooling",
-          hysteresisBaseTemperature = 0,
-          outputFeaturesName = "cdd",
-          fixedOutputFeaturesName=T),
-        by="time")
-    
-    newdata$heating_intercept <- ifelse(newdata$hdd>0, 1, 0)
-    newdata$cooling_intercept <- ifelse(newdata$cdd>0, 1, 0)
-    newdata$weekday <- as.factor(strftime(newdata$time,"%w"))
-    
-    # if(length(unique(newdata$weekday))>1){
-    #   mod <- lm(consumption ~ 0 + weekday + hdd + cdd , newdata)
-    #   x <- suppressMessages(model.matrix( ~ 0 + weekday + hdd + cdd,newdata))
-    #   y <- unlist(newdata[,"consumption"])
-    #   cv <- glmnet::cv.glmnet(x,y)
-    #   hdd_slope <- coef(cv)["hdd",1]>0
-    #   cdd_slope <- coef(cv)["cdd",1]>0
-    #   newdata$fix <- 1
-    #   mod <- list(
-    #     "mod"= penalized(y,penalized =
-    #                         if(hdd_slope && cdd_slope){
-    #                           as.formula("~ 0 + hdd + cdd")
-    #                         } else if (hdd_slope){as.formula("~ 0 + hdd")
-    #                         } else if (cdd_slope){as.formula("~ 0 + cdd")
-    #                         } else {~ fix},
-    #                     unpenalized = ~ 0 + weekday, data=newdata,
-    #                     positive = T,
-    #                     trace = F)
-    #   )
-    #   mod[["yhat"]] <- mod$mod@fitted
-    #   mod[["y"]] <- y
-    #   mod[["temperature"]] <- newdata$temperature
-    # } else {
-      x <- suppressMessages(
-        model.matrix(~ 1 + hdd + cdd, newdata))
-      y <- unlist(newdata[,"consumption"])
-      if(!(all(newdata$hdd==0) | all(newdata$cdd==0)) & nrow(newdata)>=30){
-        #cv <- glmnet::cv.glmnet(x,y,relax=T)
-        hdd_slope <- T#coef(cv)["hdd",1]>0
-        cdd_slope <- T#coef(cv)["cdd",1]>0
-      } else {
-        hdd_slope <- F
-        cdd_slope <- F
-      }
-      newdata$fix <- 1
-      mod <- list(
-        "mod"= penalized(y,penalized =
-                           if(hdd_slope && cdd_slope){
-                             as.formula("~ 0 + hdd + cdd")
-                           } else if (hdd_slope){as.formula("~ 0 + hdd")
-                           } else if (cdd_slope){as.formula("~ 0 + cdd")
-                           } else {~ fix}, 
-                         unpenalized = ~1,
-                         data=newdata,
-                         positive = T,# lambda1 = tail(cv$lambda,1), lambda2 = tail(cv$lambda,1),
-                         trace=F)
-      )
-      mod[["yhat"]] <- mod$mod@fitted
-      mod[["y"]] <- y
-      mod[["temperature"]] <- newdata$temperature
-    # }
-    mod
-    #a <- summary(mod)
-    
-    # plot(newdata$hdd,col="red", ylim=c(0,40))
-    # points(newdata$cdd,col="blue")
-  }
-  tbals <- seq(ceiling(quantile(weatherData$temperature,0.1,na.rm=T)),
-               floor(quantile(weatherData$temperature,0.9,na.rm=T)),
-               by=1)
-  hysteresis <- seq(1,3,by=1)
-  pars <- expand.grid(tbals,hysteresis)
-  pars <- data.frame(
-    "tbalh"=pars$Var1-pars$Var2,
-    "tbalc"=pars$Var1+pars$Var2)
-  mod_results <- lapply(FUN=function(i){
-    estimate_signature(par = pars[i,], weatherData = weatherDataD, 
-                       consumptionData = consumptionDataD, localTimeZone)
-  },1:nrow(pars))
-  results <- data.frame(
-    "tbalh" = pars$tbalh,
-    "tbalc" = pars$tbalc,
-    "cost" = mapply(function(mod){
-      RMSE(mod$y, mod$yhat)
-    },mod_results)
-  )
-  if(all(results$cost == results$cost[1])){
-    if(plot){
-      print(ggplot() + 
-              geom_point(aes(x=weatherDataD$temperature, 
-                             y=consumptionDataD$consumption)) + 
-              geom_point(aes(x=mod_results[[1]]$temperature,
-                             y=mod_results[[1]]$yhat),
-                         col="red",size=2) +
-              theme_bw() + xlab("temperature (ºC)") + ylab("consumption (kWh)"))
-    }
-    return(
-      list(
-        "tbalh" = NA,
-        "tbalc" = NA,
-        "heating" = F,
-        "cooling" = F
-      )
-    )
-  }
-  best <- which.min(results$cost)
-  if(plot){
-    g <- ggplot() + 
-      geom_point(aes(x=weatherDataD$temperature, 
-                    y=consumptionDataD$consumption)) + 
-      geom_point(aes(x=mod_results[[best]]$temperature,
-                     y=mod_results[[best]]$yhat),
-                 col="red",size=2) +
-      theme_bw() + xlab("temperature (ºC)") + ylab("consumption (kWh)")
-    if("hdd" %in% names(mod_results[[best]]$mod@penalized))
-      g <- g + geom_vline(aes(xintercept=results$tbalh[best]),col="red",alpha=0.5)
-    if("cdd" %in% names(mod_results[[best]]$mod@penalized))
-      g <- g + geom_vline(aes(xintercept=results$tbalc[best]),col="blue",alpha=0.5)
-    print(g)
-  }
-  # mod_results <<- mod_results
-  # consumptionDataD <<- consumptionDataD
-  # weatherDataD <<- weatherDataD
-  # best2 <<- best
-  # # best <- best2
-  # results <<- results
-  r2 <- tryCatch(cor(mod_results[[best]]$y,mod_results[[best]]$yhat)^2,
-                 warning=function(e){0})
-  
-  avghdd <- mean(mod_results[[best]]$mod@penalized[grepl("hdd",names(mod_results[[best]]$mod@penalized))])
-  avgcdd <- mean(mod_results[[best]]$mod@penalized[grepl("cdd",names(mod_results[[best]]$mod@penalized))])
-  # Check if the hdd and cdd are higher or equal than 
-  # 0.75% of average daily consumption per degree day
-  heating_dep <- (if(is.finite(avghdd) && r2>=0.1){avghdd} else {0}) >= 
-    mean(consumptionDataD$consumption,na.rm=T)*0.005
-  cooling_dep <- (if(is.finite(avgcdd) && r2>=0.1){avgcdd} else {0}) >= 
-    mean(consumptionDataD$consumption,na.rm=T)*0.005
-  return(
-    list(
-      "tbalh" = if(heating_dep){results$tbalh[best]} else {NA},
-      "tbalc" = if(cooling_dep){results$tbalc[best]} else {NA},
-      "heating" = heating_dep,
-      "cooling" = cooling_dep
-      )
-  )
-}
-
-#' Estimate the optimal change point temperature and weather dependance (v2)
-#' 
-#' Calculate change point temperature by modeling temperature vs consumption
-#' relationship using a multi-step weather dependency signature model.
-#' Multi-step weather dependency signature model is based in best
-#' fitting penalised regression model analysis. Regression quality analysis
-#' is used to identify wether proposed model properly describes the
-#' weather vs consumption relationship. Model coefficients analysis is used
-#' is used to identify type and amount of weather dependency.
-#'
-#' @param consumptionData <data.frame> containing consumption time series.
-#' The time zone of the datetimes must be UTC.
-#' @param weatherData <data.frame> containing temperature time series.
-#' The time zone of the datetimes must be UTC.
-#' @param consumptionFeature <string> with the name of consumption column.
-#' @param temperatureFeature <string> with the name of temperature column.
-#' @param consumptionGroupFeature <string> with the name of column in consumptionData
-#' that describes the grouping feature used in the estimation model.
-#' @param localTimeZone <string> specifying the local time zone related to
-#' the building in analysis. The format of this time zones are defined by
-#' the IANA Time Zone Database (https://www.iana.org/time-zones). This
-#' argument is optional, by default no transformation to local time zone is
-#' done.
-#' @param plot <boolean> Plot change point model describing load vs
-#' temperature relationship in order to identify breakpoints
-#' @return Changepoint analysis results attributes <struct>
-#      - tbal. Change point temperature 
-#      - heating. Heating dependency detected
-#      - cooling. Cooling dependency detected
-
-get_change_point_temperature_v2 <- function(consumptionData, weatherData, 
-                                         consumptionFeature, 
-                                         temperatureFeature,
-                                         consumptionGroupFeature=NULL,
-                                         localTimeZone, plot = F){
+                                            consumptionFeature, 
+                                            temperatureFeature,
+                                            consumptionGroupFeature=NULL,
+                                            localTimeZone, plot = F){
   
   weatherData <- weatherData[,c("time",temperatureFeature)]
   colnames(weatherData) <- c("time","temperature")
@@ -974,11 +743,10 @@ get_change_point_temperature_v2 <- function(consumptionData, weatherData,
               .groups = 'drop')
   
   if(is.null(consumptionGroupFeature)){
-    consumptionData <- data.frame(
-      consumptionData[,c("time",consumptionFeature)],"01")
+    consumptionData <- data.frame(consumptionData[,c("time",consumptionFeature)],"01")
+    consumptionGroupFeature <- "group"
   } else {
-    consumptionData <- consumptionData[,c("time",consumptionFeature,
-                                          consumptionGroupFeature)]
+    consumptionData <- consumptionData[,c("time",consumptionFeature, consumptionGroupFeature)]
   }
   colnames(consumptionData) <- c("time","consumption","group")
   n_timesteps <- hourly_timesteps(24,detect_time_step(consumptionData$time))
@@ -990,204 +758,129 @@ get_change_point_temperature_v2 <- function(consumptionData, weatherData,
       group = first(group),
       .groups = 'drop')
   
-  estimate_signature <- function(par, weatherDataD, consumptionDataD, localTimeZone){
-    newdata <- consumptionDataD %>% mutate(time=lubridate::force_tz(time,localTimeZone))
-    newdata <- newdata %>% 
-      left_join(weatherDataD, by="time") %>% 
-      left_join(
-        degree_days(
-          data = weatherData, 
-          temperatureFeature = "temperature", 
-          outputFrequency = "D", 
-          localTimeZone = localTimeZone,
-          baseTemperature = par["tbalh"], 
-          mode = "heating",
-          hysteresisBaseTemperature = 0,
-          outputFeaturesName = "hdd",
-          fixedOutputFeaturesName=T),
-        by="time") %>%
-      left_join(
-        degree_days(
-          data = weatherData, 
-          temperatureFeature = "temperature", 
-          outputFrequency = "D", 
-          localTimeZone = localTimeZone,
-          baseTemperature = par["tbalc"], 
-          mode = "cooling",
-          hysteresisBaseTemperature = 0,
-          outputFeaturesName = "cdd",
-          fixedOutputFeaturesName=T),
-        by="time")
-    
-    newdata$heating_intercept <- ifelse(newdata$hdd>0, 1, 0)
-    newdata$cooling_intercept <- ifelse(newdata$cdd>0, 1, 0)
-    newdata$weekday <- strftime(newdata$time,"%w")
-    
-    # if(length(unique(newdata$weekday))>1){
-    #   mod <- lm(consumption ~ 0 + weekday + hdd + cdd , newdata)
-    #   x <- suppressMessages(model.matrix( ~ 0 + weekday + hdd + cdd,newdata))
-    #   y <- unlist(newdata[,"consumption"])
-    #   cv <- glmnet::cv.glmnet(x,y)
-    #   hdd_slope <- coef(cv)["hdd",1]>0
-    #   cdd_slope <- coef(cv)["cdd",1]>0
-    #   newdata$fix <- 1
-    #   mod <- list(
-    #     "mod"= penalized(y,penalized =
-    #                         if(hdd_slope && cdd_slope){
-    #                           as.formula("~ 0 + hdd + cdd")
-    #                         } else if (hdd_slope){as.formula("~ 0 + hdd")
-    #                         } else if (cdd_slope){as.formula("~ 0 + cdd")
-    #                         } else {~ fix},
-    #                     unpenalized = ~ 0 + weekday, data=newdata,
-    #                     positive = T,
-    #                     trace = F)
-    #   )
-    #   mod[["yhat"]] <- mod$mod@fitted
-    #   mod[["y"]] <- y
-    #   mod[["temperature"]] <- newdata$temperature
-    # } else {
-    # x <- suppressMessages(
-    #   model.matrix(~ 1 + hdd + cdd, newdata))
-    # y <- unlist(newdata[,"consumption"])
-    hdd_slope <- (sum(newdata$hdd>0)/nrow(newdata))>0.2
-    cdd_slope <- (sum(newdata$cdd>0)/nrow(newdata))>0.2
-    
-    group_var <- length(unique(newdata$group))>1
-    if(group_var){
-      #newdata$group <- as.factor(newdata$group)
-      form <- if(hdd_slope && cdd_slope){
-        as.formula("consumption ~ group + hdd:group + cdd:group")# + heating_intercept:group + cooling_intercept:group")
-      } else if (hdd_slope) { as.formula("consumption ~ group + hdd:group")# + heating_intercept:group")
-      } else if (cdd_slope) { as.formula("consumption ~ group + cdd:group")# + cooling_intercept:group")
-      } else {consumption ~ group}
-    } else {
-      form <- if(hdd_slope && cdd_slope){
-        as.formula("consumption ~ 1 + hdd + cdd")
-      } else if (hdd_slope) { as.formula("consumption ~ 1 + hdd")
-      } else if (cdd_slope) { as.formula("consumption ~ 1 + cdd")
-      } else {consumption ~ 1}
-    }
-    mod <- lm(formula = form, data = newdata)
-           #quantreg::rq(form, data = newdata, tau = 0.5)    # mod <- list(
-    #   "mod"= penalized(
-    #     response = y,
-    #     penalized =
-    #      form, 
-    #     unpenalized = ~1,
-    #     data=newdata,
-    #     positive = T,# lambda1 = tail(cv$lambda,1), lambda2 = tail(cv$lambda,1),
-    #     trace=F)
-    # )
-    if(sum(
-        is.na(mod$coefficients) | (
-          grepl("hdd|cdd",names(mod$coefficients)) & ( 
-          mod$coefficients<0 | is.na(mod$coefficients)) ) , 
-      na.rm=T) > 0 ) {
-      mod$coefficients[ 
-        is.na(mod$coefficients) | (
-          grepl("hdd|cdd",names(mod$coefficients)) & ( 
-            mod$coefficients<0 | is.na(mod$coefficients)) ) ] <- 0
-    }
-    mod[["yhat"]] <- predict(mod,newdata)
-      #mod$mod@fitted
-    mod[["y"]] <- newdata$consumption
-    mod[["temperature"]] <- newdata$temperature
-    # }
-    mod
-    #a <- summary(mod)
-    
-    # plot(newdata$hdd,col="red", ylim=c(0,40))
-    # points(newdata$cdd,col="blue")
+  newdata <- consumptionDataD %>% mutate(time=lubridate::force_tz(time,localTimeZone))
+  newdata <- newdata %>% 
+    left_join(weatherDataD, by="time")
+  newdata$weekday <- strftime(newdata$time,"%w")
+  newdata$group <- as.factor(newdata$group)
+
+  group_var <- length(unique(newdata$group))>1
+  if(group_var){
+    #newdata$group <- as.factor(newdata$group)
+    temp_term <- "s(temperature)"
+    form <- as.formula(paste0("consumption ~ 0 + group + s(temperature, by=group)"))
+  } else {
+    temp_term <- "s(temperature)"
+    form <- as.formula(paste0("consumption ~ 1 + s(temperature)"))
   }
-  tbals <- seq(ceiling(quantile(weatherData$temperature,0.1,na.rm=T)),
-               floor(quantile(weatherData$temperature,0.9,na.rm=T)),
-               by=1)
-  hysteresis <- seq(1,8,by=1)
-  pars <- expand.grid(tbals,hysteresis)
-  pars <- data.frame(
-    "tbalh"=pars$Var1-pars$Var2,
-    "tbalc"=pars$Var1+pars$Var2)
-  mod_results <- lapply(FUN=function(i){
-    estimate_signature(par = pars[i,], weatherDataD = weatherDataD, 
-                       consumptionDataD = consumptionDataD, localTimeZone)
-  },1:nrow(pars))
-  results <- data.frame(
-    "tbalh" = pars$tbalh,
-    "tbalc" = pars$tbalc,
-    "cost" = mapply(function(mod){
-      RMSE(mod$y, mod$yhat)
-    },mod_results)
-  )
-  if(all(results$cost == results$cost[1])){
-    if(plot){
-      print(ggplot() + 
-              geom_point(aes(x=weatherDataD$temperature, 
-                             y=consumptionDataD$consumption)) + 
-              geom_point(aes(x=mod_results[[1]]$temperature,
-                             y=mod_results[[1]]$yhat),
-                         col="red",size=2) +
-              theme_bw() + xlab("temperature (ºC)") + ylab("consumption (kWh)"))
-    }
-    return(
-      setNames(data.frame(
-        unique(consumptionData$group), NA, NA, F, F), 
-        c(consumptionGroupFeature,"tbalh","tbalc","heating","cooling"))
+  
+  mod <- gam(form, data = newdata)
+  mod[["yhat"]] <- predict(mod,newdata)
+  mod[["y"]] <- newdata$consumption
+  mod[["temperature"]] <- newdata$temperature
+  
+  pred_mat <- predict(mod, 
+                      newdata = newdata, 
+                      type = "link", 
+                      se.fit = TRUE,
+                      unconditional = TRUE)
+  fd_tw_fit <- gratia::derivatives(object = mod,
+                           term = "s(temperature)",
+                           data = newdata,
+                           order = 1L,
+                           type = "central",
+                           n = 40,
+                           eps = 0.1,
+                           interval = "confidence",
+                           n_sim = 100,
+                           unconditional = F, 
+                           partial_match = TRUE)
+  signifD <- function(x, d, upper, lower, eval = 0) {
+    miss <- upper > eval & lower < eval
+    incr <- decr <- x
+    want <- d > eval
+    incr[!want | miss] <- NA
+    want <- d < eval
+    decr[!want | miss] <- NA
+    list(incr = incr, decr = decr)
+  }
+  m2.dsig <- signifD(x = pred_mat$fit, 
+                     d = fd_tw_fit$derivative,
+                     upper = fd_tw_fit$upper, 
+                     lower = fd_tw_fit$lower,
+                     eval = 0)
+  incr <- which( !(is.na(m2.dsig$incr)) ) %>%
+    fd_tw_fit[.,]
+  
+  decr <- which( !(is.na(m2.dsig$decr)) ) %>%
+    fd_tw_fit[.,] 
+  
+  # Calculate upper and lower confidence Intervals
+  upper_2se <- (pred_mat$fit) + (pred_mat$se.fit*2)  
+  lwr_2se <- (pred_mat$fit) - (pred_mat$se.fit*2)
+  pred_fit <- pred_mat$fit
+  
+  newdata %<>% dplyr::mutate(pred = pred_fit,
+                              lwr_2se = lwr_2se,
+                              upr_2se = upper_2se,
+                              weatherDep = ifelse(newdata$temperature %in% incr$data,
+                                                    "cooling",
+                                                    ifelse(newdata$temperature %in% decr$data,
+                                                           "heating",
+                                                           "not detected") ) %>%
+                                factor())
+  
+  # Summarise the balance temperatures and weather dependence per group
+  summarised_results <- do.call(rbind,
+    lapply( unique(newdata$group), 
+            FUN= function(gr){
+              tbalh <- newdata$temperature[newdata$group==gr & newdata$weatherDep=="heating"]
+              tbalc <- newdata$temperature[newdata$group==gr & newdata$weatherDep=="cooling"]
+              setNames(
+                data.frame(
+                  gr,
+                  "tbalh" = ifelse(any(is.finite(tbalh)),max(tbalh,na.rm=T),NA),
+                  "tbalc" = ifelse(any(is.finite(tbalc)),min(tbalc,na.rm=T),NA),
+                  "heating" = any(is.finite(tbalh)),
+                  "cooling" = any(is.finite(tbalc))
+                ), c(consumptionGroupFeature,"tbalh","tbalc","heating","cooling")
+              )}
+    ))
+  summarised_results <- summarised_results[order(summarised_results$s),]
+  
+  if(plot){
+    g <- ggplot(data = newdata, aes(x = temperature, y = pred, group = group, shape=group, color = weatherDep))+
+      geom_point(size = 1.25) +
+      scale_color_manual(
+        name = "Weather dependence",           
+        values = c("not detected" = "black",
+                   "cooling" = "blue",
+                   "heating" = "red")) +
+      scale_shape_discrete(name = "group") +
+      geom_ribbon(aes(ymin = lwr_2se, ymax = upr_2se),
+                  colour = "grey",
+                  alpha = 0.2,
+                  linetype = "blank") +
+      geom_point(data = newdata %>%
+                   select(temperature, consumption, weekday, group) %>%
+                   dplyr::mutate(weatherDep = "not detected" %>% factor()),
+                 aes(x = temperature, y = consumption, group=group, color = weatherDep),
+                 size = 1.5,
+                 alpha = 0.2,
+                 colour = "black") +
+      theme_bw() + xlab("temperature (ºC)") + ylab("consumption (kWh)") 
+    print(
+      g / tableGrob(
+        summarised_results %>% rename("Balance temperature\nheating (ºC)"="tbalh", 
+                                      "Balance temperature\ncooling (ºC)"="tbalc",
+                                      "Heating dependence\ndetected" = "heating",
+                                      "Cooling dependence\ndetected" = "cooling"
+                                      ), 
+        rows=NULL,theme = ttheme_default(base_size = 8))
     )
   }
-  best <- which.min(results$cost)
-  if(plot){
-    g <- ggplot() + 
-      geom_point(aes(x=weatherDataD$temperature, 
-                     y=consumptionDataD$consumption)) + 
-      geom_point(aes(x=mod_results[[best]]$temperature,
-                     y=mod_results[[best]]$yhat),
-                 col="red",size=2) +
-      theme_bw() + xlab("temperature (ºC)") + ylab("consumption (kWh)")
-    if("hdd" %in% names(mod_results[[best]]$mod))
-      g <- g + geom_vline(aes(xintercept=results$tbalh[best]),col="red",alpha=0.5)
-    if("cdd" %in% names(mod_results[[best]]$mod))
-      g <- g + geom_vline(aes(xintercept=results$tbalc[best]),col="blue",alpha=0.5)
-    print(g)
-  }
-  # mod_results <<- mod_results
-  # consumptionDataD <<- consumptionDataD
-  # weatherDataD <<- weatherDataD
-  # best2 <<- best
-  # # best <- best2
-  # results <<- results
-  r2 <- tryCatch(cor(mod_results[[best]]$y,mod_results[[best]]$yhat)^2,
-                 warning=function(e){0})
-  baseload <- predict(mod_results[[best]],data.frame(
-    "group"=sort(unique(consumptionDataD$group)),
-    "hdd"=0,"cdd"=0,"heating_intercept"=0,"cooling_intercept"=0
-  ))
-  avg_hdd_cdd <- data.frame(
-    "group" = sort(unique(consumptionDataD$group)),
-    "baseload"=baseload,
-    "heating" = predict(mod_results[[best]],data.frame(
-      "group"=unique(consumptionDataD$group),
-      "hdd"=1, "cdd"=0, "heating_intercept"=0, "cooling_intercept"=0)) - baseload,
-    "cooling" = predict(mod_results[[best]],data.frame(
-      "group"=unique(consumptionDataD$group),
-      "hdd"=0, "cdd"=1, "heating_intercept"=0, "cooling_intercept"=0)) - baseload)
   
-  # Check if the hdd and cdd are higher or equal than 
-  # 0.75% of average daily consumption per degree day
-  heating_dep <- (if(is.finite(avg_hdd_cdd$heating) && r2>=0.2){avg_hdd_cdd$heating} else {0}) >= 
-    baseload*0.005
-  cooling_dep <- (if(is.finite(avg_hdd_cdd$cooling) && r2>=0.2){avg_hdd_cdd$cooling} else {0}) >= 
-    baseload*0.005
-  return(
-    setNames(data.frame(
-      avg_hdd_cdd$group,
-      "tbalh" = ifelse(heating_dep,results$tbalh[best],NA),
-      "tbalc" = ifelse(cooling_dep,results$tbalc[best],NA),
-      "heating" = heating_dep,
-      "cooling" = cooling_dep
-    ), 
-    c(if(is.null(consumptionGroupFeature)){"group"}else{consumptionGroupFeature},
-      "tbalh","tbalc","heating","cooling"))
-  )
+  return(summarised_results)
 }
 
 #

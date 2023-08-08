@@ -9,9 +9,6 @@ regression_metrics(data, lev = NULL, model = NULL)
 \arguments{
 \item{arg}{<>}
 }
-\value{
-
-}
 \description{
 Description
 }

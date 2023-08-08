@@ -742,10 +742,16 @@ get_device_aggregators <- function(
                                              }), nm = unique(aux$deviceAggregatorName))
                       dfs <- dfs[mapply(function(l)!is.null(l),dfs)]
                       if(is.null(dfs)) return(NULL)
-                      list(
-                        "df"=Reduce(function(df1, df2){merge(df1, df2, by = "time", all=T)}, dfs),
+                      tz <- lubridate::tz(dfs[[1]]$time)
+                      dfs <- lapply(dfs,function(x)cbind(x,data.frame("utctime"=lubridate::with_tz(x$time,"UTC"))))
+                      ldf <- list(
+                        "df"=Reduce(function(df1, df2){merge(df1[,!(colnames(df1)=="time")], 
+                                                             df2[,!(colnames(df2)=="time")], 
+                                                             by = "utctime", all=T)}, dfs),
                         "metadata"=devagg_buildings[devagg_buildings$buildingSubject==buildingSubject,]
                       )
+                      ldf$df$time <- lubridate::with_tz(ldf$df$utctime,tz)
+                      ldf
                     }
     ), nm = unique(devagg_buildings$buildingSubject))
   

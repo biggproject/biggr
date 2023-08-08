@@ -1553,7 +1553,7 @@ GLM <- function(input_parameters=NULL){
 #' @param forceOneStepPrediction -arg for biggr::predict.train()- 
 #' <boolean> indicating if the prediction mode should be done in one step 
 #' prediction mode. 
-#' @param modelMinMaxHorizonInHours -arg for biggr::predict.train()- 
+#' @param predictionHorizonInHours -arg for biggr::predict.train()- 
 #' <array> considering the minimum and maximum horizon in hours for each 
 #' prediction timestep. When forceOneStepPrediction is TRUE, this argument
 #' is not used.
@@ -1594,13 +1594,13 @@ GLM <- function(input_parameters=NULL){
 #'    )
 #'  )
 #'  # An example for model prediction is:
-#'  predictor <- crate(function(x, forceGlobalInputFeatures = NULL,modelMinMaxHorizonInHours=1,
+#'  predictor <- crate(function(x, forceGlobalInputFeatures = NULL,predictionHorizonInHours=1,
 #'  modelWindow="%Y-%m-%d", modelSelection="rmse"){
 #'    biggr::predict.train(
 #'      object = !!mod,
 #'      newdata = x,
 #'      forceGlobalInputFeatures = forceGlobalInputFeatures,
-#'      modelMinMaxHorizonInHours = modelMinMaxHorizonInHours,
+#'      predictionHorizonInHours = predictionHorizonInHours,
 #'      modelWindow = modelWindow,
 #'      modelSelection = modelSelection
 #'    )
@@ -1841,8 +1841,16 @@ RLS <- function(input_parameters=NULL){
     },
     predict = function(modelFit, newdata, submodels, forceGlobalInputFeatures=NULL, 
                        forceInitInputFeatures=NULL, forceInitOutputFeatures=NULL, 
-                       modelMinMaxHorizonInHours=1, modelWindow="%Y-%m-%d", 
-                       forceOneStepPrediction=F, modelSelection="rmse") {
+                       predictionHorizonInHours=0, modelMinMaxHorizonInHours=NULL, 
+                       modelWindow="%Y-%m-%d", forceOneStepPrediction=F, modelSelection="rmse") {
+      
+      # Deprecated args
+      if(!is.null(modelMinMaxHorizonInHours)){
+        warning("modelMinMaxHorizonInHours is deprecated! Please, use predictionHorizonInHours argument instead.\n")
+        if(predictionHorizonInHours==0){
+          predictionHorizonInHours <- modelMinMaxHorizonInHours
+        }
+      }
       
       newdata <- as.data.frame(newdata)
       newdata$localtime <- lubridate::with_tz(newdata$time,
@@ -1951,12 +1959,34 @@ RLS <- function(input_parameters=NULL){
         data.frame("yreal" = modelFit$yreal),
         data.frame("localtime" = modelFit$localtime),
         modelFit$coefficients) %>% full_join(all_times))
+      #mod_coef <- suppressMessages(pad(mod_coef, by="localtime"))
       mod_coef <- mod_coef[order(mod_coef$localtime),]
-      mod_coef <- zoo::na.locf(mod_coef)
+      mod_coef <- zoo::na.locf(mod_coef,fromLast = T,na.rm = F)
       
-      # Predict at multi-step ahead or one-step ahead prediction, 
-      # depending if some AR input is considered using the output variable
+      ## Predict at multi-step ahead or one-step ahead prediction, 
+      ## depending if some AR input is considered using the output variable
+      
+      predictionHorizonInHours_default = ifelse(length(predictionHorizonInHours)>1, 0, predictionHorizonInHours)
+      mod_coef_aux <- mod_coef
+      mod_coef_aux$localtime <- as.POSIXct(lubridate::with_tz(as.POSIXct(
+        lubridate::with_tz(mod_coef_aux$localtime,"UTC") +
+          lubridate::seconds(predictionHorizonInHours_default*3600)), tz=lubridate::tz(modelFit$localtime)))
+      # Select the existent model closer to the horizon required
+      if(!all(mod_coef_aux$localtime %in% mod_coef$localtime)){
+        mod_coef_aux$localtime[!(mod_coef_aux$localtime %in% mod_coef$localtime)] <- as.POSIXct(
+          mod_coef$localtime[
+            mapply(mod_coef_aux$localtime[!(mod_coef_aux$localtime %in% mod_coef$localtime)], 
+                   FUN= function(elem){ which.min(abs(as.numeric(elem - mod_coef$localtime)))}
+            )]
+        )
+      }
+      # Fill the gaps and get a data.frame with newdata dimensions
+      mod_coef_aux <- mod_coef_aux[!duplicated(mod_coef_aux$localtime),]
+      mod_coef_aux <- data.frame("localtime" = newdata$localtime) %>% left_join(mod_coef_aux, by="localtime")
+      mod_coef_aux <- zoo::na.locf(mod_coef_aux,fromLast = T,na.rm = F)
+
       if(forceOneStepPrediction==F & (paste("AR",outputName,sep="_") %in% colnames(param))){
+        # MULTIPLE STEPS (slower)
         for (i in 1:nrow(newdata)){
           newdata <- lag_components(data = newdata,
                                     maxLag = maxLag,
@@ -1969,17 +1999,19 @@ RLS <- function(input_parameters=NULL){
           )
         }
       } else {
-        newdata[newdata$localtime %in% mod_coef$localtime, 
-                outputName] <- 
+        # ONE STEP
+        newdata[newdata$localtime %in% mod_coef_aux$localtime,outputName] <- 
           rowSums(
-            newdata_matrix[newdata$localtime %in% mod_coef$localtime,
+            newdata_matrix[newdata$localtime %in% mod_coef_aux$localtime,
                            colnames(modelFit$coefficients)] * 
-              as.matrix(mod_coef[mod_coef$localtime %in% newdata$localtime,colnames(modelFit$coefficients)]),
-          na.rm=T
-        )
+              as.matrix(mod_coef_aux[mod_coef_aux$localtime %in% newdata$localtime,
+                                 colnames(modelFit$coefficients)]),
+            na.rm=T
+          )
       }
-        # return the output
-      if(identical(modelMinMaxHorizonInHours,1)){
+      
+      # return the output
+      if(length(predictionHorizonInHours)==1){
         result <- 
           if (logOutput) {
             exp(newdata[,outputName])
@@ -1999,7 +2031,7 @@ RLS <- function(input_parameters=NULL){
           stop("Horizons per step higher than 1 are not allowed when predicting multiple step ahead of ARX models")
         } else {
           mod_coef <- mod_coef[
-            mod_coef$localtime >= min(newdata$localtime)-lubridate::hours(max(modelMinMaxHorizonInHours)) &
+            mod_coef$localtime >= min(newdata$localtime)-lubridate::hours(max(predictionHorizonInHours)) &
             mod_coef$localtime <= max(newdata$localtime),
           ]
           mod_coef$window <- strftime(mod_coef$localtime,modelWindow)
@@ -2026,8 +2058,8 @@ RLS <- function(input_parameters=NULL){
           multiple_preds <- lapply(1:nrow(mod_coef),
                  function(x){
                    mod_coef_aux <- mod_coef[x,]
-                   allowed_times <- newdata$localtime >= (mod_coef_aux[1,"localtime"]  + lubridate::hours(min(modelMinMaxHorizonInHours))) & 
-                       newdata$localtime <= (mod_coef_aux[1,"localtime"] + lubridate::hours(max(modelMinMaxHorizonInHours)))
+                   allowed_times <- newdata$localtime >= (mod_coef_aux[1,"localtime"]  + lubridate::hours(min(predictionHorizonInHours))) & 
+                       newdata$localtime <= (mod_coef_aux[1,"localtime"] + lubridate::hours(max(predictionHorizonInHours)))
                    result <- setNames(
                      data.frame(
                       newdata$localtime[allowed_times],
@@ -2431,12 +2463,12 @@ weather_dependence_disaggregator <- function(predictor, df, forceNoCooling, forc
                                              forceNoCoolingAndHeating=NULL,...){
   
   # Forcing only heating and only cooling dependency
-  baseload_and_cooling <- predictor( df, forceGlobalInputFeatures = forceNoHeating, ...)
-  baseload_and_heating <- predictor( df, forceGlobalInputFeatures = forceNoCooling, ...)
+  baseload_and_cooling <- predictor( df, forceGlobalInputFeatures = forceNoHeating, baseline = T)
+  baseload_and_heating <- predictor( df, forceGlobalInputFeatures = forceNoCooling, baseline = T)
   
   # Estimate the baseload consumption along the period
   if(is.null(forceNoCoolingAndHeating)) forceNoCoolingAndHeating <- c(forceNoCooling,forceNoHeating)
-  baseload <- predictor( df, forceGlobalInputFeatures = forceNoCoolingAndHeating, ...)
+  baseload <- predictor( df, forceGlobalInputFeatures = forceNoCoolingAndHeating, baseline = T)
   
   # Disaggregated predicted components and actual consumption
   disaggregated_df <- data.frame(

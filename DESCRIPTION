@@ -1,7 +1,7 @@
 Package: biggr
 Type: Package
 Title: biggr 
-Version: 1.1.0
+Version: 1.2.0
 Author: Gerard Mor, Aleix Badia, Eloi Gabaldón, Jordi Carbonell, Stoyan Danov, Florencia Lazzari, Gerard Laguna, Marc Girona, Jordi Cipriano, Riccardo De Vivo, Manu Lahariya.
 Maintainer: Gerard Mor <gmor@cimne.upc.edu>
 Description: "This is the R implementation of the AI Toolbox functions developed in the framework of BIGG EU-funded project" 
@@ -38,9 +38,13 @@ Depends:
     FinCal,
     jsonlite,
     digest,
+    matrixStats,
+    gratia,
+    ggplot2,
+    gridExtra,
     R (>= 4.1.2)
 License: "" 
-RoxygenNote: 7.1.2
+RoxygenNote: 7.2.3
 Suggests: 
     rmarkdown,
     knitr,

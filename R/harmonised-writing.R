@@ -230,7 +230,7 @@ calculate_indicator_not_aggregable_by_time <- function(indicator, annualEnergySa
     investment / affectedBuildingArea
   }
   else if(indicator == "AvoidanceCost"){
-    investment / (annualEnergySavings * lifespan)
+    investment / (annualCostSavings * lifespan)
   }
   else if(indicator == "SimplePayback"){
     investment / annualCostSavings
@@ -442,7 +442,7 @@ generate_longitudinal_benchmarking_indicators <- function (
   namespaces <- bigg_namespaces
   namespaces["biggresults"] <- buildingNamespace
   
-  if (is.null(prevResults)) {
+  if (is.null(prevResults) | length(prevResults)==0) {
     prevResults <- list(results_rdf=rdf(), results_ts=list()) 
   }
   
@@ -684,7 +684,7 @@ generate_eem_assessment_indicators <- function(
   
   data <- data[order(data[,timeColumn]),]
   
-  if (is.null(prevResults)) {
+  if (is.null(prevResults) | length(prevResults)==0) {
     prevResults <- list(results_rdf=rdf(), results_ts=list()) 
   }
   
@@ -842,8 +842,7 @@ generate_eem_assessment_indicators <- function(
                                 `bigg:timeSeriesIsCumulative` = F, 
                                 `bigg:timeSeriesStart` = min(indDfAux$start, na.rm = T), 
                                 `bigg:timeSeriesEnd` = max(indDfAux$end,  na.rm = T),
-                                `bigg:timeSeriesTimeAggregationFunction` = indicatorsTimeAggregationFunctions[[indicator]],
-                                `bigg:measuredPropertyComponent` = measuredPropertyComponent),
+                                `bigg:timeSeriesTimeAggregationFunction` = indicatorsTimeAggregationFunctions[[indicator]]),
                               if(frequency!=""){list(
                                 `bigg:timeSeriesFrequency` = frequency
                               )}), 
@@ -853,7 +852,10 @@ generate_eem_assessment_indicators <- function(
                                 `bigg:quantifiesKPI` = keyPerformanceIndicatorSubject,
                                 `bigg:hasMeasuredProperty` = if(startsWith(measuredProperty,"bigg:")){ 
                                   measuredProperty
-                                } else {paste0("bigg:",measuredProperty)}),
+                                } else {paste0("bigg:",measuredProperty)},
+                                `bigg:hasMeasuredPropertyComponent` = if(startsWith(measuredPropertyComponent,"bigg:")){ 
+                                  measuredPropertyComponent
+                                } else {paste0("bigg:",measuredPropertyComponent)}),
                                 if (!is.null(modelId)) { list(
                                   `bigg:isEstimatedByModel` = modelSubject)
                                 }
@@ -1097,8 +1099,7 @@ generate_eem_assessment_indicators <- function(
                                     `bigg:timeSeriesIsCumulative` = F, 
                                     `bigg:timeSeriesStart` = min(indDfAux$start, na.rm = T), 
                                     `bigg:timeSeriesEnd` = max(indDfAux$end,  na.rm = T),
-                                    `bigg:timeSeriesTimeAggregationFunction` = indicatorsTimeAggregationFunctions[[indicator]],
-                                    `bigg:measuredPropertyComponent` = measuredPropertyComponent),
+                                    `bigg:timeSeriesTimeAggregationFunction` = indicatorsTimeAggregationFunctions[[indicator]]),
                                     if(frequency!=""){list(
                                       `bigg:timeSeriesFrequency` = frequency
                                     )}), 
@@ -1108,7 +1109,10 @@ generate_eem_assessment_indicators <- function(
                                     `bigg:quantifiesKPI` = keyPerformanceIndicatorSubject,
                                     `bigg:hasMeasuredProperty` = if(startsWith(measuredProperty,"bigg:")){ 
                                       measuredProperty
-                                    } else {paste0("bigg:",measuredProperty)}),
+                                    } else {paste0("bigg:",measuredProperty)},
+                                    `bigg:hasMeasuredPropertyComponent` = if(startsWith(measuredPropertyComponent,"bigg:")){ 
+                                      measuredPropertyComponent
+                                    } else {paste0("bigg:",measuredPropertyComponent)}),
                                     if (!is.null(modelId)) { list(
                                       `bigg:isEstimatedByModel` = modelSubject)
                                     }

@@ -9,6 +9,7 @@ get_change_point_temperature(
   weatherData,
   consumptionFeature,
   temperatureFeature,
+  consumptionGroupFeature = NULL,
   localTimeZone,
   plot = F
 )
@@ -24,6 +25,9 @@ The time zone of the datetimes must be UTC.}
 
 \item{temperatureFeature}{<string> with the name of temperature column.}
 
+\item{consumptionGroupFeature}{<string> with the name of column in consumptionData
+that describes the grouping feature used. By default, no group is}
+
 \item{localTimeZone}{<string> specifying the local time zone related to
 the building in analysis. The format of this time zones are defined by
 the IANA Time Zone Database (https://www.iana.org/time-zones). This
@@ -35,6 +39,11 @@ temperature relationship in order to identify breakpoints}
 }
 \value{
 Changepoint analysis results attributes <struct>
+    - group. Group unique identifier
+    - tbalh. Change point temperature in heating season
+    - tbalh. Change point temperature in cooling season
+    - heating. Heating dependency detected
+    - cooling. Cooling dependency detected
 }
 \description{
 Calculate change point temperature by modeling temperature vs consumption
