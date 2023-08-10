@@ -9,6 +9,9 @@ estimate_occupancy(real = NULL, predicted, minOccupancy, timestep)
 \arguments{
 \item{arg}{<>}
 }
+\value{
+
+}
 \description{
 Description
 }

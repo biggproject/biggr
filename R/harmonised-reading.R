@@ -862,9 +862,37 @@ get_eem_details <- function(buildingsRdf, eemSubjects=NULL){
                             "http://qudt.org/vocab/unit/Euro",
                             result$Currency)
   
-  return(if(length(result)>0) {
+  return(if(nrow(result)>0) {
     result
   } else {NULL})
+}
+
+get_eem_projects <- function(buildingsRdf, buildingSubject, eemSubjects=NULL){
+  result <- suppressMessages(buildingsRdf %>% rdf_query(paste0(
+    paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),
+    '
+    SELECT ?eemProjectSubject ?buildingSubject ?eemSubject ?Description ?Investment ?DateStart ?DateEnd
+    WHERE {
+      ?eemProjectSubject a bigg:Project .
+      ?eemProjectSubject bigg:affectsBuilding ?buildingSubject .',
+      paste0('FILTER ( ?buildingSubject IN (<',paste(buildingSubject,collapse='>,<'),'>) ) .'),'
+      ?eemProjectSubject bigg:includesMeasure ?eemSubject .',
+      ifelse(!is.null(eemSubjects),paste0('
+            FILTER ( ?eemSubject IN (<',paste(eemSubjects,collapse='>,<'),'>) ) .'),'
+            '),
+      'optional { ?eemProjectSubject bigg:projectDescription ?Description .}
+       optional { ?eemProjectSubject bigg:projectInvestment ?Investment .}
+       optional { ?eemProjectSubject bigg:projectOperationalDate ?DateEnd .}
+       optional { ?eemProjectSubject bigg:projectStartDate ?DateStart .}
+    }')))
+  if(nrow(result)>0) {
+    result$eemProjectId <- factor(result$eemProjectSubject, levels=unique(result$eemProjectSubject), 
+                                  labels=c(1:length(unique(result$eemProjectSubject))))
+    return(result)
+  } else {return(NULL)}
 }
 
 #

@@ -2463,12 +2463,12 @@ weather_dependence_disaggregator <- function(predictor, df, forceNoCooling, forc
                                              forceNoCoolingAndHeating=NULL,...){
   
   # Forcing only heating and only cooling dependency
-  baseload_and_cooling <- predictor( df, forceGlobalInputFeatures = forceNoHeating, baseline = T)
-  baseload_and_heating <- predictor( df, forceGlobalInputFeatures = forceNoCooling, baseline = T)
+  baseload_and_cooling <- predictor( df, forceGlobalInputFeatures = forceNoHeating, ...)
+  baseload_and_heating <- predictor( df, forceGlobalInputFeatures = forceNoCooling, ...)
   
   # Estimate the baseload consumption along the period
   if(is.null(forceNoCoolingAndHeating)) forceNoCoolingAndHeating <- c(forceNoCooling,forceNoHeating)
-  baseload <- predictor( df, forceGlobalInputFeatures = forceNoCoolingAndHeating, baseline = T)
+  baseload <- predictor( df, forceGlobalInputFeatures = forceNoCoolingAndHeating, ...)
   
   # Disaggregated predicted components and actual consumption
   disaggregated_df <- data.frame(

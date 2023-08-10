@@ -326,10 +326,11 @@ detect_ts_calendar_model_outliers_window <- function(data,
 
 detect_profiled_data <- function(data, timeColumn = "localtime", valueColumn = "Qe"){
   if(lubridate::period("PT1H")<=detect_time_step(data[,timeColumn])){
-    data<-data.frame(
+    tz <- lubridate::tz(data[,timeColumn])
+    data <- data.frame(
       "time" = data[,timeColumn],
       "value" = data[,valueColumn],
-      "date" = as.Date(data[,timeColumn],tz=lubridate::tz(data[,timeColumn])),
+      "date" = as.Date(data[,timeColumn],tz=tz),
       "hour" = lubridate::hour(data[,timeColumn])
     )
     # Create wide data frame with aggregated hourly demand per
@@ -338,28 +339,32 @@ detect_profiled_data <- function(data, timeColumn = "localtime", valueColumn = "
       mutate(
         "hourly_lt"=as.POSIXct(format(time,"%Y-%m-%d %H"),
                                format="%Y-%m-%d %H",
-                               tz = attr(time[1],"tzone"))
+                               tz = tz)
       ) %>%
       group_by(hourly_lt) %>%
       summarise(value=sum(value,na.rm=T),
-                valueMin=min(value,na.rm=T),
-                valueMax=max(value,na.rm=T),
                 date=dplyr::first(date),
                 hour=dplyr::first(hour)) %>%
-      filter((valueMax-valueMax)>1) %>%
-      pivot_wider(id_cols=date,names_from=hour,values_from = value,names_sort = T)
+      left_join(
+        data %>% 
+          group_by(date) %>%
+          summarise(daily = sum(value,na.rm=T),
+                    dailymin = min(value,na.rm=T),
+                    dailymax = max(value,na.rm=T)
+                    ),
+        by="date"
+      ) %>%
+      mutate(value = round(value/daily,5)*100) %>%
+      pivot_wider(id_cols = c(date,daily), names_from=hour, values_from = value, names_sort = T)
+    data_wide$event <- apply(as.matrix(data_wide %>% select(-date)),1,paste,collapse="~")
     # Find duplicated days having same daily pattern. Same
     # consumption in each hour of the day
-    check_duplicated <- duplicated(apply(data_wide %>% select(-date),1,paste,collapse=""))
-    date_duplicated <- data_wide$date[check_duplicated]
-    if(length(date_duplicated)>0){
-      # Detect consecutive dates that are profiled.
-      date_duplicated <- sort(unique(
-        c(date_duplicated[(date_duplicated - dplyr::lag(date_duplicated,1))==1],
-        date_duplicated[(date_duplicated - dplyr::lag(date_duplicated,1))==1]-lubridate::days(1))
-      ))
-      date_duplicated <- date_duplicated[is.finite(date_duplicated)]
-    }
+    date_duplicated <- data_wide %>% 
+      filter(
+        ((event == lag(event,1) | event == lag(event,7) | event == lag(event,3) )
+         ) & (daily > quantile(daily,0.1,na.rm=T))
+        ) %>%
+      select(date) %>% unlist() %>% as.Date(tz=tz)
     return(date_duplicated)
   } else {
     warning("Profiled data can only be detected in hourly or quarterhourly time series")

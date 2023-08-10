@@ -9,6 +9,9 @@ get_matrix_building_space_use_types(buildingsRdf, splitSublevels = T)
 \arguments{
 \item{arg}{<>}
 }
+\value{
+
+}
 \description{
 Description
 }

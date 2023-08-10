@@ -9,6 +9,9 @@ inverse_boxcox_transformation(x, lambda)
 \arguments{
 \item{arg}{<>}
 }
+\value{
+
+}
 \description{
 Description
 }

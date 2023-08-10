@@ -12,6 +12,9 @@ get_device_aggregators_metadata(buildingsRdf)
 \arguments{
 \item{buildingsRdf}{<rdf> containing the information of a set of buildings.}
 }
+\value{
+
+}
 \description{
 Get the metadata of all device aggregators
  
