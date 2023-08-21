@@ -349,9 +349,8 @@ detect_profiled_data <- function(data, timeColumn = "localtime", valueColumn = "
         data %>% 
           group_by(date) %>%
           summarise(daily = sum(value,na.rm=T),
-                    dailymin = min(value,na.rm=T),
-                    dailymax = max(value,na.rm=T)
-                    ),
+                    dailymin = min(ifelse(is.finite(value),value,NA)),
+                    dailymax = max(ifelse(is.finite(value),value,NA))),
         by="date"
       ) %>%
       mutate(value = round(value/daily,5)*100) %>%
@@ -364,7 +363,11 @@ detect_profiled_data <- function(data, timeColumn = "localtime", valueColumn = "
         ((event == lag(event,1) | event == lag(event,7) | event == lag(event,3) )
          ) & (daily > quantile(daily,0.1,na.rm=T))
         ) %>%
-      select(date) %>% unlist() %>% as.Date(tz=tz)
+      select(date) %>% unlist() 
+    if(length(date_duplicated)>0){ 
+      date_duplicated <- date_duplicated %>% 
+        as.Date(tz=tz, origin=as.Date("1970-01-01",tz=tz))
+    }
     return(date_duplicated)
   } else {
     warning("Profiled data can only be detected in hourly or quarterhourly time series")
