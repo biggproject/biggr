@@ -1095,7 +1095,7 @@ detect_holidays_in_tertiary_buildings <- function(data, consumptionColumn, timeC
       data_ini[,consumptionColumn] <= cons_limit & is.finite(data_ini[,consumptionColumn]), timeColumn], tz=tz)
   
   # Add common holidays in ignored days.
-  if(length(ignoreDates)>0){
+  if(length(ignoreDates)>0 && any(data_ini$time %in% ignoreDates)){
     data_ini[,"holidays"] <- ifelse(data_ini$time %in% days_detected, 1, 0)
     data_ini <- calendar_components(data_ini,localTimeZone = tz)
     days_detected <- c(

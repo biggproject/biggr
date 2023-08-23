@@ -771,7 +771,7 @@ get_change_point_temperature <- function(consumptionData, weatherData,
     form <- as.formula(paste0("consumption ~ 0 + group + s(temperature, by=group)"))
   } else {
     temp_term <- "s(temperature)"
-    form <- as.formula(paste0("consumption ~ 1 + s(temperature)"))
+    form <- as.formula(paste0("consumption ~ 1 + s(temperature,k=1)"))
   }
   
   mod <- gam(form, data = newdata)
@@ -784,17 +784,20 @@ get_change_point_temperature <- function(consumptionData, weatherData,
                       type = "link", 
                       se.fit = TRUE,
                       unconditional = TRUE)
+  
   fd_tw_fit <- gratia::derivatives(object = mod,
                            term = "s(temperature)",
                            data = newdata,
                            order = 1L,
                            type = "central",
                            n = 40,
-                           eps = 0.1,
+                           eps = 0.01,
+                           level=0.95,
                            interval = "confidence",
                            n_sim = 100,
                            unconditional = F, 
                            partial_match = TRUE)
+  
   signifD <- function(x, d, upper, lower, eval = 0) {
     miss <- upper > eval & lower < eval
     incr <- decr <- x
@@ -804,16 +807,63 @@ get_change_point_temperature <- function(consumptionData, weatherData,
     decr[!want | miss] <- NA
     list(incr = incr, decr = decr)
   }
+  
   m2.dsig <- signifD(x = pred_mat$fit, 
                      d = fd_tw_fit$derivative,
                      upper = fd_tw_fit$upper, 
                      lower = fd_tw_fit$lower,
                      eval = 0)
-  incr <- which( !(is.na(m2.dsig$incr)) ) %>%
-    fd_tw_fit[.,]
+  group_vector_on_condition_and_nearby_elements <- function(condition){
+    gr <- 0
+    x <- rep(1,length(condition))
+    for(i in 1:length(condition)){
+      if(i==1){
+        x[i] <- NA
+      } else if (condition[i-1]==T && condition[i]==T){
+        x[i] <- gr
+      } else if (condition[i]==T){
+        gr <- gr + 1
+        x[i] <- gr
+      } else {
+        x[i] <- NA
+      }
+    }
+    return(x)
+  }
   
-  decr <- which( !(is.na(m2.dsig$decr)) ) %>%
-    fd_tw_fit[.,] 
+  fd_tw_fit <- fd_tw_fit %>% 
+    mutate(
+      incr = m2.dsig$incr,
+      incrl = !is.na(incr),
+      decr = m2.dsig$decr,
+      decrl = !is.na(decr)
+    ) %>%
+    arrange(group,data) %>%
+    group_by(group) %>% 
+    mutate(
+      incrg = group_vector_on_condition_and_nearby_elements(incrl),
+      decrg = group_vector_on_condition_and_nearby_elements(decrl)
+    ) %>% ungroup()
+    
+  
+  
+  # Do not allow heating dependencies with higher temperatures than cooling dependencies.
+  fd_tw_fit <- fd_tw_fit %>%
+    left_join(
+      fd_tw_fit %>% filter(!is.na(incrg)) %>% group_by(group,incrg) %>% summarise(
+        considerIncr = max(data) >= 20 & length(data)>=3 )
+    ) %>%
+    left_join(
+      fd_tw_fit %>% filter(!is.na(decrg)) %>% group_by(group,decrg) %>% summarise(
+        considerDecr = min(data) <= 16 & length(data)>=3 )
+    ) %>%
+    mutate(
+      incr = ifelse(considerIncr,incr,NA),
+      decr = ifelse(considerDecr,decr,NA)
+    )
+  
+  incr <- fd_tw_fit %>% filter(!is.na(incr))
+  decr <- fd_tw_fit %>% filter(!is.na(decr))
   
   # Calculate upper and lower confidence Intervals
   upper_2se <- (pred_mat$fit) + (pred_mat$se.fit*2)  
@@ -839,8 +889,8 @@ get_change_point_temperature <- function(consumptionData, weatherData,
               setNames(
                 data.frame(
                   gr,
-                  "tbalh" = ifelse(any(is.finite(tbalh)),max(tbalh,na.rm=T),NA),
-                  "tbalc" = ifelse(any(is.finite(tbalc)),min(tbalc,na.rm=T),NA),
+                  "tbalh" = ifelse(any(is.finite(tbalh)),round(max(tbalh,na.rm=T),2),NA),
+                  "tbalc" = ifelse(any(is.finite(tbalc)),round(min(tbalc,na.rm=T),2),NA),
                   "heating" = any(is.finite(tbalh)),
                   "cooling" = any(is.finite(tbalc))
                 ), c(consumptionGroupFeature,"tbalh","tbalc","heating","cooling")
