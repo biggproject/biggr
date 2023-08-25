@@ -605,6 +605,7 @@ compute_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
             useEstimatedValues = ',useEstimatedValues,'
           )')
       ))
+      aux_result$utctime <- lubridate::with_tz(aux_result$time,"UTC")
       if(ratioCorrection){
         if(any(grepl("^SUM",colnames(aux_result)))){
           for (sum_col in colnames(aux_result)[grepl("^SUM",colnames(aux_result))]){
@@ -618,7 +619,13 @@ compute_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
         result <- aux_result
       } else {
         elems <- colnames(result)
-        result <- merge(result, aux_result, by="time", suffixes=c("_1","_2"), all=T)
+        result$utctime <- lubridate::with_tz(result$time,"UTC")
+        result <- merge(result %>% select(-time), aux_result %>% select(-time), 
+                        suffixes=c("_1","_2"), all=T, 
+                        by.x="utctime",by.y="utctime")
+        result$time <- lubridate::with_tz(result$utctime,tz)
+        result$utctime <- NULL
+        elems <- elems[elems!="utctime"]
         if(is.null(op)) {
           stop("Device aggregator operator is not defined")
         } else if(op=="+") {
@@ -718,7 +725,7 @@ get_device_aggregators <- function(
                       }
                       dfs <- setNames(lapply(unique(aux$deviceAggregatorName),
                                              function(devAggName){
-                                               #devAggName = "totalGasConsumption"
+                                               #devAggName = "totalElectricityConsumption"
                                                df <- compute_device_aggregator_formula(
                                                  buildingsRdf = buildingsRdf,
                                                  timeseriesObject = timeseriesObject,

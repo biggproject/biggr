@@ -760,16 +760,16 @@ RandomForest <- function(input_parameters=NULL){
                    clusteringResults=NULL, 
                    ...) {
       
-      x <<- x
-      y <<- y
-      params <<- param
-      param <- params
-      formulaTerms <<- formulaTerms
-      transformationSentences <<- transformationSentences
-      maxPredictionValue <<- maxPredictionValue
-      minPredictionValue <<- minPredictionValue
-      clusteringResults <<- clusteringResults
-      trainMask <<- trainMask
+      # x <<- x
+      # y <<- y
+      # params <<- param
+      # param <- params
+      # formulaTerms <<- formulaTerms
+      # transformationSentences <<- transformationSentences
+      # maxPredictionValue <<- maxPredictionValue
+      # minPredictionValue <<- minPredictionValue
+      # clusteringResults <<- clusteringResults
+      # trainMask <<- trainMask
       
       features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
       outputName <- all.vars(formulaTerms)[1]
@@ -840,10 +840,10 @@ RandomForest <- function(input_parameters=NULL){
         data <- data[trainMask,]
       }
       
-      data_matrix <- model.matrix(ARX_form,data)
+      data_matrix <- model.matrix(ARX_form,data[is.finite(data[,outputName]),])
       colnames(data_matrix) <- gsub(":","_",colnames(data_matrix))
       
-      mod <- ranger(x = data_matrix, y=y, data = data, num.trees = 500,num.threads = 1,min.node.size = 6,
+      mod <- ranger(x = data_matrix, y=y[is.finite(y)], data = data, num.trees = 500,num.threads = 1,min.node.size = 6,
                     mtry = sqrt(ncol(data_matrix)), num.random.splits = 6,splitrule = 'extratrees')
       
       # Store the meta variables
@@ -873,8 +873,8 @@ RandomForest <- function(input_parameters=NULL){
     predict = function(modelFit, newdata, submodels, forceGlobalInputFeatures=NULL, forceInitInputFeatures=NULL,
                        forceInitOutputFeatures=NULL, forceOneStepPrediction=F, predictionIntervals=F) {
       
-      modelFit <<- modelFit
-      newdata <<- newdata
+      # modelFit <<- modelFit
+      # newdata <<- newdata
       
       newdata <- as.data.frame(newdata)
       features <- modelFit$meta$features[
