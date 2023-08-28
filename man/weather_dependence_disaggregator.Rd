@@ -16,6 +16,9 @@ weather_dependence_disaggregator(
 \arguments{
 \item{arg}{<>}
 }
+\value{
+
+}
 \description{
 Description
 }

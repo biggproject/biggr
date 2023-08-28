@@ -718,10 +718,10 @@ generate_eem_assessment_indicators <- function(
                                        if(length(unique(eemProjectDf$Currency))==1){
                                          list(`bigg:hasProjectInvestmentCurrency` = eemProjectDf$Currency[1])
                                        },
-                                       setNames(as.list(eemProjectDf$eemSubject),rep("bigg:includesMeasure",nrow(eemProjectDf))),
-                                       setNames(as.list(eemProjectDf$Type[order(eemProjectDf$Investment,decreasing = T)]),
-                                                rep("bigg:hasEnergyEfficiencyMeasureType",nrow(eemProjectDf))),
-                                       list(`bigg:affectsBuilding` = buildingSubject)), 
+                                       # setNames(as.list(eemProjectDf$Type[order(eemProjectDf$Investment,decreasing = T)]),
+                                       #          rep("bigg:hasEnergyEfficiencyMeasureType",nrow(eemProjectDf))),
+                                       # list(`bigg:affectsBuilding` = buildingSubject),
+                                       setNames(as.list(eemProjectDf$eemSubject),rep("bigg:includesMeasure",nrow(eemProjectDf)))), 
                                      namespaces = namespaces)
     }
   }
@@ -1004,7 +1004,7 @@ generate_eem_assessment_indicators <- function(
       eemProjectDf$ratioSingle <- rep(1/nrow(eemProjectDf),nrow(eemProjectDf))
     }
     
-    for (eemElem in nrow(eemProjectDf)){
+    for (eemElem in 1:nrow(eemProjectDf)){
       
       eemSingleDf <- eemProjectDf[eemElem,]
     

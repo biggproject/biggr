@@ -17,6 +17,9 @@ get_KPI_by_building(
 \arguments{
 \item{arg}{<>}
 }
+\value{
+
+}
 \description{
 Description
 }
