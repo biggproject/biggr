@@ -6,8 +6,8 @@
 \usage{
 generate_eem_assessment_indicators(
   data,
-  indicators,
-  indicatorsNotAggregableByTime,
+  indicatorsAggregatableByTime,
+  indicatorsNonAggregatableByTime,
   measuredProperty,
   measuredPropertyComponent,
   frequencies,
@@ -36,12 +36,12 @@ generate_eem_assessment_indicators(
 \arguments{
 \item{data}{<data.frame> that contains all resultant time series.}
 
-\item{indicators}{<array> of strings defining the KPIs to calculate. Possible values: 
+\item{indicatorsAggregatableByTime}{<array> of strings defining the KPIs to calculate. Possible values: 
 EnergyUseSavings, EnergyUseSavingsRelative, EnergyUseSavingsIntensity, 
 EnergyCostSavings, EnergyCostSavingsRelative, EnergyCostSavingsIntensity, 
 EnergyEmissionsSavings, EnergyEmissionsSavingsRelative, EnergyEmissionsSavingsIntensity.}
 
-\item{indicatorsNotAggregableByTime}{<string> defining the KPI to calculate. 
+\item{indicatorsNonAggregatableByTime}{<string> defining the KPI to calculate. 
 Possible values: NormalisedInvestmentCost, AvoidanceCost, SimplePayback, NetPresentValue, 
 ProfitabilityIndex, NetPresentValueQuotient, InternalRateOfReturn.}
 

@@ -13,7 +13,10 @@ get_sensor(
   aggFunctions,
   useEstimatedValues,
   integrateCost = T,
-  integrateEmissions = T
+  integrateEmissions = T,
+  transformToAggregatableMeasuredProperty = F,
+  aggregatableMeasuredPropertyName = NULL,
+  defaultFactorsByMeasuredProperty = NULL
 )
 }
 \arguments{

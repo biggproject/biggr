@@ -612,11 +612,11 @@ generate_longitudinal_benchmarking_indicators <- function (
 #' Results are always related to project of EEMs, which are single or combinations of multiple EEMs. 
 #' 
 #' @param data <data.frame> that contains all resultant time series.
-#' @param indicators <array> of strings defining the KPIs to calculate. Possible values: 
+#' @param indicatorsAggregatableByTime <array> of strings defining the KPIs to calculate. Possible values: 
 #' EnergyUseSavings, EnergyUseSavingsRelative, EnergyUseSavingsIntensity, 
 #' EnergyCostSavings, EnergyCostSavingsRelative, EnergyCostSavingsIntensity, 
 #' EnergyEmissionsSavings, EnergyEmissionsSavingsRelative, EnergyEmissionsSavingsIntensity.
-#' @param indicatorsNotAggregableByTime <string> defining the KPI to calculate. 
+#' @param indicatorsNonAggregatableByTime <string> defining the KPI to calculate. 
 #' Possible values: NormalisedInvestmentCost, AvoidanceCost, SimplePayback, NetPresentValue, 
 #' ProfitabilityIndex, NetPresentValueQuotient, InternalRateOfReturn.
 #' @param measuredProperty <uri> defining the energy consumption measured property. 
@@ -670,7 +670,7 @@ generate_longitudinal_benchmarking_indicators <- function (
 #' objects, that later can be transformed to TTL and JSON files.
 
 generate_eem_assessment_indicators <- function(
-    data, indicators, indicatorsNotAggregableByTime, measuredProperty, measuredPropertyComponent, frequencies, 
+    data, indicatorsAggregatableByTime, indicatorsNonAggregatableByTime, measuredProperty, measuredPropertyComponent, frequencies, 
     buildingId, buildingSubject, timeColumn, localTimeZone, eemProjectDf, forceAssessmentSingleEEM,
     consumptionColumn, indicatorsTimeAggregationFunctions, indicatorsUnitsSubjects, baselineConsumptionColumn = NULL, 
     buildingGrossFloorArea = NA, carbonEmissionsColumn = NULL, energyPriceColumn = NULL, 
@@ -749,7 +749,7 @@ generate_eem_assessment_indicators <- function(
   annualEndTimestamp <- NA
   
   # Assessment by EEM Project
-  for (indicator in indicators) {
+  for (indicator in indicatorsAggregatableByTime) {
     originalDataPeriod <- detect_time_step(data[, timeColumn])
     valueInd <- calculate_indicator(
       data, indicator, consumptionColumn, baselineConsumptionColumn, energyPriceColumn, carbonEmissionsColumn, 
@@ -912,7 +912,7 @@ generate_eem_assessment_indicators <- function(
   if(any(is.na(frequencies) | frequencies=="") && is.finite(annualEnergySavings) && 
     is.finite(annualCostSavings) && measuredPropertyComponent=="Total" ){
     frequency <- ""
-    for (indicatorNABT in indicatorsNotAggregableByTime){
+    for (indicatorNABT in indicatorsNonAggregatableByTime){
       indDfAux <- data.frame(
         "start" = annualStartTimestamp,
         "end" = annualEndTimestamp,
@@ -1014,7 +1014,7 @@ generate_eem_assessment_indicators <- function(
       annualEndTimestamp <- NA
       
       # Indicators that are aggregable by time
-      for (indicator in indicators) {
+      for (indicator in indicatorsAggregatableByTime) {
         originalDataPeriod <- detect_time_step(data[, timeColumn])
         valueInd <- calculate_indicator(data, indicator, consumptionColumn, baselineConsumptionColumn, energyPriceColumn, 
                                         carbonEmissionsColumn, buildingGrossFloorArea * eemSingleDf$AffectationShare/100, 
@@ -1170,7 +1170,7 @@ generate_eem_assessment_indicators <- function(
       if(any(is.na(frequencies) | frequencies=="") && is.finite(annualEnergySavings) && 
          is.finite(annualCostSavings) && measuredPropertyComponent=="Total"){
         frequency <- ""
-        for (indicatorNABT in indicatorsNotAggregableByTime){
+        for (indicatorNABT in indicatorsNonAggregatableByTime){
           indDfAux <- data.frame(
             "start" = annualStartTimestamp,
             "end" = annualEndTimestamp,

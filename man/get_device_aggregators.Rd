@@ -12,7 +12,11 @@ get_device_aggregators(
   useEstimatedValues = F,
   ratioCorrection = T,
   containsEEMs = F,
-  alignGreaterThanHourlyFrequencyToYearly = F
+  alignGreaterThanHourlyFrequencyToYearly = F,
+  transformToAggregatableMeasuredProperty = F,
+  aggregatableMeasuredPropertyName = NULL,
+  measuredPropertiesToAggregate = NULL,
+  defaultFactorsByMeasuredProperty = NULL
 )
 }
 \arguments{

@@ -330,10 +330,10 @@ get_sensor_file <- function(timeseriesObject,sensorId){
 #' or not. Important to set to TRUE when time series contain gaps.
 #' @return <data.frame> containing the resultant time series.
 
-get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz,
-                                      outputFrequency, aggFunctions,
-                                      useEstimatedValues, integrateCost = T,
-                                      integrateEmissions = T){
+get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz, outputFrequency, aggFunctions,
+                       useEstimatedValues, integrateCost = T, integrateEmissions = T, 
+                       transformToAggregatableMeasuredProperty = F, aggregatableMeasuredPropertyName = NULL, 
+                       defaultFactorsByMeasuredProperty = NULL){
   
   # Get period and aggregation function specific for the timeseries
   metadata <- get_sensor_metadata(buildingsRdf, sensorId, tz)
@@ -392,10 +392,14 @@ get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz,
                 quantile(difftime(timeseriesSensor$end, timeseriesSensor$start,
                                   tz = "UTC",units = "secs"), 0.1, na.rm=T)
               )))
-      i_timestep <- if(length(i_timestep)==0){nrow(timesteps)}else{i_timestep[1]-1}
+      i_timestep <- if(length(i_timestep)==0){nrow(timesteps)} else {i_timestep[1]-1}
       interpolateFrequency <- timesteps[i_timestep,"freq"]
     }
+    if(lubridate::as.period(outputFrequency) < lubridate::as.period(interpolateFrequency)){
+      interpolateFrequency <- outputFrequency
+    }
     metadata$timeSeriesFrequency <- interpolateFrequency
+    
     # Detect the subsets with no internal gaps
     timeseriesSensor$gapAfter <- ifelse(
       difftime(timeseriesSensor$start,lag(timeseriesSensor$end,1),units = "secs") > as.numeric(as.period(interpolateFrequency)),
@@ -510,8 +514,52 @@ get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz,
       energyTimeseriesSensor = timeseriesSensor)
   }
   
+  # Transform the sensor to an aggregatable measured property
+  if(transformToAggregatableMeasuredProperty){
+    timeseriesSensor <- sensor_measured_property_to_aggregatable_transformation(
+      buildingsRdf, timeseriesObject, 
+      timeseriesSensor = timeseriesSensor,
+      oldMeasuredProperty = metadata$measuredProperty,
+      newMeasuredProperty = aggregatableMeasuredPropertyName,
+      defaultFactorsByMeasuredProperty = defaultFactorsByMeasuredProperty
+    )
+  }
+  
   return(timeseriesSensor)
 }
+
+sensor_measured_property_to_aggregatable_transformation <- function(buildingsRdf, timeseriesObject, timeseriesSensor, 
+                                                                    oldMeasuredProperty, newMeasuredProperty, 
+                                                                    defaultFactorsByMeasuredProperty = NULL){
+  # Get the transformation factors from the dataset
+  # TO DO when defined in the ontology
+  # if () {
+  # } else
+  if(!is.null(defaultFactorsByMeasuredProperty)){
+    timeseriesFactor <- data.frame("time" = timeseriesSensor$time, 
+                                   "factor"= if(oldMeasuredProperty %in% names(defaultFactorsByMeasuredProperty)){
+                                     defaultFactorsByMeasuredProperty[[oldMeasuredProperty]]
+                                   } else if ("Other" %in% names(defaultFactorsByMeasuredProperty)) {
+                                     defaultFactorsByMeasuredProperty$Other
+                                   } else {1})
+  } else {
+    timeseriesFactor <- data.frame("time" = timeseriesSensor$time, "factor"=1)
+  }
+  
+  timeseriesSensor[grepl(paste0(oldMeasuredProperty,"$"),colnames(timeseriesSensor))] <- 
+    timeseriesSensor[grepl(paste0(oldMeasuredProperty,"$"),colnames(timeseriesSensor))] * 
+    timeseriesFactor$factor
+  timeseriesSensor[grepl(paste0(oldMeasuredProperty,"_EnergyPrice$"),colnames(timeseriesSensor))] <- 
+    timeseriesSensor[grepl(paste0(oldMeasuredProperty,"_EnergyPrice$"),colnames(timeseriesSensor))] * 
+    timeseriesFactor$factor
+  timeseriesSensor[grepl(paste0(oldMeasuredProperty,"_EnergyEmissionsFactor$"),colnames(timeseriesSensor))] <- 
+    timeseriesSensor[grepl(paste0(oldMeasuredProperty,"_EnergyEmissionsFactor$"),colnames(timeseriesSensor))] * 
+    timeseriesFactor$factor
+  colnames(timeseriesSensor) <- gsub(oldMeasuredProperty, newMeasuredProperty, colnames(timeseriesSensor))
+  
+  return(timeseriesSensor)
+}
+
 
 #
 # Read device aggregators ----
@@ -585,7 +633,10 @@ get_device_aggregators_metadata <- function(buildingsRdf){
 compute_device_aggregator_formula <- function(buildingsRdf, timeseriesObject, 
                                             buildingSubject, formula, 
                                             outputFrequency, aggFunctions,
-                                            useEstimatedValues, ratioCorrection=F, minRatioCorrection=0.7){
+                                            useEstimatedValues, ratioCorrection = F, minRatioCorrection=0.7,
+                                            transformToAggregatableMeasuredProperty = F, 
+                                            aggregatableMeasuredPropertyName = NULL,
+                                            defaultFactorsByMeasuredProperty = NULL){
   
   result <- data.frame()
   op <- NULL
@@ -602,7 +653,10 @@ compute_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
             tz = "',tz,'",
             outputFrequency = "',outputFrequency,'",
             aggFunctions = ',paste0('c("',paste(aggFunctions,collapse='","'),'")'),',
-            useEstimatedValues = ',useEstimatedValues,'
+            useEstimatedValues = ',useEstimatedValues,',
+            transformToAggregatableMeasuredProperty = transformToAggregatableMeasuredProperty,
+            aggregatableMeasuredPropertyName = aggregatableMeasuredPropertyName,
+            defaultFactorsByMeasuredProperty = defaultFactorsByMeasuredProperty
           )')
       ))
       aux_result$utctime <- lubridate::with_tz(aux_result$time,"UTC")
@@ -681,7 +735,9 @@ compute_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
 get_device_aggregators <- function(
     buildingsRdf, timeseriesObject=NULL, allowedBuildingSubjects=NULL, 
     allowedMeasuredProperties=NULL, useEstimatedValues=F, ratioCorrection=T,
-    containsEEMs=F, alignGreaterThanHourlyFrequencyToYearly=F){
+    containsEEMs=F, alignGreaterThanHourlyFrequencyToYearly=F,
+    transformToAggregatableMeasuredProperty = F, aggregatableMeasuredPropertyName = NULL,
+    measuredPropertiesToAggregate = NULL, defaultFactorsByMeasuredProperty = NULL){
   
   # Get formulas and associated metadata for each building and device aggregator
   devagg_buildings <- get_device_aggregators_metadata(buildingsRdf)
@@ -717,15 +773,23 @@ get_device_aggregators <- function(
                       aux$deviceAggregatorFrequency <- ifelse(
                         is.na(aux$deviceAggregatorFrequency), 
                         "P1M", aux$deviceAggregatorFrequency)
-                      largerFrequency <-
-                        aux$deviceAggregatorFrequency[
-                          which.max(lubridate::seconds(lubridate::period(aux$deviceAggregatorFrequency)))]
-                      if(alignGreaterThanHourlyFrequencyToYearly && as.period(largerFrequency)>as.period("PT1H")){
-                        largerFrequency <- "P1Y"
+                      if(transformToAggregatableMeasuredProperty){
+                        largerFrequencies <-
+                          aux$deviceAggregatorFrequency[ aux$measuredProperty %in% measuredPropertiesToAggregate ]
+                        largerFrequency <- largerFrequencies[
+                            which.min(lubridate::seconds(lubridate::period(largerFrequencies)))]
+                      } else {
+                        largerFrequency <-
+                          aux$deviceAggregatorFrequency[
+                            which.max(lubridate::seconds(lubridate::period(aux$deviceAggregatorFrequency)))]
+                        if(alignGreaterThanHourlyFrequencyToYearly && as.period(largerFrequency)>as.period("PT1H")){
+                          largerFrequency <- "P1Y"
+                        }
                       }
+                      
                       dfs <- setNames(lapply(unique(aux$deviceAggregatorName),
                                              function(devAggName){
-                                               #devAggName = "totalElectricityConsumption"
+                                               #devAggName = "totalGasConsumption"
                                                df <- compute_device_aggregator_formula(
                                                  buildingsRdf = buildingsRdf,
                                                  timeseriesObject = timeseriesObject,
@@ -737,7 +801,12 @@ get_device_aggregators <- function(
                                                    unique(aux[aux$deviceAggregatorName==devAggName,
                                                               "deviceAggregatorTimeAggregationFunction"]), use.names = F),
                                                  useEstimatedValues = useEstimatedValues,
-                                                 ratioCorrection = ratioCorrection
+                                                 ratioCorrection = ratioCorrection,
+                                                 transformToAggregatableMeasuredProperty = 
+                                                   if(devAggName %in% names(measuredPropertiesToAggregate)){
+                                                     transformToAggregatableMeasuredProperty} else {F}, 
+                                                 aggregatableMeasuredPropertyName = aggregatableMeasuredPropertyName,
+                                                 defaultFactorsByMeasuredProperty = defaultFactorsByMeasuredProperty
                                                )
                                                if(is.null(df)){
                                                  return(NULL)
@@ -757,8 +826,30 @@ get_device_aggregators <- function(
                                                              by = "utctime", all=T)}, dfs),
                         "metadata"=devagg_buildings[devagg_buildings$buildingSubject==buildingSubject,]
                       )
+                      
+                      # Aggregation of all the energy measured properties and convert them appropriately
+                      if(transformToAggregatableMeasuredProperty){
+                        colnames(ldf$df) <- gsub(paste0("^",names(measuredPropertiesToAggregate),collapse="|"), 
+                                                 aggregatableMeasuredPropertyName, colnames(ldf$df))
+                        ldf$df <- as.data.frame(
+                          setNames(lapply(unique(colnames(ldf$df)),
+                            function(x){
+                              # IMPORTANT! na.rm is set to false because data from all the possible sources need to be 
+                              # described, if not, the aggregation could generate misleading time series.
+                              if(grepl(".AVG_|GAPS|RATIO",x) && !is.null(nrow(ldf$df[,which(colnames(ldf$df) %in% x)]))){
+                                rowMeans(ldf$df[,which(colnames(ldf$df) %in% x)],na.rm=F)
+                              } else if(grepl(".SUM_",x) && !is.null(nrow(ldf$df[,which(colnames(ldf$df) %in% x)]))){
+                                rowSums(ldf$df[,which(colnames(ldf$df) %in% x)],na.rm=F)
+                              } else {ldf$df[,which(colnames(ldf$df) %in% x)]}
+                            }),unique(colnames(ldf$df))))
+                      }
+                      # plot(aaa$EnergyConsumptionTotal.SUM_EnergyConsumptionTotal,type="l")
+                      # lines(ldf$df[,which(colnames(ldf$df) %in% "EnergyConsumptionTotal.SUM_EnergyConsumptionTotal")[1]],col="red")
+                      # lines(ldf$df[,which(colnames(ldf$df) %in% "EnergyConsumptionTotal.SUM_EnergyConsumptionTotal")[2]],col="blue")
+                      ldf$df[grepl(".utctime",colnames(ldf$df))] <- NULL
                       ldf$df$time <- lubridate::with_tz(ldf$df$utctime,tz)
-                      ldf
+                      
+                      return(ldf)
                     }
     ), nm = unique(devagg_buildings$buildingSubject))
   

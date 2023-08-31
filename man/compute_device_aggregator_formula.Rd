@@ -13,7 +13,10 @@ compute_device_aggregator_formula(
   aggFunctions,
   useEstimatedValues,
   ratioCorrection = F,
-  minRatioCorrection = 0.7
+  minRatioCorrection = 0.7,
+  transformToAggregatableMeasuredProperty = F,
+  aggregatableMeasuredPropertyName = NULL,
+  defaultFactorsByMeasuredProperty = NULL
 )
 }
 \arguments{
