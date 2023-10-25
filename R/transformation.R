@@ -437,6 +437,18 @@ calendar_components <- function (data, localTimeZone = NULL, holidays = c(), inp
            ifelse(d >= SE & d < SS, "Spring",
                   ifelse(d >= SS & d < FE, "Summer", "Fall")))
   }
+  
+  ## Holidays count
+  start_date <- holidays[1]
+  end_date <- holidays[length(holidays)]
+  date_sequence <- seq(start_date, end_date, by="1 month")
+  formatted_dates <- format(date_sequence, "%Y-%m")
+  unique_dates <- unique(formatted_dates) # List of months in holidays, %Y-%m
+  holiday_counts <- table(format(holidays, "%Y-%m"))
+  month_counts <- table(unique_dates) -1
+  month_counts[names(month_counts) %in% names(holiday_counts)] <- holiday_counts
+  ## end holidays count
+  
   result <- data %>% summarise(
     localtime = lubridate::with_tz(time, localTimeZone), 
     date = lubridate::date(localtime), 
@@ -453,6 +465,7 @@ calendar_components <- function (data, localTimeZone = NULL, holidays = c(), inp
     season = as.factor(getSeason(localtime)),
     monthInt = month(localtime),
     month = as.factor(monthInt),
+    holidaysPerMonth = as.numeric(month_counts[format(date,"%Y-%m")][[1]]),
     day = day(localtime), 
     hour = hour(localtime),
     hourBy3 = as.factor(ceiling((hour+1)/3)),

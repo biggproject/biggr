@@ -1139,7 +1139,7 @@ get_holidays_NAGER <- function(year, country, region){
   return(data_region)
 }
 
-holidaysNAGER <- function(year, country, region=NULL){
+holidaysNAGER <- function(y, country, region=NULL){
   df <- sapply(y, get_holidays_NAGER, country, region)
   dates <- as.Date(c("2000-03-02")) # Irene's birthday as culprit
   
