@@ -1123,3 +1123,33 @@ detect_holidays_in_tertiary_buildings <- function(data, consumptionColumn, timeC
     return(unique(days_detected))
   }
 }
+
+get_holidays_NAGER <- function(year, country, region){
+  res = GET("https://date.nager.at",
+            path = list("api/v3/publicholidays", year, country))
+  data = fromJSON(rawToChar(res$content))
+  if (length(region) != 0){ # length of var is 0 if var is NULL, != 0 if var is defined
+    data_region <- data %>% filter(data$counties %in% list(paste(year, region, sep="-"), NULL))
+    for (el in 1:nrow(data))
+      if (typeof(data$counties[el]) == "list" && paste(year, region, sep="-") %in% data$counties[[el]])
+        data_region = rbind(data_region, data[el,])
+  } else {
+    data_region <- data
+  }
+  return(data_region)
+}
+
+holidaysNAGER <- function(y, country, region=NULL){
+  df <- sapply(y, get_holidays_NAGER, country, region)
+  dates <- as.Date(c("2000-03-02")) # Irene's birthday as culprit
+  
+  for (i in 1:length(y)){
+    # i = 1
+    for (ii in 1:length(df["date", i][[1]])){
+      # ii = 6
+      d <- as.Date(df[["date", i]][[ii]])
+      dates <- append(dates, d)
+    }
+  }
+  return(dates[-1])
+}
