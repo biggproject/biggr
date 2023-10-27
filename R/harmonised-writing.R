@@ -566,6 +566,9 @@ generate_longitudinal_benchmarking_indicators <- function (
       
       results_ts[[singleKPISubjectHash]] <- list()
       results_ts[[singleKPISubjectHash]]$basic <- indDfAux
+      results_ts[[singleKPISubjectHash]]$basic$start <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$start)
+      results_ts[[singleKPISubjectHash]]$basic$end <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$end)
+      
       if(lubridate::as.period(frequency)>=lubridate::as.period("P1M")){
         indDfAuxMeta <- data.frame(
           `individualSubject` = namespace_integrator(buildingSubject, namespaces),
@@ -876,6 +879,9 @@ generate_eem_assessment_indicators <- function(
       
       results_ts[[singleKPISubjectHash]] <- list()
       results_ts[[singleKPISubjectHash]]$basic <- indDfAux
+      results_ts[[singleKPISubjectHash]]$basic$start <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$start)
+      results_ts[[singleKPISubjectHash]]$basic$end <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$end)
+      
       if(frequency=="" | lubridate::as.period(frequency)>=lubridate::as.period("P1M")){
         indDfAuxMeta <- data.frame(
           `individualSubject` = namespace_integrator(projectSubject, namespaces),
@@ -885,7 +891,9 @@ generate_eem_assessment_indicators <- function(
           `measuredPropertyComponent` = namespace_integrator(paste0("bigg:",measuredPropertyComponent), namespaces),
           `unit` = namespace_integrator(indicatorsUnitsSubjects[[indicator]], namespaces),
           `frequency` = frequency,
-          `modelSubject` = namespace_integrator(modelSubject, namespaces)
+          `modelSubject` = namespace_integrator(modelSubject, namespaces),
+          `modelName` = if(is.na(modelSubject)){NA}else{namespace_integrator(paste0("bigg:",modelName), namespaces)},
+          `modelBased` = !is.na(modelSubject)
         )
         results_ts[[singleKPISubjectHash]]$full <- cbind(indDfAux,indDfAuxMeta)
         results_ts[[singleKPISubjectHash]]$full <- 
@@ -969,6 +977,9 @@ generate_eem_assessment_indicators <- function(
       
       results_ts[[singleKPISubjectHash]] <- list()
       results_ts[[singleKPISubjectHash]]$basic <- indDfAux
+      results_ts[[singleKPISubjectHash]]$basic$start <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$start)
+      results_ts[[singleKPISubjectHash]]$basic$end <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$end)
+      
       if(frequency=="" | lubridate::as.period(frequency)>=lubridate::as.period("P1M")){
         indDfAuxMeta <- data.frame(
           `individualSubject` = namespace_integrator(projectSubject, namespaces),
@@ -1133,6 +1144,9 @@ generate_eem_assessment_indicators <- function(
           
           results_ts[[singleKPISubjectHash]] <- list()
           results_ts[[singleKPISubjectHash]]$basic <- indDfAux
+          results_ts[[singleKPISubjectHash]]$basic$start <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$start)
+          results_ts[[singleKPISubjectHash]]$basic$end <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$end)
+          
           if(frequency=="" | lubridate::as.period(frequency)>=lubridate::as.period("P1M")){
             indDfAuxMeta <- data.frame(
               `individualSubject` = eemSingleDf$eemSubject,
@@ -1142,7 +1156,9 @@ generate_eem_assessment_indicators <- function(
               `measuredPropertyComponent` = namespace_integrator(paste0("bigg:",measuredPropertyComponent), namespaces),
               `unit` = namespace_integrator(indicatorsUnitsSubjects[[indicator]], namespaces),
               `frequency` = frequency,
-              `modelSubject` = namespace_integrator(modelSubject, namespaces)
+              `modelSubject` = namespace_integrator(modelSubject, namespaces),
+              `modelName` = namespace_integrator(paste0("bigg:",modelName), namespaces),
+              `modelBased` = !is.na(modelSubject)
             )
             results_ts[[singleKPISubjectHash]]$full <- cbind(indDfAux,indDfAuxMeta)
             results_ts[[singleKPISubjectHash]]$full <- 
@@ -1223,6 +1239,9 @@ generate_eem_assessment_indicators <- function(
           
           results_ts[[singleKPISubjectHash]] <- list()
           results_ts[[singleKPISubjectHash]]$basic <- indDfAux
+          results_ts[[singleKPISubjectHash]]$basic$start <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$start)
+          results_ts[[singleKPISubjectHash]]$basic$end <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$end)
+          
           if(frequency=="" | lubridate::as.period(frequency)>=lubridate::as.period("P1M")){
             indDfAuxMeta <- data.frame(
               `individualSubject` = eemSingleDf$eemSubject,

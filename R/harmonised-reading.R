@@ -349,9 +349,16 @@ get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz, outputFrequ
   }
   
   # If timeseriesObject is NULL, read certain sensor
-  timeseriesObject_ <- get_sensor_file(timeseriesObject,metadata$sensorId)
+  if(!is.list(timeseriesObject)){
+    timeseriesObject_ <- get_sensor_file(timeseriesObject,metadata$sensorId)
+  } else {
+    timeseriesObject_ <- timeseriesObject[names(timeseriesObject) %in% sensorId]
+  }
+  if(length(timeseriesObject_)==0){
+    stop(sprintf("Measurement Hash %s (%s) is not available in the time series of the building.",
+                 sensorId, metadata$measuredProperty[1]))
+  }
   
-  if(is.null(timeseriesObject_)) return(NULL)
   timeseriesSensor <- timeseriesObject_[sensorId][[1]]
   timeseriesSensor$start <- parse_iso_8601(timeseriesSensor$start)
   timeseriesSensor$end <- parse_iso_8601(timeseriesSensor$end)
@@ -659,6 +666,7 @@ compute_device_aggregator_formula <- function(buildingsRdf, timeseriesObject,
             defaultFactorsByMeasuredProperty = defaultFactorsByMeasuredProperty
           )')
       ))
+      if(is.null(aux_result)){return(NULL)}
       aux_result$utctime <- lubridate::with_tz(aux_result$time,"UTC")
       if(ratioCorrection){
         if(any(grepl("^SUM",colnames(aux_result)))){
@@ -789,7 +797,7 @@ get_device_aggregators <- function(
                       
                       dfs <- setNames(lapply(unique(aux$deviceAggregatorName),
                                              function(devAggName){
-                                               #devAggName = "totalGasConsumption"
+                                               #devAggName = "totalElectricityConsumption"
                                                df <- compute_device_aggregator_formula(
                                                  buildingsRdf = buildingsRdf,
                                                  timeseriesObject = timeseriesObject,
@@ -1204,7 +1212,15 @@ append_cost_to_sensor <- function(buildingsRdf, timeseriesObject, tariffSubject,
     metadata_df <- metadata_df[order(metadata_df$start),]
     prices <- do.call(rbind,lapply(1:nrow(metadata_df), function(i){
       
-      timeseriesObject_ <- get_sensor_file(timeseriesObject,metadata_df$hash[i]) 
+      if(!is.list(timeseriesObject)){
+        timeseriesObject_ <- get_sensor_file(timeseriesObject,metadata_df$hash[i]) 
+      } else {
+        timeseriesObject_ <- timeseriesObject[names(timeseriesObject) %in% metadata_df$hash[i]]
+      }
+      if(length(timeseriesObject_)==0){
+        stop(sprintf("Measurement Hash %s (energy prices of %s) is not available in the time series of the building.",
+                     metadata_df$hash[i], metadata_df$measuredProperty[i]))
+      }
       timeseriesTariff <- timeseriesObject_[metadata_df$hash[i]][[1]]
       timeseriesTariff$start <- parse_iso_8601(timeseriesTariff$start)
       timeseriesTariff$end <- parse_iso_8601(timeseriesTariff$end)
@@ -1305,7 +1321,15 @@ append_emissions_to_sensor <- function(buildingsRdf, timeseriesObject, emissions
                                  as.period(metadata_df$timeSeriesFrequency)==as.period(frequency_),]
     }
     
-    timeseriesObject_ <- get_sensor_file(timeseriesObject,metadata_df$hash) 
+    if(!is.list(timeseriesObject)){
+      timeseriesObject_ <- get_sensor_file(timeseriesObject,metadata_df$hash) 
+    } else {
+      timeseriesObject_ <- timeseriesObject[names(timeseriesObject) %in% metadata_df$hash]
+    }
+    if(length(timeseriesObject_)==0){
+      stop(sprintf("Measurement Hash %s (CO2 emission factors of %s) is not available in the time series of the building.",
+                   metadata_df$hash, metadata_df$measuredProperty))
+    }
     emissions <- timeseriesObject_[metadata_df$hash][[1]]
     emissions$start <- parse_iso_8601(emissions$start)
     emissions$end <- parse_iso_8601(emissions$end)
