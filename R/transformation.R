@@ -438,21 +438,23 @@ calendar_components <- function (data, localTimeZone = NULL, holidays = c(), inp
                   ifelse(d >= SS & d < FE, "Summer", "Fall")))
   }
   
-  ## Holidays count
-  start_date <- holidays[1]
-  end_date <- holidays[length(holidays)]
-  date_sequence <- seq(start_date, end_date, by="1 month")
-  formatted_dates <- format(date_sequence, "%Y-%m")
-  unique_dates <- unique(formatted_dates) # List of months in holidays, %Y-%m
-  holiday_counts <- table(format(holidays, "%Y-%m"))
-  month_counts <- table(unique_dates) -1
-  month_counts[names(month_counts) %in% names(holiday_counts)] <- holiday_counts
-  ## Weekdends count
-  for(d in unique_dates){
-    first_day <- as.Date(paste(d, "-01", sep=""))
-    weekend_days_bool <- wday(seq(first_day, ceiling_date(ymd(first_day), 'month') - days(1), "days")) %in% c(7, 1)
-    weekend_days <- seq(first_day, ceiling_date(ymd(first_day), 'month') - days(1), "days")[weekend_days_bool]
-    month_counts[paste(d)] = month_counts[paste(d)] + sum(weekend_days_bool) - sum(weekend_days %in% holidays) 
+  if(length(holidays) > 0){
+    ## Holidays count
+    start_date <- holidays[1]
+    end_date <- holidays[length(holidays)]
+    date_sequence <- seq(start_date, end_date, by="1 month")
+    formatted_dates <- format(date_sequence, "%Y-%m")
+    unique_dates <- unique(formatted_dates) # List of months in holidays, %Y-%m
+    holiday_counts <- table(format(holidays, "%Y-%m"))
+    month_counts <- table(unique_dates) -1
+    month_counts[names(month_counts) %in% names(holiday_counts)] <- holiday_counts
+    ## Weekdends count
+    for(d in unique_dates){
+      first_day <- as.Date(paste(d, "-01", sep=""))
+      weekend_days_bool <- wday(seq(first_day, ceiling_date(ymd(first_day), 'month') - days(1), "days")) %in% c(7, 1)
+      weekend_days <- seq(first_day, ceiling_date(ymd(first_day), 'month') - days(1), "days")[weekend_days_bool]
+      month_counts[paste(d)] = month_counts[paste(d)] + sum(weekend_days_bool) - sum(weekend_days %in% holidays) 
+    }
   }
   
   result <- data %>% summarise(
@@ -471,7 +473,7 @@ calendar_components <- function (data, localTimeZone = NULL, holidays = c(), inp
     season = as.factor(getSeason(localtime)),
     monthInt = month(localtime),
     month = as.factor(monthInt),
-    holidaysPerMonth = as.numeric(month_counts[format(date,"%Y-%m")]),
+    holidaysPerMonth = ifelse(length(holidays == 0), (date %in% holidays), as.numeric(month_counts[format(date,"%Y-%m")])),
     day = day(localtime), 
     hour = hour(localtime),
     hourBy3 = as.factor(ceiling((hour+1)/3)),
