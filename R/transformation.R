@@ -440,21 +440,28 @@ calendar_components <- function (data, localTimeZone = NULL, holidays = c(), inp
   
   if(length(holidays) > 0){
     ## Holidays count
-    start_date <- holidays[1]
-    end_date <- holidays[length(holidays)]
+    localdates <- as.Date(data$time, tz=localTimeZone)
+    start_date <- min(localdates)
+    end_date <- max(localdates)
     date_sequence <- seq(start_date, end_date, by="1 month")
     formatted_dates <- format(date_sequence, "%Y-%m")
     unique_dates <- unique(formatted_dates) # List of months in holidays, %Y-%m
     holiday_counts <- table(format(holidays, "%Y-%m"))
     month_counts <- table(unique_dates) -1
-    month_counts[names(month_counts) %in% names(holiday_counts)] <- holiday_counts
-    ## Weekdends count
+    suppressWarnings(month_counts[names(month_counts) %in% names(holiday_counts)] <- holiday_counts)
+    ## Add the weekends count
     for(d in unique_dates){
       first_day <- as.Date(paste(d, "-01", sep=""))
       weekend_days_bool <- wday(seq(first_day, ceiling_date(ymd(first_day), 'month') - days(1), "days")) %in% c(7, 1)
       weekend_days <- seq(first_day, ceiling_date(ymd(first_day), 'month') - days(1), "days")[weekend_days_bool]
-      month_counts[paste(d)] = month_counts[paste(d)] + sum(weekend_days_bool) - sum(weekend_days %in% holidays) 
+      month_counts[paste(d)] <- month_counts[paste(d)] + sum(weekend_days_bool) - sum(weekend_days %in% holidays) 
     }
+  } else {
+    month_counts <- NULL
+  }
+  get_month_count <- function(month_counts,date){
+    if(is.null(month_counts)){ 0 } else {
+      as.numeric(month_counts[format(date,"%Y-%m")])}
   }
   
   result <- data %>% summarise(
@@ -473,7 +480,7 @@ calendar_components <- function (data, localTimeZone = NULL, holidays = c(), inp
     season = as.factor(getSeason(localtime)),
     monthInt = month(localtime),
     month = as.factor(monthInt),
-    holidaysPerMonth = ifelse(length(holidays == 0), (date %in% holidays), as.numeric(month_counts[format(date,"%Y-%m")])),
+    holidaysPerMonth = get_month_count(month_counts,as.Date(date,tz=localTimeZone)),
     day = day(localtime), 
     hour = hour(localtime),
     hourBy3 = as.factor(ceiling((hour+1)/3)),

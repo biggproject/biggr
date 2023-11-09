@@ -9,9 +9,6 @@ get_analytical_groups_by_building_subject(buildingsRdf)
 \arguments{
 \item{arg}{<>}
 }
-\value{
-
-}
 \description{
 Description
 }

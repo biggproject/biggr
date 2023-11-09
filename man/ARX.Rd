@@ -9,9 +9,6 @@ ARX(input_parameters = NULL)
 \arguments{
 \item{arg}{<>}
 }
-\value{
-
-}
 \description{
 Description
 }

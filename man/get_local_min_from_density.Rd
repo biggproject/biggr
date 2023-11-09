@@ -14,9 +14,6 @@ get_local_min_from_density(
 \arguments{
 \item{arg}{<>}
 }
-\value{
-
-}
 \description{
 Description
 }
