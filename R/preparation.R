@@ -86,32 +86,61 @@ hourly_timesteps <- function(nHours, original_timestep) {
 #' of lower frequency timestep required.
 #'
 #' @param data <data.frame> describing the input time series to be resampled. 
-#' Time column: 'time', value column: 'value'.
+#' Time column: 'time', value column: 'value'. If you use weighted average aggregation,
+#' you must include a column in data named 'weights'
 #' @param timeStep <string> A string in ISO 8601 format representing the period
 #' or timestep (e.g. "PT15M","PT1H", "P3M", "P1D" ,...).
-#' @return <data.frame> corresponding to the resampled time series
+#' @param func <string> A string defining the function to use in aggregate
+#' ("SUM","WEIGHTED-AVG", "AVG").
+#' @param minRatioToTimeAggregateIndicators <float> Minimum percentage of known values
+#' in a timestep. Default is 0%
+#' @param estimateWhenAggregate <boolean> defining if the output value should be an
+#' estimator (theorical approx considering the timestep) or the real value (unconsidering gaps). 
+#' @return <data.frame> corresponding to the resampled and aggregated time series
 
-resample <- function(data, timestep) {
-  # Resample (upsample) by creating synthetic comple serie
-  data$time_ <- lubridate::floor_date(data$time, iso8601_period_to_text(timestep),
-    week_start = getOption("lubridate.week.start", 1)
-  )
-  start <- data$time_[1]
-  end <- data$time[length(data$time)]
-  timeseq <- seq(start, end, by = iso8601_period_to_text(timestep))
-
-  # TEMPFIX: seq.Date not properly adding months
-  if ((timestep == "P1M") & (day(start) == 31)) {
-    mask <- day(timeseq) == 1
-    timeseq[mask] <- timeseq[mask] - 60 * 60 * 24
+resample_and_aggregate <- function(data, timestep, func, minRatioToTimeAggregateIndicators = 0,
+                                   estimateWhenAggregate = T) {
+  
+  minRatioToTimeAggregateIndicators = minRatioToTimeAggregateIndicators/100
+  if(timestep!=""){
+    n <- hourly_timesteps(as.numeric(lubridate::as.period(timestep))/3600, 
+                          detect_time_step(data$time))
+  } else {
+    # When no timestep, calculate the indicators only considering the first 365 days
+    data <- data %>% filter(time <= min(time,na.rm=T)+days(365))
+    n <- nrow(data)
   }
-
-  # Create synthetic serie mixing timeserie and ffill values
-  newdata <- data.frame(time_ = timeseq) %>%
-    left_join(data, by = "time_") %>%
-    fill(value, .direction = "down") %>%
-    mutate(time = time_) %>%
-    select(-time_)
+  
+  newdata <- data %>%  {
+    if(timestep==""){
+      group_by(., time = min(time))
+    } else {
+      group_by(., time = lubridate::floor_date(time, lubridate::as.period(timestep), 
+                                                week_start = getOption("lubridate.week.start", 1)))
+    }
+  } %>% {
+    if(func=="SUM") {
+      summarise(., count = length(value) ,
+                estimated = mean(value, na.rm = T)*n, real = sum(value, na.rm = T))
+    } else if(func=="AVG"){
+      summarise(., count = length(value) ,
+                estimated = mean(value, na.rm = T), real = mean(value, na.rm = T))
+    } else if(func=="WEIGHTED-AVG"){
+      summarise(., count = length(value),
+                estimated = weighted.mean(value, weights, na.rm = T), 
+                real = weighted.mean(value, weights, na.rm = T))
+    } else {
+      .
+    }
+  } %>%
+    filter(count > (n*minRatioToTimeAggregateIndicators)) %>%
+    #select(-count) %>%
+    mutate(
+      value = if (estimateWhenAggregate == T) { estimated } else { real }, 
+      isReal = ifelse(!is.finite(value), NA, ifelse(count==n, T, F))
+    )# %>% 
+    #select(-real, -estimated)
+  
   return(newdata)
 }
 
@@ -144,7 +173,7 @@ detect_ts_min_max_outliers <- function(data, min, max, minSeries = NULL, maxSeri
 
   if (!is.null(minSeries)) {
     timestep <- detect_time_step(data)
-    minSeries <- resample(minSeries, timestep)
+    #minSeries <- resample(minSeries, timestep)
     mask <- data %>%
       left_join(minSeries, by = "time") %>%
       mutate(outlier = value.x < value.y)
@@ -152,7 +181,7 @@ detect_ts_min_max_outliers <- function(data, min, max, minSeries = NULL, maxSeri
   }
   if (!is.null(maxSeries)) {
     timestep <- detect_time_step(data)
-    maxSeries <- resample(maxSeries, timestep)
+    #maxSeries <- resample(maxSeries, timestep)
     mask <- data %>%
       left_join(maxSeries, by = "time") %>%
       mutate(outlier = value.x > value.y)

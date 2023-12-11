@@ -566,8 +566,6 @@ generate_longitudinal_benchmarking_indicators <- function (
       
       results_ts[[singleKPISubjectHash]] <- list()
       results_ts[[singleKPISubjectHash]]$basic <- indDfAux
-      results_ts[[singleKPISubjectHash]]$basic$start <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$start)
-      results_ts[[singleKPISubjectHash]]$basic$end <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$end)
       
       if(lubridate::as.period(frequency)>=lubridate::as.period("P1M")){
         indDfAuxMeta <- data.frame(
@@ -879,8 +877,6 @@ generate_eem_assessment_indicators <- function(
       
       results_ts[[singleKPISubjectHash]] <- list()
       results_ts[[singleKPISubjectHash]]$basic <- indDfAux
-      results_ts[[singleKPISubjectHash]]$basic$start <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$start)
-      results_ts[[singleKPISubjectHash]]$basic$end <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$end)
       
       if(frequency=="" | lubridate::as.period(frequency)>=lubridate::as.period("P1M")){
         indDfAuxMeta <- data.frame(
@@ -977,8 +973,6 @@ generate_eem_assessment_indicators <- function(
       
       results_ts[[singleKPISubjectHash]] <- list()
       results_ts[[singleKPISubjectHash]]$basic <- indDfAux
-      results_ts[[singleKPISubjectHash]]$basic$start <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$start)
-      results_ts[[singleKPISubjectHash]]$basic$end <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$end)
       
       if(frequency=="" | lubridate::as.period(frequency)>=lubridate::as.period("P1M")){
         indDfAuxMeta <- data.frame(
@@ -1144,8 +1138,6 @@ generate_eem_assessment_indicators <- function(
           
           results_ts[[singleKPISubjectHash]] <- list()
           results_ts[[singleKPISubjectHash]]$basic <- indDfAux
-          results_ts[[singleKPISubjectHash]]$basic$start <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$start)
-          results_ts[[singleKPISubjectHash]]$basic$end <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$end)
           
           if(frequency=="" | lubridate::as.period(frequency)>=lubridate::as.period("P1M")){
             indDfAuxMeta <- data.frame(
@@ -1239,8 +1231,6 @@ generate_eem_assessment_indicators <- function(
           
           results_ts[[singleKPISubjectHash]] <- list()
           results_ts[[singleKPISubjectHash]]$basic <- indDfAux
-          results_ts[[singleKPISubjectHash]]$basic$start <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$start)
-          results_ts[[singleKPISubjectHash]]$basic$end <- parsedate::parse_iso_8601(results_ts[[singleKPISubjectHash]]$basic$end)
           
           if(frequency=="" | lubridate::as.period(frequency)>=lubridate::as.period("P1M")){
             indDfAuxMeta <- data.frame(
