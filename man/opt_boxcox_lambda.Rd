@@ -9,6 +9,9 @@ opt_boxcox_lambda(x)
 \arguments{
 \item{arg}{<>}
 }
+\value{
+
+}
 \description{
 Description
 }

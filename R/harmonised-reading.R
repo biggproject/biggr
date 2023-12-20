@@ -297,10 +297,21 @@ get_sensor_metadata <- function(buildingsRdf, sensorId, tz){
 
 get_sensor_file <- function(timeseriesObject,sensorId){
   if(is.character(timeseriesObject)){
-    jsonFiles <- list.files(timeseriesObject,"json",full.names=T)
+    jsonFiles <- list.files(timeseriesObject,"*.json",full.names=T)
     timeseriesObject_ <- unlist(lapply(
       jsonFiles[grepl(sensorId,jsonFiles)],
       function(x){jsonlite::fromJSON(x)}),recursive=F)
+    if (length(timeseriesObject_)==0){
+      tsvFiles <- list.files(timeseriesObject,"*.tsv",full.names=T)
+      timeseriesObject_ <- setNames(lapply(
+        tsvFiles[grepl(sensorId,tsvFiles)],
+        function(x){read.csv(x,sep = "\t")}),
+        gsub(".tsv","",basename(tsvFiles[grepl(sensorId,tsvFiles)])))
+      timeseriesObject_[[1]]$value <- as.numeric(timeseriesObject_[[1]]$value)
+      timeseriesObject_[[1]]$isReal <- as.logical(timeseriesObject_[[1]]$isReal)
+      timeseriesObject_[[1]]$isReal <- ifelse(is.na(timeseriesObject_[[1]]$isReal),F,
+                                              timeseriesObject_[[1]]$isReal)
+    }
   } else {
     timeseriesObject_ <- timeseriesObject[names(timeseriesObject) %in% sensorId]
   }

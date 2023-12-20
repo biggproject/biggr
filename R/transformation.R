@@ -699,7 +699,7 @@ degree_days <- function(data, temperatureFeature, localTimeZone, baseTemperature
     ) %>%
     group_by(time) %>%
     summarize(
-      value = mean(value, na.rm = TRUE)
+      value = mean(value, na.rm = T)
     )
   dd_ <- do.call(cbind,lapply(FUN = function(b) {
       degree_raw(data = tmp, featuresName = "value", baseTemperature = b, mode = mode, 
