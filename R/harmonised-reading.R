@@ -766,6 +766,8 @@ get_device_aggregators <- function(
     devagg_buildings <- devagg_buildings[
       devagg_buildings$buildingSubject %in% allowedBuildingSubjects,
     ]
+  } else {
+    allowedBuildingSubjects <- unique(devagg_buildings$buildingSubject)
   }
   
   # Filter by the allowed device aggregator names
@@ -785,10 +787,31 @@ get_device_aggregators <- function(
       filter(EEMexists)
   }
   
+  # Get the data by building
   all_buildings_timeseries <- 
-    setNames(lapply(unique(devagg_buildings$buildingSubject),
+    setNames(lapply(allowedBuildingSubjects,
                     function(buildingSubject){
                       aux <- devagg_buildings[devagg_buildings$buildingSubject==buildingSubject,]
+                      # Return NULL object if not sufficient measured properties are defined in device aggregators.
+                      otherMeasuredProperties <- allowedMeasuredProperties[!(allowedMeasuredProperties %in% measuredPropertiesToAggregate)]
+                      if (!all(otherMeasuredProperties %in% unique(aux$measuredProperty)) ||
+                          !any(measuredPropertiesToAggregate %in% unique(aux$measuredProperty))){
+                        write(sprintf(
+                          "* Any device aggregator of building subject %s\n was related with the following needed measured properties: %s\n ",
+                          buildingSubject,
+                          paste(unique(c(
+                            otherMeasuredProperties[!(otherMeasuredProperties %in% unique(aux$measuredProperty))],
+                            measuredPropertiesToAggregate[!(measuredPropertiesToAggregate %in% unique(aux$measuredProperty))]
+                          )),collapse=", ")),stderr())
+                        return(NULL)
+                      }
+                      if(!all(measuredPropertiesToAggregate %in% unique(aux$measuredProperty))){
+                        write(sprintf(
+                          "* Any device aggregator of building subject %s\n was related with the following needed measured properties: %s\n The analysis will continue only considering the other measured properties.",
+                          buildingSubject,
+                          paste(measuredPropertiesToAggregate[!(measuredPropertiesToAggregate %in% unique(aux$measuredProperty))],
+                          collapse=", ")),stderr())
+                      }
                       aux$deviceAggregatorFrequency <- ifelse(
                         is.na(aux$deviceAggregatorFrequency), 
                         "P1M", aux$deviceAggregatorFrequency)
