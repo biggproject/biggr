@@ -10,16 +10,16 @@ detect_ts_min_max_outliers(data, min, max, minSeries = NULL, maxSeries = NULL)
 \item{data}{<data.frame> describing the input time series whose outliers need 
 to be detected. Time column: 'time', value column: 'value'.}
 
-\item{min:}{<float> describing the minimum value allowed for each element 
+\item{min}{<float> describing the minimum value allowed for each element 
 of the time series.}
 
-\item{max:}{<float> describing the maximum value allowed for each element 
+\item{max}{<float> describing the maximum value allowed for each element 
 of the time series.}
 
-\item{minSeries:}{<data.frame> defining the time series with minimum allowed 
+\item{minSeries}{<data.frame> defining the time series with minimum allowed 
 values. Time column: 'time', value column: 'value'.}
 
-\item{maxSeries:}{<data.frame> defining the time series with maximum allowed 
+\item{maxSeries}{<data.frame> defining the time series with maximum allowed 
 values. Time column: 'time', value column: 'value'.}
 }
 \value{

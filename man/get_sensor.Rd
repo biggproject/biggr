@@ -8,15 +8,16 @@ get_sensor(
   timeseriesObject,
   buildingsRdf,
   sensorId,
-  tz,
-  outputFrequency,
-  aggFunctions,
-  useEstimatedValues,
+  tz = NULL,
+  outputFrequency = NULL,
+  aggFunctions = NULL,
+  useEstimatedValues = F,
   integrateCost = T,
   integrateEmissions = T,
   transformToAggregatableMeasuredProperty = F,
   aggregatableMeasuredPropertyName = NULL,
-  defaultFactorsByMeasuredProperty = NULL
+  defaultFactorsByMeasuredProperty = NULL,
+  obtainMetadata = F
 )
 }
 \arguments{

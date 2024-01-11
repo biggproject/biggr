@@ -4,27 +4,24 @@
 \alias{resample_and_aggregate}
 \title{Resample time series to new ISO 8601 timestep}
 \usage{
-resample_and_aggregate(
-  data,
-  timestep,
-  func,
-  minRatioToTimeAggregateIndicators = 0,
-  estimateWhenAggregate = T
-)
+resample_and_aggregate(data, timestep, func, minRatio = 0, estimate = T)
 }
 \arguments{
 \item{data}{<data.frame> describing the input time series to be resampled. 
 Time column: 'time', value column: 'value'. If you use weighted average aggregation,
-you must include a column in data named 'weights'}
+you must include a column in data named 'weights'.}
 
-\item{func}{<string> A string defining the function to use in aggregate
-("SUM","WEIGHTED-AVG", "AVG").}
+\item{func}{<string> A string defining the function to use in aggregate (options 
+are: "SUM" to sum up the values at each time step,"WEIGHTED-AVG" to calculate the 
+weighted average of the values at each time step, "AVG" to calculate the mean of the values
+at each time step).}
 
-\item{minRatioToTimeAggregateIndicators}{<float> Minimum percentage of known values
-in a timestep. Default is 0%}
+\item{minRatio}{<float> Minimum percentage of known values
+in a timestep to calculate the desired aggregation. Default is 0\%. Unit is percentage.}
 
-\item{estimateWhenAggregate}{<boolean> defining if the output value should be an
-estimator (theorical approx considering the timestep) or the real value (unconsidering gaps).}
+\item{estimate}{<boolean> defining if the output value should be an
+estimated value (theoretical linear approximation considering the time step) 
+or the real value (gaps are unconsidered, if they exist).}
 
 \item{timeStep}{<string> A string in ISO 8601 format representing the period
 or timestep (e.g. "PT15M","PT1H", "P3M", "P1D" ,...).}
@@ -33,8 +30,7 @@ or timestep (e.g. "PT15M","PT1H", "P3M", "P1D" ,...).}
 <data.frame> corresponding to the resampled and aggregated time series
 }
 \description{
-Time series is upsampled creating synthetic forward fill time series
-in case of higher frequency timestep required. On contrary, is 
-downsampled maintaing current values but repeated indexes in case 
-of lower frequency timestep required.
+Time series resampled to the desired timestep and the values are aggregated
+using the aggregation function defined. Timestep of the original series must be
+shorter than the output timestep of the series.
 }

@@ -721,7 +721,7 @@ generate_eem_assessment_indicators <- function(
                                        },
                                        # setNames(as.list(eemProjectDf$Type[order(eemProjectDf$Investment,decreasing = T)]),
                                        #          rep("bigg:hasEnergyEfficiencyMeasureType",nrow(eemProjectDf))),
-                                       # list(`bigg:affectsBuilding` = buildingSubject),
+                                       list(`bigg:affectsBuilding` = buildingSubject),
                                        setNames(as.list(eemProjectDf$eemSubject),rep("bigg:includesMeasure",nrow(eemProjectDf)))), 
                                      namespaces = namespaces)
     }

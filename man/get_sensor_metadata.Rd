@@ -9,7 +9,7 @@ get_sensor_metadata(buildingsRdf, sensorId, tz)
 \arguments{
 \item{buildingsRdf}{<rdf> containing the information of a set of buildings.}
 
-\item{sensorId}{<uri> of an analytical model.}
+\item{sensorId}{<uri> or directly the hash of a measurement.}
 
 \item{tz}{<string> specifying the local time zone related to the
 building in analysis. The format of this time zones are defined by the IANA

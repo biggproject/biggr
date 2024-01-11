@@ -79,32 +79,44 @@ hourly_timesteps <- function(nHours, original_timestep) {
 
 
 #' Resample time series to new ISO 8601 timestep
-#'
-#' Time series is upsampled creating synthetic forward fill time series
-#' in case of higher frequency timestep required. On contrary, is 
-#' downsampled maintaing current values but repeated indexes in case 
-#' of lower frequency timestep required.
+#' 
+#' Time series resampled to the desired timestep and the values are aggregated
+#' using the aggregation function defined. Timestep of the original series must be
+#' shorter than the output timestep of the series.
 #'
 #' @param data <data.frame> describing the input time series to be resampled. 
 #' Time column: 'time', value column: 'value'. If you use weighted average aggregation,
-#' you must include a column in data named 'weights'
+#' you must include a column in data named 'weights'.
 #' @param timeStep <string> A string in ISO 8601 format representing the period
 #' or timestep (e.g. "PT15M","PT1H", "P3M", "P1D" ,...).
-#' @param func <string> A string defining the function to use in aggregate
-#' ("SUM","WEIGHTED-AVG", "AVG").
-#' @param minRatioToTimeAggregateIndicators <float> Minimum percentage of known values
-#' in a timestep. Default is 0%
-#' @param estimateWhenAggregate <boolean> defining if the output value should be an
-#' estimator (theorical approx considering the timestep) or the real value (unconsidering gaps). 
+#' @param func <string> A string defining the function to use in aggregate (options 
+#' are: "SUM" to sum up the values at each time step,"WEIGHTED-AVG" to calculate the 
+#' weighted average of the values at each time step, "AVG" to calculate the mean of the values
+#' at each time step).
+#' @param minRatio <float> Minimum percentage of known values
+#' in a timestep to calculate the desired aggregation. Default is 0\%. Unit is percentage.
+#' @param estimate <boolean> defining if the output value should be an
+#' estimated value (theoretical linear approximation considering the time step) 
+#' or the real value (gaps are unconsidered, if they exist). 
+#' 
 #' @return <data.frame> corresponding to the resampled and aggregated time series
 
-resample_and_aggregate <- function(data, timestep, func, minRatioToTimeAggregateIndicators = 0,
-                                   estimateWhenAggregate = T) {
+resample_and_aggregate <- function(data, timestep, func, minRatio = 0,
+                                   estimate = T) {
   
-  minRatioToTimeAggregateIndicators = minRatioToTimeAggregateIndicators/100
+  minRatio <- minRatio/100
+  if(!(func %in% c("SUM", "AVG", "WEIGHTED-AVG"))){
+    stop("Unknown function to aggregate in argument 'func'")
+  }
   if(timestep!=""){
+    origin_timestep <- detect_time_step(data$time)
+    if(lubridate::as.period(timestep) < lubridate::as.period(origin_timestep)){
+      stop(sprintf(
+        "Timestep (%s) must be greater or equal to the original timestep (%s) of the series",
+        timestep, origin_timestep))
+    }
     n <- hourly_timesteps(as.numeric(lubridate::as.period(timestep))/3600, 
-                          detect_time_step(data$time))
+                          origin_timestep)
   } else {
     # When no timestep, calculate the indicators only considering the first 365 days
     data <- data %>% filter(time <= min(time,na.rm=T)+days(365))
@@ -133,10 +145,10 @@ resample_and_aggregate <- function(data, timestep, func, minRatioToTimeAggregate
       .
     }
   } %>%
-    filter(count > (n*minRatioToTimeAggregateIndicators)) %>%
+    filter(count > (n*minRatio)) %>%
     #select(-count) %>%
     mutate(
-      value = if (estimateWhenAggregate == T) { estimated } else { real }, 
+      value = if (estimate == T) { estimated } else { real }, 
       isReal = ifelse(!is.finite(value), NA, ifelse(count==n, T, F))
     )# %>% 
     #select(-real, -estimated)
@@ -156,13 +168,13 @@ resample_and_aggregate <- function(data, timestep, func, minRatioToTimeAggregate
 #'
 #' @param data <data.frame> describing the input time series whose outliers need 
 #' to be detected. Time column: 'time', value column: 'value'.
-#' @param min: <float> describing the minimum value allowed for each element 
+#' @param min <float> describing the minimum value allowed for each element 
 #' of the time series.
-#' @param max: <float> describing the maximum value allowed for each element 
+#' @param max <float> describing the maximum value allowed for each element 
 #' of the time series.
-#' @param minSeries: <data.frame> defining the time series with minimum allowed 
+#' @param minSeries <data.frame> defining the time series with minimum allowed 
 #' values. Time column: 'time', value column: 'value'.
-#' @param maxSeries: <data.frame> defining the time series with maximum allowed 
+#' @param maxSeries <data.frame> defining the time series with maximum allowed 
 #' values. Time column: 'time', value column: 'value'.
 #' @return <data.frame> with boolean values representing whether a item is an 
 #' outlier, or not.
