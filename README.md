@@ -21,8 +21,5 @@ devtools::install_github("biggproject/biggr")
 install.packages(<.tar.gz file>, repos = NULL, type ="source")
 ```
 
-## Documentation and updates
-The functions implemented in this package are well documented, but end-users should know that authors could make minor refinements until the end of the BIGG project (november 2023). Some minor changes in code could occur.
-
 ## License
 This R package is licensed under the MIT License. It also depends on other popular open-source R libraries, from which it will retain their licenses.

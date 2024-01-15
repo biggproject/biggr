@@ -296,7 +296,7 @@ get_measurements_by_building_metadata <- function(buildingsRdf){
   return(metadata_df)
 }
 
-check_measurements_by_building <- function(buildingsRdf, timeseriesObject){
+check_measurements_by_building <- function(buildingsRdf, timeseriesObject, updateHadoopStatus=F){
   
   write("Checking the measurements and devices aggregators by building",stderr())
   
@@ -311,8 +311,12 @@ check_measurements_by_building <- function(buildingsRdf, timeseriesObject){
   # Check and summarise time series data from the related measurements
   n_sensors <- nrow(measurements_metadata)
   sensors <- lapply(1:n_sensors, FUN = function(i){
-    write(sprintf("  Sensor %s/%s",i,n_sensors),stderr())
     sensorId <- measurements_metadata$sensorId[i]
+    if(updateHadoopStatus==T){
+      write(sprintf("reporter:status: READING %s (%s/%s)", sensorId, i, n_sensors), stderr())
+    } else {
+      write(sprintf("  Sensor %s/%s",i,n_sensors),stderr())
+    }
     sensor_data <- suppressMessages(suppressWarnings(
       get_sensor(timeseriesObject, buildingsRdf, sensorId, 
         tz=NULL, outputFrequency="P1Y", aggFunctions=NULL,
@@ -320,9 +324,12 @@ check_measurements_by_building <- function(buildingsRdf, timeseriesObject){
         transformToAggregatableMeasuredProperty=F, aggregatableMeasuredPropertyName=NULL, 
         defaultFactorsByMeasuredProperty=NULL, obtainMetadata=T)
       ))
-    sensor_data$metadata$summary <- if(is.null(sensor_data$timeseries)){
-      NA } else {
-      list(sensor_data$timeseries)}
+    if(is.null(sensor_data$timeseries)){
+      sensor_data$metadata$summary <- NA 
+    } else {
+      #colnames(sensor_data$timeseries)[2] <- "value"
+      sensor_data$metadata$summary <- list(sensor_data$timeseries)
+    }
     sensor_data$metadata$containsData <- !is.null(sensor_data$timeseries)
     sensor_data$metadata})
   sensors_df <- do.call(rbind,sensors)
@@ -370,7 +377,14 @@ check_measurements_by_building <- function(buildingsRdf, timeseriesObject){
          "DeviceAggregators"=dev_aggregator_metadata))
 }
 
-check_static_information_by_building <- function(buildingsRdf){
+check_static_information_by_building <- function(buildingsRdf, updateHadoopStatus=F){
+  
+  write("Checking the static information by building",stderr())
+  
+  if(updateHadoopStatus==T){
+    write("reporter:status: READING Buildings", stderr())
+  }
+  
   metadata <- data.frame(
     buildingSubject = get_all_buildings_list(buildingsRdf))
   # Building area 
@@ -404,12 +418,17 @@ check_static_information_by_building <- function(buildingsRdf){
   return(metadata)
 }
 
-services_execution_feasability_by_building <- function(buildingsRdf, timeseriesObject, settings){
+data_requirements_compliance_by_building <- function(buildingsRdf, timeseriesObject, settings, updateHadoopStatus=F){
   
-  checkedMetadata <- check_measurements_by_building(buildingsRdf, timeseriesObject)
-  checkedMetadata$Building <- check_static_information_by_building(buildingsRdf)
+  checkedMetadata <- check_measurements_by_building(buildingsRdf, timeseriesObject, updateHadoopStatus)
+  checkedMetadata$Building <- check_static_information_by_building(buildingsRdf, updateHadoopStatus)
+  
+  write("Checking the data requirements compliance by building",stderr())
   
   servicesRequirements <- settings$DataRequirementsForAnalyticalServices
+  if(updateHadoopStatus==T){
+    write("reporter:status: CALCULATING COMPLIANCE by buildings", stderr())
+  }
   
   checkedResults <- lapply(
     unique(checkedMetadata$Measurements$buildingSubject),
@@ -421,7 +440,7 @@ services_execution_feasability_by_building <- function(buildingsRdf, timeseriesO
     
     services <- data.frame(
       Name = servicesRequirements[,"Name"],
-      CompliesWithDataRequirements = mapply(function(i){
+      do.call(rbind,lapply(FUN = function(i){
         service <- servicesRequirements[i,]
         
         # DeviceAggregator checking
@@ -485,9 +504,13 @@ services_execution_feasability_by_building <- function(buildingsRdf, timeseriesO
           T
         }
         
-        all(DeviceAggregators_check, Measurements_check, Building_check)
-        
-      }, 1:nrow(settings$DataRequirementsForAnalyticalServices))
+        c(
+          "CompliesAllRequirements" = all(DeviceAggregators_check, Measurements_check, Building_check),
+          "CompliesDeviceAggregatorsRequirements" = DeviceAggregators_check,
+          "CompliesMeasurementsRequirements" = Measurements_check,
+          "CompliesBuildingRequirements" = Building_check
+        )
+      }, 1:nrow(settings$DataRequirementsForAnalyticalServices)))
     )
     list(
          "BuildingSubject" = buildingSubject,
@@ -499,14 +522,16 @@ services_execution_feasability_by_building <- function(buildingsRdf, timeseriesO
   
   suppressMessages(suppressWarnings(library(mongolite)))
   if(mongo_check("", settings)){
+    write("Loading the results to Mongo",stderr())
     for (item in checkedResults){
       mongo_conn("DataRequirementsCompliance", settings)$replace(
         query=sprintf('{"BuildingSubject": "%s"}',item$BuildingSubject),
-        update=jsonlite::toJSON(item),upsert=T)
+        update=jsonlite::toJSON(c(list('BuildingSubject'=jsonlite::unbox(item[['BuildingSubject']])),
+                                  item[names(item)!='BuildingSubject']), na = 'null'),upsert=T)
     }
-  } else {
-    return(checkedResults)
   }
+  write("Data requirements compliance successfully executed!",stderr())
+  return(checkedResults)
 }
 
 #
