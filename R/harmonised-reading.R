@@ -855,21 +855,27 @@ get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz=NULL, output
   
   # Add energy cost component
   if(nrow(metadata_tariff)>0 & integrateCost){
-    timeseriesSensor <- append_cost_to_sensor(
-      buildingsRdf, timeseriesObject, 
-      tariffSubject = metadata_tariff$tariff,
-      measuredProperty = metadata$measuredProperty,
-      frequency = metadata$timeSeriesFrequency,
-      energyTimeseriesSensor = timeseriesSensor)
+    tryCatch(
+      timeseriesSensor <- append_cost_to_sensor(
+        buildingsRdf, timeseriesObject, 
+        tariffSubject = metadata_tariff$tariff,
+        measuredProperty = metadata$measuredProperty,
+        frequency = metadata$timeSeriesFrequency,
+        energyTimeseriesSensor = timeseriesSensor),
+      error = function(e) NULL
+    )
   }
   # Add emissions component
   if(nrow(metadata_emissions)>0 & integrateEmissions){
-    timeseriesSensor <- append_emissions_to_sensor(
-      buildingsRdf, timeseriesObject, 
-      emissionsSubject = metadata_emissions$emissions,
-      measuredProperty = metadata$measuredProperty,
-      frequency = metadata$timeSeriesFrequency,
-      energyTimeseriesSensor = timeseriesSensor)
+    tryCatch(
+      timeseriesSensor <- append_emissions_to_sensor(
+        buildingsRdf, timeseriesObject, 
+        emissionsSubject = metadata_emissions$emissions,
+        measuredProperty = metadata$measuredProperty,
+        frequency = metadata$timeSeriesFrequency,
+        energyTimeseriesSensor = timeseriesSensor),
+    error = function(e) NULL
+    )
   }
   
   # Transform the sensor to an aggregatable measured property
