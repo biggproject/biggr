@@ -93,6 +93,30 @@ get_area_building <- function(buildingsRdf, buildingSubjects){
   return(r)
 }
 
+#' Get GEONAMES attributes from buildings
+#' 
+get_geonames_attr_from_buildings <- function(buildingsRdf, buildingSubjects){
+  
+  metadata_df <- suppressMessages(buildingsRdf %>% rdf_query(paste0(    
+    paste0(paste0(mapply(function(i){
+      sprintf('PREFIX %s: <%s>', names(bigg_namespaces)[i],
+              bigg_namespaces[i])},
+      1:length(bigg_namespaces))),collapse = "\n "),
+    '
+    SELECT ?buildingSubject ?provinceName ?countryCode
+    WHERE {
+        ?buildingSubject a bigg:Building .
+        FILTER ( ?buildingSubject IN (<',paste(buildingSubjects,collapse='>,<'),'>) ) .
+        ?buildingSubject bigg:hasLocationInfo ?l .
+        ?l bigg:hasAddressProvince ?pro .
+        ?pro geo:name ?provinceName .
+        ?pro geo:countryCode ?countryCode .
+    }')))
+  return( if(length(metadata_df)>0) {
+    metadata_df
+  } else {NULL} )
+}
+
 #' Get namespaces of a building
 #' 
 #' This function get from a BIGG-harmonised dataset the namespaces of a list of buildings.

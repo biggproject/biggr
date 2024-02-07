@@ -1658,6 +1658,11 @@ RLS <- function(input_parameters=NULL){
                    maxPredictionValue=NULL, weatherDependenceByCluster=NULL,
                    clusteringResults=NULL,...
                    ) {
+      # x <<- x
+      # y <<- y
+      # formulaTerms <<- formulaTerms
+      # params <<- param
+      # param <- params
       
       features <- all.vars(formulaTerms)[2:length(all.vars(formulaTerms))]
       outputName <- all.vars(formulaTerms)[1]
@@ -1803,6 +1808,7 @@ RLS <- function(input_parameters=NULL){
       }
       mod$localtime <- mod_rls$data$t
       mod$yreal <- if(logOutput){exp(mod_rls$data[[outputName]])}else{mod_rls$data[[outputName]]}
+      mod_rls$data
       mod$yhat <- if(logOutput){exp(mod_rls$Yhat$k0)}else{mod_rls$Yhat$k0}
       mod$meta <- list(
         features = features,
