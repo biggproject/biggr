@@ -224,6 +224,8 @@ get_std_regioncode_from_buildings <- function(countryCode, Province){
     }else if (Province == "Zaragoza") {
       regionCode = "AR"
     } else {regionCode = NULL}
+  } else {
+    regionCode = NULL
   }
   return(regionCode)
 }
