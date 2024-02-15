@@ -117,6 +117,120 @@ get_geonames_attr_from_buildings <- function(buildingsRdf, buildingSubjects){
   } else {NULL} )
 }
 
+
+#' Get ISO 3166-2 Region Codes from buildings using Country Code and Province information
+#' 
+get_std_regioncode_from_buildings <- function(countryCode, Province){
+  
+  if (countryCode == "ES"){
+    if (Province == "A Coruña " || Province == "La Coruña") {
+      regionCode = "GA"
+    } else if (Province == "Álava" || Province == "Araba") {
+      regionCode = "PV"
+    } else if (Province == "Albacete") {
+      regionCode = "CM"
+    } else if (Province == "Alicante" || Province == "Alacant") {
+      regionCode = "VC"
+    } else if (Province == "Almería") {
+      regionCode = "AN"
+    } else if (Province == "Asturias") {
+      regionCode = "AS"
+    } else if (Province == "Ávila") {
+      regionCode = "CL"
+    } else if (Province == "Badajoz") {
+      regionCode = "EX"
+    } else if (Province == "Barcelona") {
+      regionCode = "CT"
+    } else if (Province == "Bizkaia") {
+      regionCode = "PV"
+    } else if (Province == "Burgos") {
+      regionCode = "CL"
+    } else if (Province == "Cáceres") {
+      regionCode = "EX"
+    } else if (Province == "Cádiz") {
+      regionCode = "AN"
+    } else if (Province == "Cantabria") {
+      regionCode = "CB"
+    } else if (Province == "Castellón" || Province == "Castelló") {
+      regionCode = "VC"
+    } else if (Province == "Ciudad Real") {
+      regionCode = "CM"
+    } else if (Province == "Córdoba") {
+      regionCode = "AN"
+    } else if (Province == "Cuenca") {
+      regionCode = "CM"
+    } else if (Province == "Gipuzkoa") {
+      regionCode = "PV"
+    } else if (Province == "Girona" || Province == "Gerona") {
+      regionCode = "CT"
+    } else if (Province == "Granada") {
+      regionCode = "AN"
+    } else if (Province == "Guadalajara") {
+      regionCode = "CM"
+    } else if (Province == "Huelva") {
+      regionCode = "AN"
+    } else if (Province == "Huesca") {
+      regionCode = "AR"
+    } else if (Province == "Illes Balears" || Province == "Islas Baleares") {
+      regionCode = "IB"
+    } else if (Province == "Jaén") {
+      regionCode = "AN"
+    } else if (Province == "La Rioja") {
+      regionCode = "RI"
+    } else if (Province == "Las Palmas") {
+      regionCode = "CN"
+    } else if (Province == "León") {
+      regionCode = "CL"
+    } else if (Province == "Lleida" || Province == "Lérida") {
+      regionCode = "CT"
+    } else if (Province == "Lugo") {
+      regionCode = "GA"
+    } else if (Province == "Madrid") {
+      regionCode = "MD"
+    } else if (Province == "Málaga") {
+      regionCode = "AN"
+    } else if (Province == "Murcia") {
+      regionCode = "MC"
+    } else if (Province == "Navarra" || Province == "Nafarroa") {
+      regionCode = "NC"
+    }else if (Province == "	Ourense" || Province == "Orense") {
+      regionCode = "GA"
+    }else if (Province == "Palencia") {
+      regionCode = "NC"
+    }else if (Province == "Pontevedra") {
+      regionCode = "GA"
+    }else if (Province == "Salamanca") {
+      regionCode = "CL"
+    }else if (Province == "Santa Cruz de Tenerife") {
+      regionCode = "CN"
+    }else if (Province == "Segovia") {
+      regionCode = "CL"
+    }else if (Province == "Sevilla") {
+      regionCode = "AN"
+    }else if (Province == "Soria") {
+      regionCode = "CL"
+    }else if (Province == "Tarragona") {
+      regionCode = "CT"
+    }else if (Province == "Teruel") {
+      regionCode = "AR"
+    }else if (Province == "Toledo") {
+      regionCode = "CM"
+    }else if (Province == "Valencia" || Province == "València") {
+      regionCode = "VC"
+    }else if (Province == "Valladolid") {
+      regionCode = "CL"
+    }else if (Province == "Zamora") {
+      regionCode = "CL"
+    }else if (Province == "Zaragoza") {
+      regionCode = "AR"
+    } else {regionCode = NULL}
+  } else {
+    regionCode = NULL
+  }
+  return(regionCode)
+}
+
+
 #' Get namespaces of a building
 #' 
 #' This function get from a BIGG-harmonised dataset the namespaces of a list of buildings.

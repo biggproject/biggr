@@ -73,13 +73,12 @@ hourly_timesteps <- function(nHours, original_timestep) {
   #   "P1Y" = 1/(365*24)
   #   )
   ht <- 60*60/(as.numeric(lubridate::as.period(original_timestep)))*nHours
-  if(ht>1.05){ 
-    return(ht) 
+  if(ht<1.05){
+    return(ht)
   } else {
     return(ceiling(ht))
   }
 }
-
 
 #' Resample time series to new ISO 8601 timestep
 #' 
