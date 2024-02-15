@@ -72,9 +72,12 @@ hourly_timesteps <- function(nHours, original_timestep) {
   #   "P1M" = 1/(30*24),
   #   "P1Y" = 1/(365*24)
   #   )
-  return(#round(timesteps_to_hour[[original_timestep]]*nHours))
-    ceiling(60*60/(as.numeric(lubridate::as.period(original_timestep)))*nHours)
-    )
+  ht <- 60*60/(as.numeric(lubridate::as.period(original_timestep)))*nHours
+  if(ht>1.05){ 
+    return(ht) 
+  } else {
+    return(ceiling(ht))
+  }
 }
 
 
