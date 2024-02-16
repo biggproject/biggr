@@ -440,75 +440,82 @@ check_measurements_by_building <- function(buildingsRdf, timeseriesObject, updat
   
   # Get the measurements and device aggregators by building
   measurements_metadata <- get_measurements_by_building_metadata(buildingsRdf)
-  measurements_metadata$sensorId <- gsub(".*#","",measurements_metadata$sensorId,fixed = F)
+  if(nrow(measurements_metadata)>0){
+    measurements_metadata$sensorId <- gsub(".*#","",measurements_metadata$sensorId,fixed = F)
+  }
   dev_aggregator_metadata <- get_device_aggregators_metadata(buildingsRdf)
+  if(nrow(dev_aggregator_metadata)>0){
   dev_aggregator_metadata$sensorIdsRelated <- lapply(FUN = function(x)unlist(x[,2]),
          stringr::str_match_all(dev_aggregator_metadata$deviceAggregatorFormula, 
-           "<mi>\\s*(.*?)\\s*</mi>"))
+           "<mi>\\s*(.*?)\\s*</mi>"))}
   
   # Check and summarise time series data from the related measurements
   n_sensors <- nrow(measurements_metadata)
-  sensors <- lapply(1:n_sensors, FUN = function(i){
-    sensorId <- measurements_metadata$sensorId[i]
-    if(updateHadoopStatus==T){
-      write(sprintf("reporter:status: READING %s (%s/%s)", sensorId, i, n_sensors), stderr())
-    } else {
-      write(sprintf("  Sensor %s/%s",i,n_sensors),stderr())
-    }
-    sensor_data <- suppressMessages(suppressWarnings(
-      get_sensor(timeseriesObject, buildingsRdf, sensorId, 
-        tz=NULL, outputFrequency="P1Y", aggFunctions=NULL,
-        useEstimatedValues=F, integrateCost=T, integrateEmissions=T, 
-        transformToAggregatableMeasuredProperty=F, aggregatableMeasuredPropertyName=NULL, 
-        defaultFactorsByMeasuredProperty=NULL, obtainMetadata=T)
-      ))
-    if(is.null(sensor_data$timeseries)){
-      sensor_data$metadata$summary <- NA 
-    } else {
-      #colnames(sensor_data$timeseries)[2] <- "value"
-      sensor_data$metadata$summary <- list(sensor_data$timeseries)
-    }
-    sensor_data$metadata$containsData <- !is.null(sensor_data$timeseries)
-    sensor_data$metadata})
-  sensors_df <- do.call(rbind,sensors)
-  measurements_metadata <- measurements_metadata %>% left_join(sensors_df,by="sensorId")
+  if(n_sensors>0){
+    sensors <- lapply(1:n_sensors, FUN = function(i){
+      sensorId <- measurements_metadata$sensorId[i]
+      if(updateHadoopStatus==T){
+        write(sprintf("reporter:status: READING %s (%s/%s)", sensorId, i, n_sensors), stderr())
+      } else {
+        write(sprintf("  Sensor %s/%s",i,n_sensors),stderr())
+      }
+      sensor_data <- suppressMessages(suppressWarnings(
+        get_sensor(timeseriesObject, buildingsRdf, sensorId, 
+          tz=NULL, outputFrequency="P1Y", aggFunctions=NULL,
+          useEstimatedValues=F, integrateCost=T, integrateEmissions=T, 
+          transformToAggregatableMeasuredProperty=F, aggregatableMeasuredPropertyName=NULL, 
+          defaultFactorsByMeasuredProperty=NULL, obtainMetadata=T)
+        ))
+      if(is.null(sensor_data$timeseries)){
+        sensor_data$metadata$summary <- NA 
+      } else {
+        #colnames(sensor_data$timeseries)[2] <- "value"
+        sensor_data$metadata$summary <- list(sensor_data$timeseries)
+      }
+      sensor_data$metadata$containsData <- !is.null(sensor_data$timeseries)
+      sensor_data$metadata})
+    sensors_df <- do.call(rbind,sensors)
+    measurements_metadata <- measurements_metadata %>% left_join(sensors_df,by="sensorId")
+  }
   
   # Check which device aggregators can be calculated, or not.
-  dev_aggregator_metadata$existsDataFromSensors <- mapply(function(i){
-    all(measurements_metadata[
-          measurements_metadata$sensorId %in% 
-            dev_aggregator_metadata$sensorIdsRelated[[i]],
-        ]$containsData)
-  },1:nrow(dev_aggregator_metadata))
-  dev_aggregator_metadata$timeSeriesStart <- as.POSIXct(
-    mapply(FUN = function(i){
+  if(nrow(dev_aggregator_metadata)>0){
+    dev_aggregator_metadata$existsDataFromSensors <- mapply(function(i){
+      all(measurements_metadata[
+            measurements_metadata$sensorId %in% 
+              dev_aggregator_metadata$sensorIdsRelated[[i]],
+          ]$containsData)
+    },1:nrow(dev_aggregator_metadata))
+    dev_aggregator_metadata$timeSeriesStart <- as.POSIXct(
+      mapply(FUN = function(i){
+        if (dev_aggregator_metadata$existsDataFromSensors[i]){
+          max(measurements_metadata[
+            measurements_metadata$sensorId %in% 
+              dev_aggregator_metadata$sensorIdsRelated[[i]],
+          ]$timeSeriesStart)
+        } else {
+          NA
+        }
+      },1:nrow(dev_aggregator_metadata)),tz="UTC",
+      origin=as.POSIXct("1970-01-01 00:00:00",tz="UTC"))
+    dev_aggregator_metadata$timeSeriesEnd <- as.POSIXct(mapply(function(i){
       if (dev_aggregator_metadata$existsDataFromSensors[i]){
-        max(measurements_metadata[
+        min(measurements_metadata[
           measurements_metadata$sensorId %in% 
             dev_aggregator_metadata$sensorIdsRelated[[i]],
-        ]$timeSeriesStart)
+        ]$timeSeriesEnd)
       } else {
         NA
       }
     },1:nrow(dev_aggregator_metadata)),tz="UTC",
     origin=as.POSIXct("1970-01-01 00:00:00",tz="UTC"))
-  dev_aggregator_metadata$timeSeriesEnd <- as.POSIXct(mapply(function(i){
-    if (dev_aggregator_metadata$existsDataFromSensors[i]){
-      min(measurements_metadata[
-        measurements_metadata$sensorId %in% 
-          dev_aggregator_metadata$sensorIdsRelated[[i]],
-      ]$timeSeriesEnd)
-    } else {
-      NA
-    }
-  },1:nrow(dev_aggregator_metadata)),tz="UTC",
-  origin=as.POSIXct("1970-01-01 00:00:00",tz="UTC"))
-  dev_aggregator_metadata$aggregationCanBeCalculated <- 
-    dev_aggregator_metadata$existsDataFromSensors & 
-    dev_aggregator_metadata$timeSeriesStart <= dev_aggregator_metadata$timeSeriesEnd
-  dev_aggregator_metadata$aggregationCanBeCalculated <- ifelse(is.na(
-    dev_aggregator_metadata$aggregationCanBeCalculated), F, 
-    dev_aggregator_metadata$aggregationCanBeCalculated)
+    dev_aggregator_metadata$aggregationCanBeCalculated <- 
+      dev_aggregator_metadata$existsDataFromSensors & 
+      dev_aggregator_metadata$timeSeriesStart <= dev_aggregator_metadata$timeSeriesEnd
+    dev_aggregator_metadata$aggregationCanBeCalculated <- ifelse(is.na(
+      dev_aggregator_metadata$aggregationCanBeCalculated), F, 
+      dev_aggregator_metadata$aggregationCanBeCalculated)
+  }
   
   return(
     list("Measurements"=measurements_metadata,
@@ -569,11 +576,15 @@ data_requirements_compliance_by_building <- function(buildingsRdf, timeseriesObj
   }
   
   checkedResults <- lapply(
-    unique(checkedMetadata$Measurements$buildingSubject),
+    unique(checkedMetadata$Building$buildingSubject),
     function(buildingSubject){
     
-    measurementsBuilding <- checkedMetadata$Measurements[checkedMetadata$Measurements$buildingSubject==buildingSubject,]
-    deviceAggregatorsBuilding <- checkedMetadata$DeviceAggregators[checkedMetadata$DeviceAggregators$buildingSubject==buildingSubject,]
+    measurementsBuilding <- if(nrow(checkedMetadata$Measurements)>0){
+      checkedMetadata$Measurements[checkedMetadata$Measurements$buildingSubject==buildingSubject,]
+    } else {checkedMetadata$Measurements}
+    deviceAggregatorsBuilding <- if(nrow(checkedMetadata$DeviceAggregators)>0){
+      checkedMetadata$DeviceAggregators[checkedMetadata$DeviceAggregators$buildingSubject==buildingSubject,]
+    } else {checkedMetadata$DeviceAggregators}
     staticsBuilding <- checkedMetadata$Building[checkedMetadata$Building$buildingSubject==buildingSubject,]
     
     services <- data.frame(
@@ -582,7 +593,11 @@ data_requirements_compliance_by_building <- function(buildingsRdf, timeseriesObj
         service <- servicesRequirements[i,]
         
         # DeviceAggregator checking
-        DeviceAggregators_check <- if(length(service$DeviceAggregators$AllValid[[1]])>0 &&
+        DeviceAggregators_check <- if((length(service$DeviceAggregators$AllValid[[1]])>0 ||
+                                       length(service$DeviceAggregators$AnyValid[[1]])>0) &&
+                                      nrow(deviceAggregatorsBuilding)==0){
+          FALSE
+        } else if(length(service$DeviceAggregators$AllValid[[1]])>0 &&
                                       length(service$DeviceAggregators$AnyValid[[1]])>0){
           all(
             all(mapply(FUN = function(x) nrow(deviceAggregatorsBuilding %>% filter(eval(parse(text=x))))>0, 
@@ -597,11 +612,15 @@ data_requirements_compliance_by_building <- function(buildingsRdf, timeseriesObj
           any(mapply(FUN = function(x) nrow(deviceAggregatorsBuilding %>% filter(eval(parse(text=x))))>0, 
                      service$DeviceAggregators$AnyValid[[1]]))
         } else {
-          T
+          NA
         }
         
         # Measurements checking
-        Measurements_check <- if(length(service$Measurements$AllValid[[1]])>0 &&
+        Measurements_check <- if((length(service$Measurements$AllValid[[1]])>0 ||
+                                  length(service$Measurements$AnyValid[[1]])>0) &&
+                                 nrow(measurementsBuilding)==0){
+          FALSE
+        } else if(length(service$Measurements$AllValid[[1]])>0 &&
                                  length(service$Measurements$AnyValid[[1]])>0){
           all(
             all(mapply(FUN = function(x) nrow(measurementsBuilding %>% filter(eval(parse(text=x))))>0, 
@@ -616,7 +635,7 @@ data_requirements_compliance_by_building <- function(buildingsRdf, timeseriesObj
           any(mapply(FUN = function(x) nrow(measurementsBuilding %>% filter(eval(parse(text=x))))>0, 
                      service$Measurements$AnyValid[[1]]))
         } else {
-          T
+          NA
         }
         
         # Building checking
@@ -639,21 +658,27 @@ data_requirements_compliance_by_building <- function(buildingsRdf, timeseriesObj
                      #eval(parse(text=gsub("()","(buildingsRdf=buildingsRdf, buildingSubject=buildingSubject)",x,fixed = T))), 
                      service$Building$AnyValid[[1]]))
         } else {
-          T
+          NA
         }
         
         c(
-          "CompliesAllRequirements" = all(DeviceAggregators_check, Measurements_check, Building_check),
+          "CompliesAllRequirements" = all(DeviceAggregators_check, Measurements_check, Building_check,na.rm=T),
           "CompliesDeviceAggregatorsRequirements" = DeviceAggregators_check,
           "CompliesMeasurementsRequirements" = Measurements_check,
           "CompliesBuildingRequirements" = Building_check
         )
       }, 1:nrow(settings$DataRequirementsForAnalyticalServices)))
     )
+    if(nrow(measurementsBuilding)>0){
+      measurementsBuilding %>% select(-buildingSubject)
+    }
+    if(nrow(deviceAggregatorsBuilding)>0){
+      deviceAggregatorsBuilding %>% select(-buildingSubject)
+    }
     list(
          "BuildingSubject" = buildingSubject,
-         "Measurements" = measurementsBuilding %>% select(-buildingSubject),
-         "DeviceAggregators" = deviceAggregatorsBuilding %>% select(-buildingSubject),
+         "Measurements" = measurementsBuilding,
+         "DeviceAggregators" = deviceAggregatorsBuilding,
          "Statics" = staticsBuilding %>% select(-buildingSubject),
          "Services" = services)
   })
@@ -1104,11 +1129,13 @@ get_device_aggregators_metadata <- function(buildingsRdf){
       optional {?s bigg:deviceAggregatorFormula ?deviceAggregatorFormula .}
       optional {?s bigg:hasDeviceAggregatorProperty ?measuredProperty .}
     }')))
+  if(length(result)>0){
   result$measuredProperty <- gsub(paste0(bigg_namespaces,collapse="|"),"",
                                   result$measuredProperty)
   result$deviceAggregatorFrequency <- ifelse(mapply(function(x)!is.na(x),
                                                     as.period(result$deviceAggregatorFrequency)),
                                              result$deviceAggregatorFrequency,NA)
+  }
   return(result)
 }
 
