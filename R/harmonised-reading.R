@@ -680,7 +680,8 @@ data_requirements_compliance_by_building <- function(buildingsRdf, timeseriesObj
          "Measurements" = measurementsBuilding,
          "DeviceAggregators" = deviceAggregatorsBuilding,
          "Statics" = staticsBuilding %>% select(-buildingSubject),
-         "Services" = services)
+         "Services" = services,
+         "_updated" = format_iso_8601z(lubridate::with_tz(Sys.time(),"UTC")))
   })
   
   suppressMessages(suppressWarnings(library(mongolite)))
@@ -690,7 +691,8 @@ data_requirements_compliance_by_building <- function(buildingsRdf, timeseriesObj
       mongo_conn("DataRequirementsCompliance", settings)$replace(
         query=sprintf('{"BuildingSubject": "%s"}',item$BuildingSubject),
         update=jsonlite::toJSON(c(list('BuildingSubject'=jsonlite::unbox(item[['BuildingSubject']])),
-                                  item[names(item)!='BuildingSubject']), na = 'null'),upsert=T)
+                                  list('_updated'=jsonlite::unbox(item[['_updated']])),
+                                  item[!(names(item) %in% c('BuildingSubject','_updated'))]), na = 'null'),upsert=T)
     }
   }
   write("Data requirements compliance successfully executed!",stderr())
@@ -857,7 +859,7 @@ get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz=NULL, output
     }, error=function(x){
       NULL
     })
-  if(is.null(timeseriesObject_) || length(timeseriesObject_)==0){
+  if(is.null(timeseriesObject_) || length(timeseriesObject_)==0 || identical(timeseriesObject_[[1]],list())){
     if(obtainMetadata){
       metadata$timeSeriesStart <- NA
       metadata$timeSeriesEnd <- NA
