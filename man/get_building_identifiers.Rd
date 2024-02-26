@@ -9,9 +9,6 @@ get_building_identifiers(buildingSubjects)
 \arguments{
 \item{buildingSubjects}{<array> of URIs of the building subjects.}
 }
-\value{
-
-}
 \description{
 This function calculates the building identifiers from a list of building subjects.
 }

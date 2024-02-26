@@ -749,14 +749,15 @@ align_time_grid <- function(data,
   
   data$time <- lubridate::with_tz(data$time,tz)
 
-  # Remove estimated values from time serie  
+  # Remove estimated values from time series
   if(useEstimatedValues==F && ("isReal" %in% colnames(data))){
     dataWithoutEstimates <- data %>% 
       filter(isReal==T)
     if(nrow(dataWithoutEstimates)==0){
-      stop("The whole timeseries contains estimated values, 
+      warning("The whole timeseries contains estimated values, 
            and they are not allowed during the alignment process. 
            Consider useEstimatedValues=T if you allow their usage.")
+      return(NULL)
     }
     data <- dataWithoutEstimates
   }

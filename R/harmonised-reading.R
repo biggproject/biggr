@@ -1044,7 +1044,7 @@ get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz=NULL, output
   }
   
   # Transform the sensor to an aggregatable measured property
-  if(transformToAggregatableMeasuredProperty){
+  if(transformToAggregatableMeasuredProperty & !is.null(timeseriesSensor)){
     timeseriesSensor <- sensor_measured_property_to_aggregatable_transformation(
       buildingsRdf, timeseriesObject, 
       timeseriesSensor = timeseriesSensor,

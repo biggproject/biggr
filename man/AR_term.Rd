@@ -9,9 +9,6 @@ AR_term(features, orders, suffix = NULL)
 \arguments{
 \item{arg}{<>}
 }
-\value{
-
-}
 \description{
 Description
 }

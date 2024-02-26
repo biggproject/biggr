@@ -17,9 +17,6 @@ data_transformation_wrapper(
 \arguments{
 \item{arg}{<>}
 }
-\value{
-
-}
 \description{
 Description
 }
