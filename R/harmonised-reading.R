@@ -57,7 +57,7 @@ get_tz_sensor <- function(buildingsRdf, sensorId){
     ')))
   return( if(length(metadata_df)>0) {
     as.character(metadata_df$tz)
-  } else {NULL} )
+  } else {"UTC"} )
 }
 
 #' Get gross floor area of a building
@@ -534,10 +534,14 @@ check_static_information_by_building <- function(buildingsRdf, updateHadoopStatu
     buildingSubject = get_all_buildings_list(buildingsRdf))
   # Building area 
   areas <- get_area_building(buildingsRdf,metadata$buildingSubject)
-  metadata <- metadata %>% full_join(
-      data.frame("buildingSubject" = names(areas),"area"=areas),
-      by="buildingSubject"
-  )
+  if(!is.null(areas)){
+    metadata <- metadata %>% full_join(
+        data.frame("buildingSubject" = names(areas),"area"=areas),
+        by="buildingSubject"
+    )
+  } else {
+    metadata$area <- NA
+  }
   # Building related single EEM
   eems <- get_building_eems(buildingsRdf)
   if (!is.null(eems)){
@@ -910,10 +914,12 @@ get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz=NULL, output
                  0.1,na.rm=T)))
     } else {
       # Calculate the minimum frequency for series interpolation
+      aux <- difftime(timeseriesSensor$end, timeseriesSensor$start,
+                            tz = "UTC",units = "secs")
+      aux <- ifelse(aux>0,aux,NA)
       i_timestep <- which(timesteps$secs>=
               as.numeric(lubridate::as.period(
-                quantile(difftime(timeseriesSensor$end, timeseriesSensor$start,
-                                  tz = "UTC",units = "secs"), 0.1, na.rm=T)
+                quantile(aux, 0.1, na.rm=T)
               )))
       i_timestep <- if(length(i_timestep)==0){nrow(timesteps)} else {i_timestep[1]-1}
       interpolateFrequency <- timesteps[i_timestep,"freq"]
@@ -930,7 +936,7 @@ get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz=NULL, output
     timeseriesSensor$gapAfter <- cumsum(ifelse(is.na(timeseriesSensor$gapAfter),0,timeseriesSensor$gapAfter))
     # Resample the original irregular series to a regular series, among the detected subsets
     dfs <- lapply(split(timeseriesSensor,timeseriesSensor$gapAfter), function(tsChunk){
-      # tsChunk <- split(timeseriesSensor,timeseriesSensor$gapAfter)[[1]]
+      # tsChunk <- split(timeseriesSensor,timeseriesSensor$gapAfter)[[2]]
       if("AVG" %in% aggFunctions){
         tsChunk$iniValue <- tsChunk$value
         tsChunk$iniIsReal <- tsChunk$isReal
@@ -942,7 +948,7 @@ get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz=NULL, output
         tsChunk <- tsChunk[cumsum(tsChunk$isReal)!=0 &
           rev(cumsum(rev(tsChunk$isReal))!=0),]
       }
-      if(nrow(tsChunk)==1 && is.na(tsChunk$iniValue)){
+      if(nrow(tsChunk)==0 || (nrow(tsChunk)==1 && is.na(tsChunk$iniValue))){
         return(NULL)
       }
       tsChunk <- rbind(
@@ -1044,7 +1050,7 @@ get_sensor <- function(timeseriesObject, buildingsRdf, sensorId, tz=NULL, output
   }
   
   # Transform the sensor to an aggregatable measured property
-  if(transformToAggregatableMeasuredProperty){
+  if(transformToAggregatableMeasuredProperty & !is.null(timeseriesSensor)){
     timeseriesSensor <- sensor_measured_property_to_aggregatable_transformation(
       buildingsRdf, timeseriesObject, 
       timeseriesSensor = timeseriesSensor,
