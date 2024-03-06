@@ -2,6 +2,36 @@
 # General utils for harmonised data reading ----
 #
 
+upload_covid_lockdown_inference <- function(buildingSubject, settings, affectedDates) {
+  if (mongo_check("", settings)) {
+    write("Loading the COVID lockdowns estimations to Mongo", stderr())
+    mongo_conn("BuildingsInference", settings)$replace(
+      query = sprintf('{"BuildingSubject": "%s"}', buildingSubject),
+      update = jsonlite::toJSON(
+        c(
+          list('BuildingSubject' = buildingSubject),
+          list('_updated' = biggr::format_iso_8601z(lubridate::with_tz(Sys.time(), "UTC"))),
+          list('COVIDLockdownAffectance' = as.list(as.character(affectedDates)))
+        ),
+        na = 'null',
+        auto_unbox = T
+      ),
+      upsert = TRUE
+    )
+  }
+}
+
+get_covid_lockdown_inference <- function(buildingSubject, settings) {
+  if (mongo_check("", settings)) {
+    write("Loading the COVID lockdowns estimations to Mongo", stderr())
+    affectedDates <- mongo_conn("BuildingsInference", settings)$find(sprintf('{"BuildingSubject": "%s"}', buildingSubject))
+    if (nrow(affectedDates) > 0) {
+      return(list("exists" = TRUE, "dates" = as.Date(unlist(affectedDates$COVIDLockdownAffectance))))
+    }
+    return(list("exists" = FALSE, "dates" = NULL))
+  }
+}
+
 #' Get timezone of a building
 #' 
 #' This function get from a BIGG-harmonised dataset the timezone of a list of buildings.

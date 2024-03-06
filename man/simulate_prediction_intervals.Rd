@@ -17,6 +17,9 @@ simulate_prediction_intervals(
 \arguments{
 \item{arg}{<>}
 }
+\value{
+
+}
 \description{
 Description
 }
