@@ -1534,7 +1534,7 @@ get_eem_details <- function(buildingsRdf, eemSubjects=NULL){
               bigg_namespaces[i])},
       1:length(bigg_namespaces))),
     '
-    SELECT ?eemSubject ?ExchangeRate ?Description ?Investment ?Date ?Currency ?Type ?AffectationShare
+    SELECT ?eemSubject ?ExchangeRate ?Description ?Investment ?DateEnd ?DateStart ?Currency ?Type ?AffectationShare
     WHERE {
       ?eemSubject a bigg:EnergyEfficiencyMeasure .',
     ifelse(!is.null(eemSubjects),paste0('
@@ -1543,7 +1543,8 @@ get_eem_details <- function(buildingsRdf, eemSubjects=NULL){
     'optional { ?eemSubject bigg:energyEfficiencyMeasureCurrencyExchangeRate ?ExchangeRate .}
        optional { ?eemSubject bigg:energyEfficiencyMeasureDescription ?Description .}
        optional { ?eemSubject bigg:energyEfficiencyMeasureInvestment ?Investment .}
-       optional { ?eemSubject bigg:energyEfficiencyMeasureOperationalDate ?Date .}
+       optional { ?eemSubject bigg:energyEfficiencyMeasureOperationalDate ?DateEnd .}
+       optional { ?eemSubject bigg:startWorkDate ?DateStart .}
        optional { ?eemSubject bigg:hasEnergyEfficiencyMeasureInvestmentCurrency ?Currency .}
        optional { ?eemSubject bigg:hasEnergyEfficiencyMeasureType ?Type .}
        optional { ?eemSubject bigg:shareOfAffectedElement ?AffectationShare .}
